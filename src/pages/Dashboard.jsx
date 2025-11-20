@@ -1,0 +1,226 @@
+import { useMemo } from 'react';
+import useAppStore from '../store/useAppStore';
+import { formatCurrency } from '../utils/formatters';
+import CategoryDoughnut from '../components/charts/CategoryDoughnut';
+import Button from '../components/common/Button';
+import { useNavigate } from 'react-router-dom';
+
+const Dashboard = () => {
+  const navigate = useNavigate();
+  const { transactions, participants, loading } = useAppStore();
+
+  // --- Core Balance Logic ---
+  const stats = useMemo(() => {
+    let myPersonalBalances = {}; 
+    let netPosition = 0;
+    let totalPaymentsMadeByMe = 0;
+    let totalRepaymentsMadeToMe = 0;
+    let myTotalExpenseShare = 0;
+    let totalPaidByOthersForMe = 0;
+    let monthlyIncome = 0;
+    let categorySums = {};
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    participants.forEach(p => {
+      if (p.uniqueId !== 'me') myPersonalBalances[p.uniqueId] = 0;
+    });
+
+    transactions.forEach(txn => {
+      const payer = txn.payer || 'me';
+      const splits = txn.splits || {};
+      const amount = txn.amount || 0; 
+
+      if (txn.type === 'income') {
+        if (txn.timestamp) {
+          const d = txn.timestamp.toDate();
+          if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+            monthlyIncome += (amount / 100);
+          }
+        }
+        return; 
+      }
+
+      if (txn.isReturn) {
+        const recipient = txn.participants[0];
+        if (payer === 'me') {
+          if (recipient && recipient !== 'me') {
+            myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;
+          }
+          totalPaymentsMadeByMe += amount;
+        } else {
+          if (recipient === 'me') {
+            myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
+            totalRepaymentsMadeToMe += amount;
+          }
+        }
+      } 
+      else {
+        if (payer === 'me') {
+          totalPaymentsMadeByMe += amount;
+          Object.entries(splits).forEach(([uid, share]) => {
+            if (uid === 'me') {
+              myTotalExpenseShare += share;
+              const cat = txn.category || 'Uncategorized';
+              categorySums[cat] = (categorySums[cat] || 0) + share;
+            } else {
+              myPersonalBalances[uid] = (myPersonalBalances[uid] || 0) + share;
+            }
+          });
+        } else {
+          const myShare = splits['me'] || 0;
+          if (myShare > 0) {
+            myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - myShare;
+            myTotalExpenseShare += myShare;
+            totalPaidByOthersForMe += myShare;
+            const cat = txn.category || 'Uncategorized';
+            categorySums[cat] = (categorySums[cat] || 0) + myShare;
+          }
+        }
+      }
+    });
+
+    netPosition = Object.values(myPersonalBalances).reduce((sum, val) => sum + val, 0);
+
+    const chartData = Object.entries(categorySums)
+      .map(([label, val]) => ({ label, value: val / 100 }))
+      .sort((a, b) => b.value - a.value);
+
+    return {
+      netPosition,
+      myPersonalBalances,
+      myTotalExpenditure: totalPaymentsMadeByMe - totalRepaymentsMadeToMe,
+      myTotalShare: myTotalExpenseShare,
+      paidByOthers: totalPaidByOthersForMe,
+      monthlyIncome,
+      chartData
+    };
+
+  }, [transactions, participants]);
+
+  const getParticipantName = (uid) => {
+    const p = participants.find(x => x.uniqueId === uid);
+    return p ? p.name : uid;
+  };
+
+  const handleSettleUp = (uid, amount) => {
+    navigate('/add', { 
+      state: { 
+        type: 'expense', 
+        isReturn: true,
+        payer: 'me',
+        participants: [uid], // Fix: Pass as array for the form logic
+        amount: Math.abs(amount/100),
+        description: 'Settlement'
+      } 
+    });
+  };
+
+  if (loading) return <div className="text-center text-gray-500 mt-10">Calculating balances...</div>;
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Balances</h2>
+        <Button variant="primary" onClick={() => alert("Summary feature coming in next update!")}>
+          Who Owes Whom?
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Your Net Position</h3>
+          <div className={`text-4xl font-bold mt-2 ${
+            stats.netPosition > 0 ? 'text-green-600' : stats.netPosition < 0 ? 'text-red-600' : 'text-gray-800 dark:text-gray-200'
+          }`}>
+            {formatCurrency(stats.netPosition)}
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            {stats.netPosition > 0 ? "You are owed money" : "You owe money"}
+          </p>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Income (This Month)</h3>
+          <div className="text-4xl font-bold mt-2 text-emerald-500">
+            {formatCurrency(stats.monthlyIncome * 100)}
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Total Expenditure</h3>
+          <div className="text-4xl font-bold mt-2 text-blue-600">
+            {formatCurrency(stats.myTotalExpenditure)}
+          </div>
+          <p className="text-xs text-gray-400 mt-1">Total payments - Repayments</p>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">My Total Share</h3>
+          <div className="text-4xl font-bold mt-2 text-purple-600">
+            {formatCurrency(stats.myTotalShare)}
+          </div>
+        </div>
+
+         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Paid By Others</h3>
+          <div className="text-4xl font-bold mt-2 text-orange-600">
+            {formatCurrency(stats.paidByOthers)}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700 md:col-span-2">
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Detailed Breakdown</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto no-scrollbar">
+            {Object.entries(stats.myPersonalBalances).filter(([, val]) => Math.abs(val) > 1).length === 0 ? (
+              <p className="text-gray-500 dark:text-gray-400">You are all settled up!</p>
+            ) : (
+              Object.entries(stats.myPersonalBalances).map(([uid, val]) => {
+                if (Math.abs(val) < 1) return null;
+                const name = getParticipantName(uid);
+                
+                return (
+                  <div key={uid} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">{name}</span>
+                    {val > 0 ? (
+                      <span className="font-semibold text-green-600">owes you {formatCurrency(val)}</span>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-red-600">you owe {formatCurrency(Math.abs(val))}</span>
+                        <button 
+                          onClick={() => handleSettleUp(uid, val)}
+                          className="text-xs bg-sky-600 text-white px-2 py-1 rounded hover:bg-sky-700"
+                        >
+                          Settle
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700 md:col-span-1">
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">My Share by Category</h3>
+          <div className="h-64 relative">
+            {stats.chartData.length > 0 ? (
+              <CategoryDoughnut data={stats.chartData} />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">No data</div>
+            )}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;

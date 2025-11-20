@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  /* This sets 'Inter' as the default sans font, replacing 'fontFamily' in config */
+  --font-sans: "Inter", sans-serif;
+}
+
+/* This forces the 'dark' variant to work with the 'dark' class 
+   instead of system settings (replaces darkMode: 'class') */
+@variant dark (&:where(.dark, .dark *));
+
+/* Custom Scrollbar Hide (unchanged) */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+body {
+    font-family: var(--font-sans);
+}

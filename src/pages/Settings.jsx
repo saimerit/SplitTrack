@@ -7,6 +7,7 @@ import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import { exportToCSV, exportFullBackup, importFromBackup, importFromCSV, nukeCollection } from '../services/exportImportService';
+import ConfirmModal from '../components/modals/ConfirmModal';
 
 const Settings = () => {
   const { 
@@ -25,6 +26,15 @@ const Settings = () => {
   });
   
   const [csvFile, setCsvFile] = useState(null);
+
+  // Modal State
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmInput: '',
+    onConfirm: () => {}
+  });
 
   const handleSaveDefaults = async (e) => {
     e.preventDefault();
@@ -52,12 +62,21 @@ const Settings = () => {
   };
 
   const handleRemoveMember = async (email) => {
-    if (!window.confirm(`Remove ${email}?`)) return;
-    try {
-      const newMembers = (userSettings.allowed_emails || []).filter(e => e !== email);
-      await updateDoc(doc(db, 'ledgers/main-ledger'), { allowed_emails: newMembers });
-      showToast("Member removed.");
-    } catch { showToast("Failed to remove member.", true); }
+    setModalConfig({
+      isOpen: true,
+      title: "Remove Member?",
+      message: `Remove <strong>${email}</strong>? They will lose access immediately.`,
+      confirmInput: "REMOVE",
+      confirmText: "Remove",
+      onConfirm: async () => {
+        try {
+          const newMembers = (userSettings.allowed_emails || []).filter(e => e !== email);
+          await updateDoc(doc(db, 'ledgers/main-ledger'), { allowed_emails: newMembers });
+          showToast("Member removed.");
+        } catch { showToast("Failed to remove member.", true); }
+        closeModal();
+      }
+    });
   };
 
   const handleExportJSON = async () => {
@@ -73,16 +92,24 @@ const Settings = () => {
     const file = e.target.files[0];
     if (!file) return;
     
-    if (!window.confirm("WARNING: This will DELETE ALL current data and replace it. Continue?")) return;
-    
-    setLoading(true);
-    try {
-      const settings = await importFromBackup(file);
-      await setDoc(doc(db, 'ledgers/main-ledger'), settings, { merge: true });
-      showToast("Full backup restored! Reloading...");
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (e) { console.error(e); showToast("Import failed: " + e.message, true); }
-    setLoading(false);
+    setModalConfig({
+      isOpen: true,
+      title: "Restore from Backup?",
+      message: "This will <strong class='text-red-500'>DELETE ALL</strong> current data and replace it with the data from this backup. This cannot be undone.",
+      confirmInput: "DELETE ALL",
+      confirmText: "Restore",
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          const settings = await importFromBackup(file);
+          await setDoc(doc(db, 'ledgers/main-ledger'), settings, { merge: true });
+          showToast("Full backup restored! Reloading...");
+          setTimeout(() => window.location.reload(), 1500);
+        } catch (e) { console.error(e); showToast("Import failed: " + e.message, true); }
+        setLoading(false);
+        closeModal();
+      }
+    });
   };
 
   const handleCSVImport = async () => {
@@ -123,15 +150,25 @@ const Settings = () => {
   };
 
   const handleNuke = async (collectionName) => {
-    if (!window.confirm(`PERMANENTLY DELETE ALL ${collectionName.toUpperCase()}?`)) return;
-    setLoading(true);
-    try {
-      await nukeCollection(collectionName);
-      showToast(`All ${collectionName} deleted.`);
-    } catch { showToast("Delete failed.", true); }
-    setLoading(false);
+    setModalConfig({
+      isOpen: true,
+      title: `Delete All ${collectionName}?`,
+      message: `Permanently delete <strong>ALL</strong> ${collectionName}? This cannot be undone.`,
+      confirmInput: "DELETE",
+      confirmText: "Delete All",
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          await nukeCollection(collectionName);
+          showToast(`All ${collectionName} deleted.`);
+        } catch { showToast("Delete failed.", true); }
+        setLoading(false);
+        closeModal();
+      }
+    });
   };
 
+  const closeModal = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
   const mapOpts = (items) => [{ value: '', label: '-- None --' }, ...items.map(i => ({ value: i.name, label: i.name }))];
 
   return (
@@ -208,8 +245,20 @@ const Settings = () => {
            <Button onClick={() => handleNuke('participants')} variant="danger">Delete All Participants</Button>
            <Button onClick={() => handleNuke('categories')} variant="danger">Delete All Categories</Button>
            <Button onClick={() => handleNuke('places')} variant="danger">Delete All Places</Button>
+           <Button onClick={() => handleNuke('tags')} variant="danger">Delete All Tags</Button>
+           <Button onClick={() => handleNuke('modesOfPayment')} variant="danger">Delete All Modes</Button>
         </div>
       </div>
+
+      <ConfirmModal 
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        confirmInputRequired={modalConfig.confirmInput}
+        confirmText={modalConfig.confirmText}
+        onConfirm={modalConfig.onConfirm}
+        onCancel={closeModal}
+      />
     </div>
   );
 };

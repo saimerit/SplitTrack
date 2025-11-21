@@ -5,6 +5,7 @@ import { addDoc, collection, doc, updateDoc, deleteDoc } from 'firebase/firestor
 import { db } from '../config/firebase';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
+import ConfirmModal from '../components/modals/ConfirmModal';
 
 const LEDGER_ID = 'main-ledger';
 
@@ -39,7 +40,7 @@ const SimpleManager = ({ title, data, collectionName, onDelete }) => {
           {data.map(item => (
             <div key={item.id} className="p-4 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700">
               <span className="dark:text-gray-300">{item.name}</span>
-              <button onClick={() => onDelete(item.id, collectionName)} className="text-gray-400 hover:text-red-500">
+              <button onClick={() => onDelete(item.id, collectionName, item.name)} className="text-gray-400 hover:text-red-500">
                 <Trash2 size={18} />
               </button>
             </div>
@@ -58,26 +59,37 @@ const ManageData = () => {
     showToast, transactions 
   } = useAppStore();
 
-  const handleDelete = async (id, collectionName) => {
-    if(!window.confirm("Delete this item?")) return;
-    
+  const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+
+  const closeModal = () => setModalConfig({ ...modalConfig, isOpen: false });
+
+  const handleDelete = (id, collectionName, name) => {
+    // Check usage
     let isUsed = false;
-    if (collectionName === 'categories') isUsed = transactions.some(t => t.category === categories.find(c=>c.id===id)?.name);
-    else if (collectionName === 'places') isUsed = transactions.some(t => t.place === places.find(p=>p.id===id)?.name);
-    else if (collectionName === 'tags') isUsed = transactions.some(t => t.tag === tags.find(tag=>tag.id===id)?.name);
+    if (collectionName === 'categories') isUsed = transactions.some(t => t.category === name);
+    else if (collectionName === 'places') isUsed = transactions.some(t => t.place === name);
+    else if (collectionName === 'tags') isUsed = transactions.some(t => t.tag === name);
+    else if (collectionName === 'modesOfPayment') isUsed = transactions.some(t => t.modeOfPayment === name);
 
     if (isUsed) {
       showToast("Cannot delete: Item is used in existing transactions.", true);
       return;
     }
 
-    try {
-      await deleteDoc(doc(db, `ledgers/${LEDGER_ID}/${collectionName}`, id));
-      showToast("Deleted successfully");
-    } catch {
-      // Removed (error)
-      showToast("Failed to delete", true);
-    }
+    setModalConfig({
+        isOpen: true,
+        title: `Delete ${name}?`,
+        message: `Are you sure you want to delete <strong>${name}</strong>? This cannot be undone.`,
+        onConfirm: async () => {
+            try {
+                await deleteDoc(doc(db, `ledgers/${LEDGER_ID}/${collectionName}`, id));
+                showToast("Deleted successfully");
+            } catch {
+                showToast("Failed to delete", true);
+            }
+            closeModal();
+        }
+    });
   };
 
   const handleAddParticipant = async (e) => {
@@ -95,7 +107,6 @@ const ManageData = () => {
       e.target.reset();
       showToast("Participant added!");
     } catch {
-      // Removed (err)
       showToast("Error adding participant", true);
     }
   };
@@ -107,7 +118,7 @@ const ManageData = () => {
       });
       showToast(p.isArchived ? "Un-archived" : "Archived");
     } catch (err) {
-      console.error(err); // Kept this one because it logs to console
+      console.error(err);
     }
   };
 
@@ -176,6 +187,14 @@ const ManageData = () => {
         {activeTab === 'tags' && <SimpleManager title="Tag" data={tags} collectionName="tags" onDelete={handleDelete} />}
         {activeTab === 'modes' && <SimpleManager title="Mode" data={modesOfPayment} collectionName="modesOfPayment" onDelete={handleDelete} />}
       </div>
+
+      <ConfirmModal 
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
+        onCancel={closeModal}
+      />
     </div>
   );
 };

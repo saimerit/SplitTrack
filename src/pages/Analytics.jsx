@@ -26,7 +26,6 @@ const Analytics = () => {
     const balancePoints = [];
     let runningBalance = 0;
 
-    // SAFETY: Handle mixed date formats robustly
     const getMillis = (t) => {
         if (t?.timestamp?.toMillis) return t.timestamp.toMillis();
         const d = new Date(t?.timestamp);
@@ -103,6 +102,12 @@ const Analytics = () => {
         return new Date(y, m-1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     });
 
+    // --- Forecast Logic ---
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const daysPassed = Math.max(1, now.getDate());
+    const projectedTotal = (currentMonthSpend / daysPassed) * daysInMonth;
+    const forecastPercent = projectedTotal > 0 ? Math.min(100, (currentMonthSpend / projectedTotal) * 100) : 0;
+
     return {
       totalSpend,
       activeDays: activeDays.size,
@@ -110,6 +115,8 @@ const Analytics = () => {
       peakAmount,
       avgMonthly,
       currentMonthSpend,
+      projectedTotal,
+      forecastPercent,
       currentMonthCatStats,
       heatmapData,
       monthlyChart: { labels: monthlyChartLabels, data: monthlyKeys.map(k => monthlyStats[k]) },
@@ -123,12 +130,14 @@ const Analytics = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Analytics Dashboard</h2>
+      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Total Spending (All Time)" value={formatCurrency(stats.totalSpend * 100)} />
         <StatCard title="Highest Spending Month" value={stats.peakMonth} subValue={formatCurrency(stats.peakAmount * 100)} />
         <StatCard title="Avg. Monthly Spending" value={formatCurrency(stats.avgMonthly * 100)} />
         <StatCard title="Active Days" value={stats.activeDays} />
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="Monthly Spending Trend">
           <MonthlyTrendLine labels={stats.monthlyChart.labels} data={stats.monthlyChart.data} />
@@ -137,14 +146,23 @@ const Analytics = () => {
           <NetBalanceLine labels={stats.netBalanceChart.labels} data={stats.netBalanceChart.data} />
         </ChartCard>
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700 lg:col-span-2">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Spending by Category</h3>
             <div className="h-64 relative">
                 <CategoryDoughnut data={stats.categoryData} />
             </div>
         </div>
-        <HeatmapPanel data={stats.heatmapData} />
+        <div className="lg:col-span-2 space-y-6">
+            {/* Forecast Card */}
+            <ForecastCard 
+                spent={stats.currentMonthSpend} 
+                projected={stats.projectedTotal} 
+                percent={stats.forecastPercent} 
+            />
+            <HeatmapPanel data={stats.heatmapData} />
+        </div>
       </div>
     </div>
   );
@@ -165,6 +183,32 @@ const ChartCard = ({ title, children }) => (
       {children}
     </div>
   </div>
+);
+
+const ForecastCard = ({ spent, projected, percent }) => (
+    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Spending Forecast (Current Month)</h3>
+        <div className="relative pt-1">
+            <div className="flex mb-2 items-center justify-between">
+                <div>
+                    <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-sky-600 bg-sky-200 dark:text-sky-200 dark:bg-sky-900">
+                        Spent {formatCurrency(spent * 100)}
+                    </span>
+                </div>
+                <div className="text-right">
+                    <span className="text-xs font-semibold inline-block text-sky-600 dark:text-sky-400">
+                        {Math.round(percent)}% of projection
+                    </span>
+                </div>
+            </div>
+            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-sky-200 dark:bg-gray-700">
+                <div style={{ width: `${percent}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-sky-500 transition-all duration-500"></div>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+                Based on your daily average, you are projected to spend <span className="font-bold text-gray-700 dark:text-gray-200">{formatCurrency(projected * 100)}</span> by month end.
+            </p>
+        </div>
+    </div>
 );
 
 const HeatmapPanel = ({ data }) => {

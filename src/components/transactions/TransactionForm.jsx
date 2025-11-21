@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Timestamp, addDoc, collection } from 'firebase/firestore'; // Added imports
-import { db } from '../../config/firebase'; // Added db
+import { Timestamp, addDoc, collection } from 'firebase/firestore'; 
+import { db } from '../../config/firebase'; 
 import useAppStore from '../../store/useAppStore';
 import { useOfflineQueue } from '../../hooks/useOfflineQueue';
 import { addTransaction, updateTransaction } from '../../services/transactionService';
@@ -64,13 +64,33 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
   const isIncome = type === 'income';
 
-  // --- NEW: Template Saving Logic ---
+  // --- QUICK ADD HELPER ---
+  const handleQuickAdd = async (value, collectionName, label, setter) => {
+    if (value === `add_new_${collectionName}`) {
+        const newItemName = prompt(`Enter New ${label} Name:`);
+        if (newItemName) {
+            try {
+                await addDoc(collection(db, `ledgers/main-ledger/${collectionName}`), { name: newItemName });
+                showToast(`${label} added!`);
+                setter(newItemName); // Auto-select the new item
+            } catch (error) {
+                console.error(error);
+                showToast(`Failed to add ${label}.`, true);
+                setter(''); // Reset on error
+            }
+        } else {
+            setter(''); // Reset if cancelled
+        }
+    } else {
+        setter(value);
+    }
+  };
+
   const handleSaveTemplate = async () => {
     const templateName = prompt("Enter Template Name (e.g., 'Monthly Rent'):");
     if (!templateName) return;
 
     const amountInRupees = parseFloat(amount);
-    // Allow saving template even with partial data (null amount)
     const multiplier = type === 'refund' ? -1 : 1;
     const finalAmount = !isNaN(amountInRupees) ? Math.round(amountInRupees * 100) * multiplier : null;
 
@@ -95,7 +115,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         showToast("Failed to save template.", true);
     }
   };
-  // ----------------------------------
 
   const saveTransaction = async () => {
        const amountInPaise = Math.round(parseFloat(amount) * 100);
@@ -106,7 +125,11 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
          expenseName: name,
          amount: finalAmount,
          type,
-         category, place, tag, modeOfPayment: mode, description,
+         category: category.startsWith('add_new') ? '' : category, // Safety check
+         place: place.startsWith('add_new') ? '' : place,
+         tag: tag.startsWith('add_new') ? '' : tag,
+         modeOfPayment: mode.startsWith('add_new') ? '' : mode,
+         description,
          timestamp: Timestamp.fromDate(new Date(date)),
          payer: (type === 'income') ? 'me' : payer,
          isReturn,
@@ -177,7 +200,12 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       saveTransaction();
   };
 
-  const mapOptions = (items) => [{ value: "", label: "-- Select --" }, ...items.map(i => ({ value: i.name, label: i.name }))];
+  // Updated MapOptions to include "Add New"
+  const mapOptions = (items, collectionName, label) => [
+      { value: "", label: "-- Select --" }, 
+      ...items.map(i => ({ value: i.name, label: i.name })),
+      { value: `add_new_${collectionName}`, label: `+ Add New ${label}`, className: "text-sky-600 font-bold bg-sky-50" }
+  ];
 
   return (
     <>
@@ -210,10 +238,31 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         <Input label="Name" value={name} onChange={e => setName(e.target.value)} required />
         <Input label="Amount (₹)" type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required />
         <Input label="Date" type="date" value={date} onChange={e => setDate(e.target.value)} required />
-        <Select label="Category" value={category} onChange={e => setCategory(e.target.value)} options={mapOptions(categories)} />
-        <Select label="Place" value={place} onChange={e => setPlace(e.target.value)} options={mapOptions(places)} />
-        <Select label="Tag" value={tag} onChange={e => setTag(e.target.value)} options={mapOptions(tags)} />
-        <Select label="Mode" value={mode} onChange={e => setMode(e.target.value)} options={mapOptions(modesOfPayment)} />
+        
+        <Select 
+            label="Category" 
+            value={category} 
+            onChange={e => handleQuickAdd(e.target.value, 'categories', 'Category', setCategory)} 
+            options={mapOptions(categories, 'categories', 'Category')} 
+        />
+        <Select 
+            label="Place" 
+            value={place} 
+            onChange={e => handleQuickAdd(e.target.value, 'places', 'Place', setPlace)} 
+            options={mapOptions(places, 'places', 'Place')} 
+        />
+        <Select 
+            label="Tag" 
+            value={tag} 
+            onChange={e => handleQuickAdd(e.target.value, 'tags', 'Tag', setTag)} 
+            options={mapOptions(tags, 'tags', 'Tag')} 
+        />
+        <Select 
+            label="Mode" 
+            value={mode} 
+            onChange={e => handleQuickAdd(e.target.value, 'modesOfPayment', 'Mode', setMode)} 
+            options={mapOptions(modesOfPayment, 'modesOfPayment', 'Mode')} 
+        />
       </div>
       
       <Input label="Description" value={description} onChange={e => setDescription(e.target.value)} />
@@ -276,7 +325,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
       <div className="flex gap-4 pt-4">
          <Button type="submit" className="flex-1">{isEditMode ? 'Update' : 'Log Transaction'}</Button>
-         {/* CONNECTED SAVE TEMPLATE */}
          {!isEditMode && (
             <Button type="button" variant="secondary" onClick={handleSaveTemplate}>
               Save Template

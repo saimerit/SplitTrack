@@ -1,15 +1,14 @@
 import { useState } from 'react';
-import { Trash2, Edit2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Trash2, Edit2, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 
-const TransactionItem = ({ txn, participantsLookup, onEdit, onDelete }) => {
+const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, onDelete }) => {
   const [isOpen, setIsOpen] = useState(false);
   
   const payerName = txn.payer === 'me' ? 'You (me)' : (participantsLookup.get(txn.payer)?.name || txn.payer);
   const myShare = txn.splits?.me || 0;
   const amount = txn.amount;
 
-  // Logic to determine color and text
   let shareText = '';
   let shareColor = 'text-gray-600 dark:text-gray-400';
   
@@ -52,8 +51,19 @@ const TransactionItem = ({ txn, participantsLookup, onEdit, onDelete }) => {
           {txn.place && ` at ${txn.place}`}
           {txn.tag && <span className="ml-2 px-2 py-0.5 bg-gray-100 dark:bg-gray-600 rounded-full text-xs">{txn.tag}</span>}
         </p>
+        
+        {/* Linked Refunds (Children) */}
+        {linkedRefunds.length > 0 && (
+            <div className="mt-2 space-y-1">
+                {linkedRefunds.map(child => (
+                    <div key={child.id} className="flex items-center text-xs text-green-600 dark:text-green-400">
+                        <RefreshCw size={12} className="mr-1" />
+                        <span>Refund received: {formatCurrency(Math.abs(child.amount))} on {formatDate(child.timestamp)}</span>
+                    </div>
+                ))}
+            </div>
+        )}
 
-        {/* Toggle for Details */}
         <button 
           onClick={() => setIsOpen(!isOpen)} 
           className="mt-2 text-sm text-sky-600 hover:underline flex items-center gap-1"

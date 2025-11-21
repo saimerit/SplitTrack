@@ -7,7 +7,6 @@ import { exportToCSV } from '../services/exportImportService';
 import Button from '../components/common/Button';
 import Select from '../components/common/Select';
 import Input from '../components/common/Input';
-// Import the new component
 import TransactionItem from '../components/transactions/TransactionItem';
 
 const History = () => {
@@ -60,28 +59,12 @@ const History = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700">
-        <Select 
-          label="Filter by Tag" 
-          value={filterTag} 
-          onChange={e => setFilterTag(e.target.value)}
-          options={[{ value: '', label: 'All Tags' }, ...tags.map(t => ({ value: t.name, label: t.name }))]} 
-        />
-        <Input 
-          label="Filter by Date" 
-          type="date" 
-          value={filterDate} 
-          onChange={e => { setFilterDate(e.target.value); setFilterMonth(''); }} 
-        />
-        <Input 
-          label="Filter by Month" 
-          type="month" 
-          value={filterMonth} 
-          onChange={e => { setFilterMonth(e.target.value); setFilterDate(''); }} 
-        />
+        {/* Filters... (same as before) */}
+        <Select label="Filter by Tag" value={filterTag} onChange={e => setFilterTag(e.target.value)} options={[{ value: '', label: 'All Tags' }, ...tags.map(t => ({ value: t.name, label: t.name }))]} />
+        <Input label="Filter by Date" type="date" value={filterDate} onChange={e => { setFilterDate(e.target.value); setFilterMonth(''); }} />
+        <Input label="Filter by Month" type="month" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setFilterDate(''); }} />
         <div className="flex items-end">
-          <Button variant="secondary" onClick={() => { setFilterTag(''); setFilterDate(''); setFilterMonth(''); }} className="w-full">
-            Clear Filters
-          </Button>
+          <Button variant="secondary" onClick={() => { setFilterTag(''); setFilterDate(''); setFilterMonth(''); }} className="w-full">Clear</Button>
         </div>
       </div>
 
@@ -92,7 +75,9 @@ const History = () => {
           filteredTransactions.map(txn => (
             <TransactionItem 
               key={txn.id} 
-              txn={txn} 
+              txn={txn}
+              // Pass related refunds
+              linkedRefunds={transactions.filter(t => t.parentTransactionId === txn.id)}
               participantsLookup={participantsLookup}
               onEdit={() => handleEdit(txn)}
               onDelete={handleDelete}

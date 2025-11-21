@@ -26,14 +26,20 @@ const Analytics = () => {
     const balancePoints = [];
     let runningBalance = 0;
 
-    const sortedTxns = [...transactions].sort((a, b) => a.timestamp - b.timestamp);
+    // SAFETY: Handle mixed date formats robustly
+    const getMillis = (t) => {
+        if (t?.timestamp?.toMillis) return t.timestamp.toMillis();
+        const d = new Date(t?.timestamp);
+        return isNaN(d.getTime()) ? 0 : d.getTime();
+    };
+    
+    const sortedTxns = [...transactions].sort((a, b) => getMillis(a) - getMillis(b));
 
     sortedTxns.forEach(txn => {
       if (!txn.timestamp) return;
       
-      // ROBUST DATE PARSING (Fixes crash on legacy data)
       const date = txn.timestamp.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp);
-      if (isNaN(date.getTime())) return; // Skip invalid dates
+      if (isNaN(date.getTime())) return;
 
       const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -112,20 +118,17 @@ const Analytics = () => {
     };
   }, [transactions]);
 
-
   if (loading) return <div>Loading analytics...</div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
       <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Analytics Dashboard</h2>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Total Spending (All Time)" value={formatCurrency(stats.totalSpend * 100)} />
         <StatCard title="Highest Spending Month" value={stats.peakMonth} subValue={formatCurrency(stats.peakAmount * 100)} />
         <StatCard title="Avg. Monthly Spending" value={formatCurrency(stats.avgMonthly * 100)} />
         <StatCard title="Active Days" value={stats.activeDays} />
       </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="Monthly Spending Trend">
           <MonthlyTrendLine labels={stats.monthlyChart.labels} data={stats.monthlyChart.data} />
@@ -134,7 +137,6 @@ const Analytics = () => {
           <NetBalanceLine labels={stats.netBalanceChart.labels} data={stats.netBalanceChart.data} />
         </ChartCard>
       </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700 lg:col-span-2">
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Spending by Category</h3>
@@ -167,21 +169,16 @@ const ChartCard = ({ title, children }) => (
 
 const HeatmapPanel = ({ data }) => {
   const cats = Object.keys(data);
-  
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700 overflow-hidden">
         <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Intensity Heatmap</h3>
         <p className="text-xs text-gray-500 mb-2">Current Month (Day 1-31)</p>
-        
         {cats.length === 0 ? (
             <p className="text-gray-500">No data this month.</p>
         ) : (
             <div className="grid gap-1 overflow-x-auto pb-2" style={{ gridTemplateColumns: 'auto repeat(31, minmax(10px, 1fr))' }}>
                 <div className="text-xs font-bold text-gray-500">Cat</div>
-                {[...Array(31)].map((_, i) => (
-                    <div key={i} className="text-[9px] text-center text-gray-400">{i+1}</div>
-                ))}
-
+                {[...Array(31)].map((_, i) => (<div key={i} className="text-[9px] text-center text-gray-400">{i+1}</div>))}
                 {cats.map(cat => {
                     const maxDaily = Math.max(...data[cat]);
                     return (
@@ -190,14 +187,7 @@ const HeatmapPanel = ({ data }) => {
                            {[...Array(31)].map((_, i) => {
                                const val = data[cat][i+1];
                                const opacity = val > 0 ? Math.max(0.3, val / (maxDaily || 1)) : 0.1;
-                               return (
-                                   <div 
-                                     key={`${cat}-${i}`} 
-                                     title={`${cat}: ${val.toFixed(2)}`}
-                                     className={`h-3 w-full rounded-sm ${val > 0 ? 'bg-sky-600' : 'bg-gray-100 dark:bg-gray-700'}`}
-                                     style={{ opacity: val > 0 ? opacity : 1 }}
-                                   />
-                               );
+                               return (<div key={`${cat}-${i}`} title={`${cat}: ${val.toFixed(2)}`} className={`h-3 w-full rounded-sm ${val > 0 ? 'bg-sky-600' : 'bg-gray-100 dark:bg-gray-700'}`} style={{ opacity: val > 0 ? opacity : 1 }} />);
                            })}
                         </>
                     );

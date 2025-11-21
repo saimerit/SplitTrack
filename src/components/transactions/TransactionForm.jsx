@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, addDoc, collection } from 'firebase/firestore'; // Added imports
+import { db } from '../../config/firebase'; // Added db
 import useAppStore from '../../store/useAppStore';
 import { useOfflineQueue } from '../../hooks/useOfflineQueue';
 import { addTransaction, updateTransaction } from '../../services/transactionService';
@@ -11,7 +12,7 @@ import Select from '../common/Select';
 import Button from '../common/Button';
 import SplitAllocator from './SplitAllocator';
 import ParticipantSelector from './ParticipantSelector';
-import ConfirmModal from '../modals/ConfirmModal'; // Needed for Dupes
+import ConfirmModal from '../modals/ConfirmModal';
 
 const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   const navigate = useNavigate();
@@ -43,16 +44,13 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   const [splits, setSplits] = useState(initialData?.splits || {}); 
   const [splitError, setSplitError] = useState('');
   
-  // Duplicate Modal State
   const [showDupeModal, setShowDupeModal] = useState(false);
   const [dupeTxn, setDupeTxn] = useState(null);
 
-  // Helper: Filter eligible parents for Refund
   const eligibleParents = transactions
     .filter(t => t.amount > 0 && !t.isReturn)
     .sort((a, b) => b.timestamp - a.timestamp);
 
-  // Handle Refund Parent Selection
   const handleRefundParentChange = (e) => {
     const pid = e.target.value;
     setRefundParentId(pid);
@@ -66,7 +64,39 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
   const isIncome = type === 'income';
 
-  // Logic to execute the save operation
+  // --- NEW: Template Saving Logic ---
+  const handleSaveTemplate = async () => {
+    const templateName = prompt("Enter Template Name (e.g., 'Monthly Rent'):");
+    if (!templateName) return;
+
+    const amountInRupees = parseFloat(amount);
+    // Allow saving template even with partial data (null amount)
+    const multiplier = type === 'refund' ? -1 : 1;
+    const finalAmount = !isNaN(amountInRupees) ? Math.round(amountInRupees * 100) * multiplier : null;
+
+    const templateData = {
+        name: templateName,
+        expenseName: name,
+        amount: finalAmount,
+        type,
+        category, place, tag, modeOfPayment: mode, description,
+        payer: (type === 'income') ? 'me' : payer,
+        isReturn,
+        participants: (type === 'income') ? [] : (isReturn ? [selectedParticipants[0]] : selectedParticipants),
+        splitMethod: (isReturn || type === 'income') ? 'none' : splitMethod,
+        splits: (isReturn || type === 'income') ? {} : splits,
+    };
+
+    try {
+        await addDoc(collection(db, 'ledgers/main-ledger/templates'), templateData);
+        showToast("Template saved successfully!");
+    } catch (error) {
+        console.error(error);
+        showToast("Failed to save template.", true);
+    }
+  };
+  // ----------------------------------
+
   const saveTransaction = async () => {
        const amountInPaise = Math.round(parseFloat(amount) * 100);
        const multiplier = type === 'refund' ? -1 : 1;
@@ -126,7 +156,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         }
     }
 
-    // Duplicate Check Logic
     if (!isEditMode) {
         const checkAmount = Math.round(amountInRupees * 100);
         const potentialDupe = transactions.find(t => 
@@ -137,10 +166,9 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         if (potentialDupe) {
             setDupeTxn(potentialDupe);
             setShowDupeModal(true);
-            return; // Wait for modal confirmation
+            return;
         }
     }
-
     saveTransaction();
   };
 
@@ -154,7 +182,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   return (
     <>
     <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-6 bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-      {/* Form Fields (Type, Name, Amount, etc.) */}
       <div className="grid grid-cols-3 gap-4">
         {['expense', 'income', 'refund'].map(t => (
           <label key={t} className={`cursor-pointer border rounded-lg py-2 text-center capitalize ${type === t ? 'bg-sky-100 border-sky-500 text-sky-700 dark:bg-sky-900 dark:text-sky-300' : 'border-gray-300 dark:border-gray-600'}`}>
@@ -164,7 +191,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         ))}
       </div>
 
-      {/* Refund Link Row */}
       {type === 'refund' && (
           <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
               <Select 
@@ -180,7 +206,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
           </div>
       )}
 
-      {/* Basic Fields */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Input label="Name" value={name} onChange={e => setName(e.target.value)} required />
         <Input label="Amount (₹)" type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required />
@@ -193,7 +218,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       
       <Input label="Description" value={description} onChange={e => setDescription(e.target.value)} />
 
-      {/* Return Checkbox */}
       {type === 'expense' && (
          <div className="flex items-center gap-2">
            <input type="checkbox" id="isReturn" checked={isReturn} onChange={e => setIsReturn(e.target.checked)} className="h-4 w-4 text-sky-600 rounded" />
@@ -201,7 +225,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
          </div>
       )}
 
-      {/* Payer & Participants */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
          {type !== 'income' && (
             <Select 
@@ -220,7 +243,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
          )}
       </div>
 
-      {/* Splits (Hide for Income/Return) */}
       {type !== 'income' && !isReturn && (
          <div className="border-t pt-6 dark:border-gray-700 space-y-6">
             <ParticipantSelector 
@@ -254,10 +276,15 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
       <div className="flex gap-4 pt-4">
          <Button type="submit" className="flex-1">{isEditMode ? 'Update' : 'Log Transaction'}</Button>
+         {/* CONNECTED SAVE TEMPLATE */}
+         {!isEditMode && (
+            <Button type="button" variant="secondary" onClick={handleSaveTemplate}>
+              Save Template
+            </Button>
+         )}
       </div>
     </form>
 
-    {/* Duplicate Modal */}
     <ConfirmModal 
        isOpen={showDupeModal} 
        title="Possible Duplicate" 

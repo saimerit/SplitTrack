@@ -28,7 +28,7 @@ const ParticipantSelector = ({ selectedIds, onAdd, onRemove }) => {
 
   return (
     <div className="space-y-4">
-      <div className="relative">
+      <div className="relative group">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           Participants (excluding you)
         </label>
@@ -38,24 +38,31 @@ const ParticipantSelector = ({ selectedIds, onAdd, onRemove }) => {
           value={search}
           onChange={(e) => { setSearch(e.target.value); setShowResults(true); }}
           onFocus={() => setShowResults(true)}
-          onBlur={() => setTimeout(() => setShowResults(false), 200)}
+          onBlur={() => {
+            // Small delay to allow click to register if onMouseDown doesn't catch it
+            setTimeout(() => setShowResults(false), 200);
+          }}
           className="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
         />
         
         {/* Search Dropdown */}
         {showResults && search && (
-          <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
             {results.length > 0 ? results.map(p => (
               <div 
                 key={p.uniqueId}
-                onClick={() => handleSelect(p.uniqueId)}
+                // FIX: Use onMouseDown to prevent input blur from hiding list before click registers
+                onMouseDown={(e) => {
+                  e.preventDefault(); 
+                  handleSelect(p.uniqueId);
+                }}
                 className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer text-gray-800 dark:text-gray-200"
               >
                 <div className="font-medium">{p.name}</div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">{p.uniqueId}</div>
               </div>
             )) : (
-              <div className="px-4 py-2 text-gray-500">No matches found</div>
+              <div className="px-4 py-2 text-gray-500 dark:text-gray-400">No matches found</div>
             )}
           </div>
         )}
@@ -64,7 +71,7 @@ const ParticipantSelector = ({ selectedIds, onAdd, onRemove }) => {
       {/* Selected Chips */}
       <div className="flex flex-wrap gap-2">
         {selectedIds.map(uid => (
-          <span key={uid} className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">
+          <span key={uid} className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300 animate-fade-in">
             {getParticipantName(uid)}
             <button type="button" onClick={() => onRemove(uid)} className="hover:text-sky-900 dark:hover:text-sky-100">
               <X size={14} />

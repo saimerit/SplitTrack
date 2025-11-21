@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Timestamp, addDoc, collection } from 'firebase/firestore'; 
 import { db } from '../../config/firebase'; 
@@ -23,11 +23,37 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   
   const { addToQueue } = useOfflineQueue();
 
+  // --- INITIALIZATION LOGIC ---
+  const wasMeIncluded = initialData?.splits ? (initialData.splits['me'] !== undefined) : true;
+
   // State
   const [type, setType] = useState(initialData?.type || 'expense');
   const [name, setName] = useState(initialData?.expenseName || '');
   const [amount, setAmount] = useState(initialData ? (Math.abs(initialData.amount)/100).toFixed(2) : '');
-  const [date, setDate] = useState(initialData?.timestamp ? new Date(initialData.timestamp.toDate()).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+  
+  // Handle date conversion safely
+  const getInitialDate = () => {
+      try {
+          if (initialData?.timestamp) {
+              let d;
+              if (typeof initialData.timestamp.toDate === 'function') {
+                  d = initialData.timestamp.toDate();
+              } else if (initialData.timestamp.seconds) {
+                  d = new Date(initialData.timestamp.seconds * 1000);
+              } else {
+                  d = new Date(initialData.timestamp);
+              }
+              if (!isNaN(d.getTime())) {
+                  return d.toISOString().split('T')[0];
+              }
+          }
+      } catch (e) {
+          console.warn("Date parsing error:", e);
+      }
+      return new Date().toISOString().split('T')[0];
+  };
+
+  const [date, setDate] = useState(getInitialDate());
   
   const [category, setCategory] = useState(initialData?.category || userSettings.defaultCategory || '');
   const [place, setPlace] = useState(initialData?.place || userSettings.defaultPlace || '');
@@ -37,19 +63,41 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
   const [payer, setPayer] = useState(initialData?.payer || 'me');
   const [isReturn, setIsReturn] = useState(initialData?.isReturn || false);
+  
   const [selectedParticipants, setSelectedParticipants] = useState(initialData?.participants || []);
   
   const [refundParentId, setRefundParentId] = useState(initialData?.parentTransactionId || '');
   const [splitMethod, setSplitMethod] = useState(initialData?.splitMethod || 'equal');
   const [splits, setSplits] = useState(initialData?.splits || {}); 
-  const [splitError, setSplitError] = useState('');
   
+  const [includeMe, setIncludeMe] = useState(wasMeIncluded);
+
   const [showDupeModal, setShowDupeModal] = useState(false);
   const [dupeTxn, setDupeTxn] = useState(null);
 
   const eligibleParents = transactions
     .filter(t => t.amount > 0 && !t.isReturn)
     .sort((a, b) => b.timestamp - a.timestamp);
+
+  const isIncome = type === 'income';
+
+  // --- LIVE VALIDATION ---
+  const validation = useMemo(() => {
+    if (type === 'income' || isReturn) {
+        return { isValid: true, message: '' };
+    }
+
+    const amountInRupees = parseFloat(amount);
+    if (isNaN(amountInRupees) || amountInRupees === 0) {
+        return splitMethod === 'dynamic' 
+            ? { isValid: false, message: 'Enter a total amount first.' }
+            : { isValid: true, message: '' };
+    }
+
+    const amountInPaise = Math.round(amountInRupees * 100);
+    return validateSplits(amountInPaise, splits, splitMethod);
+  }, [amount, splits, splitMethod, type, isReturn]);
+
 
   const handleRefundParentChange = (e) => {
     const pid = e.target.value;
@@ -62,9 +110,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     }
   };
 
-  const isIncome = type === 'income';
-
-  // --- QUICK ADD HELPER ---
   const handleQuickAdd = async (value, collectionName, label, setter) => {
     if (value === `add_new_${collectionName}`) {
         const newItemName = prompt(`Enter New ${label} Name:`);
@@ -87,7 +132,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   };
 
   const handleSaveTemplate = async () => {
-    const templateName = prompt("Enter Template Name (e.g., 'Monthly Rent'):");
+    const templateName = prompt("Enter Template Name:");
     if (!templateName) return;
 
     const amountInRupees = parseFloat(amount);
@@ -121,6 +166,11 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
        const multiplier = type === 'refund' ? -1 : 1;
        const finalAmount = amountInPaise * multiplier;
        
+       let safeParticipants = selectedParticipants;
+       if (isReturn && (!selectedParticipants || selectedParticipants.length === 0)) {
+           safeParticipants = ['me'];
+       }
+
        const txnData = {
          expenseName: name,
          amount: finalAmount,
@@ -133,7 +183,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
          timestamp: Timestamp.fromDate(new Date(date)),
          payer: (type === 'income') ? 'me' : payer,
          isReturn,
-         participants: (type === 'income') ? [] : (isReturn ? [selectedParticipants[0]] : selectedParticipants),
+         participants: (type === 'income') ? [] : (isReturn ? [safeParticipants[0]] : safeParticipants),
          splitMethod: (isReturn || type === 'income') ? 'none' : splitMethod,
          splits: (isReturn || type === 'income') ? {} : splits,
          parentTransactionId: refundParentId || null,
@@ -156,13 +206,12 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
          navigate('/');
        } catch(e) { 
          console.error(e); 
-         showToast("Error saving", true); 
+         showToast("Error saving: " + e.message, true); 
        }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSplitError('');
 
     const amountInRupees = parseFloat(amount);
     if (!name || !amountInRupees || amountInRupees <= 0) {
@@ -170,13 +219,9 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         return;
     }
 
-    if (!isReturn && !isIncome) {
-        const amountInPaise = Math.round(amountInRupees * 100);
-        const validation = validateSplits(amountInPaise, splits, splitMethod);
-        if (!validation.isValid) {
-            setSplitError(validation.message);
-            return;
-        }
+    if (!isReturn && !isIncome && !validation.isValid) {
+        showToast(validation.message || "Please fix split errors.", true);
+        return;
     }
 
     if (!isEditMode) {
@@ -206,11 +251,17 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       { value: `add_new_${collectionName}`, label: `+ Add New ${label}`, className: "text-sky-600 font-bold bg-sky-50" }
   ];
 
+  // Filter participants for the split allocator
+  const splitAllocatorParticipants = [
+      ...(includeMe ? [{ uniqueId: 'me', name: 'You' }] : []),
+      ...participants.filter(p => selectedParticipants.includes(p.uniqueId))
+  ];
+
   return (
     <>
     <form onSubmit={handleSubmit} className="max-w-7xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       
-      {/* 1. Transaction Type (Full Width) */}
+      {/* 1. Transaction Type */}
       <div className="col-span-1 md:col-span-2 lg:col-span-4">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Transaction Type</label>
         <div className="flex flex-col sm:flex-row gap-4">
@@ -239,7 +290,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         </div>
       </div>
 
-      {/* 2. Expense Name (Full Width) */}
+      {/* 2. Name */}
       <Input 
         label="Expense Name" 
         value={name} 
@@ -249,7 +300,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         placeholder="e.g. Dinner at Taj"
       />
 
-      {/* 3. Refund Parent Link (Full Width - Conditional) */}
+      {/* 3. Refund Parent */}
       {type === 'refund' && (
           <div className="col-span-1 md:col-span-2 lg:col-span-4">
               <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
@@ -262,14 +313,12 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                         ...eligibleParents.map(t => ({ value: t.id, label: `${t.expenseName} (${(t.amount/100).toFixed(2)})` }))
                     ]} 
                 />
-                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-                    Selecting an expense will auto-fill participants.
-                </p>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">Selecting an expense will auto-fill participants.</p>
               </div>
           </div>
       )}
 
-      {/* 4. Core Details (Row 3) */}
+      {/* 4. Core Fields */}
       <Input 
         label="Amount (₹)" 
         type="number" 
@@ -279,7 +328,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         required 
         className="col-span-1" 
       />
-      
       <Input 
         label="Date" 
         type="date" 
@@ -288,7 +336,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         required 
         className="col-span-1" 
       />
-      
       <Select 
         label="Category" 
         value={category} 
@@ -296,7 +343,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         options={mapOptions(categories, 'categories', 'Category')} 
         className="col-span-1"
       />
-      
       <Select 
         label="Place" 
         value={place} 
@@ -304,8 +350,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         options={mapOptions(places, 'places', 'Place')} 
         className="col-span-1"
       />
-
-      {/* 5. Meta Details (Row 4) */}
       <Select 
         label="Tag" 
         value={tag} 
@@ -313,7 +357,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         options={mapOptions(tags, 'tags', 'Tag')} 
         className="col-span-1"
       />
-      
       <Select 
         label="Mode" 
         value={mode} 
@@ -321,7 +364,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         options={mapOptions(modesOfPayment, 'modesOfPayment', 'Mode')} 
         className="col-span-1"
       />
-      
       <Input 
         label="Description (Optional)" 
         value={description} 
@@ -330,7 +372,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         placeholder="Short notes..."
       />
 
-      {/* 6. Return Checkbox (Full Width) */}
+      {/* 6. Return Checkbox */}
       {type === 'expense' && (
          <div className="col-span-1 md:col-span-2 lg:col-span-4 pt-4 border-t border-gray-200 dark:border-gray-700">
            <div className="flex items-center">
@@ -348,7 +390,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
          </div>
       )}
 
-      {/* 7. Payer & Recipient (Row 5 - Half Width each) */}
+      {/* 7. Payer */}
       <div className="col-span-1 md:col-span-1 lg:col-span-2">
          {type !== 'income' && (
             <Select 
@@ -370,15 +412,29 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
          </div>
       )}
 
-      {/* 8. Participants & Splits (Half Width each) */}
+      {/* 8. Participants & Splits */}
       {type !== 'income' && !isReturn && (
          <>
-            <div className="col-span-1 md:col-span-2 lg:col-span-2 space-y-4">
+            <div className="col-span-1 md:col-span-2 lg:col-span-2 space-y-4 border-t sm:border-t-0 pt-4 sm:pt-0 border-gray-200 dark:border-gray-700">
                 <ParticipantSelector 
                    selectedIds={selectedParticipants} 
                    onAdd={uid => setSelectedParticipants([...selectedParticipants, uid])} 
                    onRemove={uid => setSelectedParticipants(selectedParticipants.filter(x => x !== uid))} 
                 />
+                
+                {/* Include Me Toggle */}
+                <div className="flex items-center bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
+                    <input 
+                        type="checkbox" 
+                        id="includeMe" 
+                        checked={includeMe} 
+                        onChange={e => setIncludeMe(e.target.checked)}
+                        className="h-4 w-4 text-sky-600 rounded dark:bg-gray-700 dark:border-gray-500"
+                    />
+                    <label htmlFor="includeMe" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                        Include <strong>Me</strong> in this split?
+                    </label>
+                </div>
             </div>
             
             <div className="col-span-1 md:col-span-2 lg:col-span-2 space-y-4">
@@ -396,29 +452,41 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                <div className="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                    <SplitAllocator 
                       method={splitMethod}
-                      participants={[{ uniqueId: 'me', name: 'You' }, ...participants.filter(p => selectedParticipants.includes(p.uniqueId))]}
+                      participants={splitAllocatorParticipants}
                       totalAmount={Math.round(parseFloat(amount || 0) * 100)}
                       splits={splits}
                       onSplitChange={setSplits}
                    />
-                   {splitError && (
-                      <p className="text-sm text-red-600 mt-2 font-medium flex items-center gap-1">
-                          <span className="text-lg">⚠️</span> {splitError}
-                      </p>
+                   
+                   {/* Live Validation Feedback */}
+                   {validation.message && (
+                      <div className={`mt-3 p-2 rounded text-sm font-medium flex items-center gap-2 ${
+                          validation.isValid 
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' 
+                            : 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300'
+                      }`}>
+                          <span>{validation.isValid ? '✓' : '⚠️'}</span>
+                          {validation.message.replace(/^✓ /, '')}
+                      </div>
                    )}
                </div>
             </div>
          </>
       )}
 
-      {/* 9. Actions (Full Width) */}
+      {/* 9. Buttons */}
       <div className="col-span-1 md:col-span-2 lg:col-span-4 flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
          {!isEditMode && (
             <Button type="button" variant="secondary" onClick={handleSaveTemplate} className="flex-1 py-3">
               Save as Template
             </Button>
          )}
-         <Button type="submit" className="flex-2 py-3 text-lg shadow-md">
+         <Button 
+            type="submit" 
+            className={`flex-1 sm:grow-2 py-3 text-lg shadow-md ${
+                isEditMode ? 'bg-yellow-500 hover:bg-yellow-600 focus:ring-yellow-500' : ''
+            }`}
+         >
             {isEditMode ? 'Update Transaction' : 'Log Transaction'}
          </Button>
       </div>

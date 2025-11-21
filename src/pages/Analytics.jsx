@@ -10,7 +10,6 @@ const Analytics = () => {
 
   const stats = useMemo(() => {
     const monthlyStats = {};
-    const placeStats = {};
     const categoryStats = {};
     const currentMonthCatStats = {};
     const heatmapData = {}; 
@@ -20,6 +19,7 @@ const Analytics = () => {
     const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     
     let totalSpend = 0;
+    let totalLent = 0; // Track money lent (paid but not consumed)
     let currentMonthSpend = 0;
     
     const balanceLabels = [];
@@ -53,6 +53,12 @@ const Analytics = () => {
           myConsumption = txn.splits['me'] / 100;
       }
 
+      // Money Lent Calculation: I paid, but didn't consume (or consumed less than I paid)
+      if (txn.type === 'expense' && txn.payer === 'me') {
+          const lentAmount = amountIPaid - myConsumption;
+          if (lentAmount > 0) totalLent += lentAmount;
+      }
+
       runningBalance += (amountIPaid - myConsumption);
       balanceLabels.push(dateStr);
       balancePoints.push(runningBalance);
@@ -63,9 +69,6 @@ const Analytics = () => {
 
         monthlyStats[monthKey] = (monthlyStats[monthKey] || 0) + myConsumption;
         
-        const place = txn.place || 'Unknown';
-        placeStats[place] = (placeStats[place] || 0) + myConsumption;
-
         const cat = txn.category || 'Uncategorized';
         categoryStats[cat] = (categoryStats[cat] || 0) + myConsumption;
 
@@ -102,7 +105,7 @@ const Analytics = () => {
         return new Date(y, m-1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     });
 
-    // --- Forecast Logic ---
+    // Forecast Logic
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const daysPassed = Math.max(1, now.getDate());
     const projectedTotal = (currentMonthSpend / daysPassed) * daysInMonth;
@@ -110,6 +113,7 @@ const Analytics = () => {
 
     return {
       totalSpend,
+      totalLent,
       activeDays: activeDays.size,
       peakMonth,
       peakAmount,
@@ -131,10 +135,11 @@ const Analytics = () => {
     <div className="space-y-6 animate-fade-in">
       <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Analytics Dashboard</h2>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Spending (All Time)" value={formatCurrency(stats.totalSpend * 100)} />
-        <StatCard title="Highest Spending Month" value={stats.peakMonth} subValue={formatCurrency(stats.peakAmount * 100)} />
-        <StatCard title="Avg. Monthly Spending" value={formatCurrency(stats.avgMonthly * 100)} />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard title="Total Spending" value={formatCurrency(stats.totalSpend * 100)} />
+        <StatCard title="Total Money Lent" value={formatCurrency(stats.totalLent * 100)} subValue="Paid for others" />
+        <StatCard title="Peak Month" value={stats.peakMonth} subValue={formatCurrency(stats.peakAmount * 100)} />
+        <StatCard title="Avg. Monthly" value={formatCurrency(stats.avgMonthly * 100)} />
         <StatCard title="Active Days" value={stats.activeDays} />
       </div>
 
@@ -155,7 +160,6 @@ const Analytics = () => {
             </div>
         </div>
         <div className="lg:col-span-2 space-y-6">
-            {/* Forecast Card */}
             <ForecastCard 
                 spent={stats.currentMonthSpend} 
                 projected={stats.projectedTotal} 

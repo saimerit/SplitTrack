@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Timestamp, addDoc, collection } from 'firebase/firestore'; 
 import { db } from '../../config/firebase'; 
 import useAppStore from '../../store/useAppStore';
-import { useOfflineQueue } from '../../hooks/useOfflineQueue';
 import { addTransaction, updateTransaction } from '../../services/transactionService';
 import { validateSplits } from '../../utils/validators';
 
@@ -21,8 +20,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     userSettings, showToast 
   } = useAppStore();
   
-  const { addToQueue } = useOfflineQueue();
-
   // --- INITIALIZATION LOGIC ---
   const wasMeIncluded = initialData?.splits ? (initialData.splits['me'] !== undefined) : true;
 
@@ -31,7 +28,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   const [name, setName] = useState(initialData?.expenseName || '');
   const [amount, setAmount] = useState(initialData ? (Math.abs(initialData.amount)/100).toFixed(2) : '');
   
-  // Handle date conversion safely
   const getInitialDate = () => {
       try {
           if (initialData?.timestamp) {
@@ -191,11 +187,10 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
        };
 
        try {
-         if (!navigator.onLine) {
-            addToQueue(txnData);
-            navigate('/'); 
-            return;
-         }
+         // REMOVED: Manual offline queue check. 
+         // Firestore handles offline persistence automatically. 
+         // This prevents data from being "hidden" in a local queue.
+
          if (isEditMode) {
             await updateTransaction(initialData.id, txnData, initialData.parentTransactionId);
             showToast("Transaction updated!");
@@ -484,7 +479,9 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
          <Button 
             type="submit" 
             className={`flex-1 sm:grow-2 py-3 text-lg shadow-md ${
-                isEditMode ? 'bg-yellow-500 hover:bg-yellow-600 focus:ring-yellow-500' : ''
+                isEditMode 
+                    ? 'bg-yellow-500 hover:bg-yellow-600 focus:ring-yellow-500' 
+                    : 'bg-sky-600 hover:bg-sky-700 focus:ring-sky-500'
             }`}
          >
             {isEditMode ? 'Update Transaction' : 'Log Transaction'}

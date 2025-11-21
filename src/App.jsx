@@ -11,7 +11,6 @@ import Loader from './components/common/Loader';
 import Layout from './components/layout/Layout';
 
 // --- STATIC IMPORTS (Debugging Mode) ---
-// If a file is missing, Vite will now show you exactly which one it is.
 import Dashboard from './pages/Dashboard';
 import AddTransaction from './pages/AddTransaction'; 
 import History from './pages/History';
@@ -24,6 +23,7 @@ import Goals from './pages/Goals';
 import Templates from './pages/Templates';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import Timeline from './pages/Timeline'; // Import Timeline
 
 const AppDataSyncer = ({ children }) => {
   useFirestoreSync();
@@ -55,6 +55,7 @@ const App = () => {
             <Route path="/history" element={<History />} />
             <Route path="/data" element={<ManageData />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/timeline" element={<Timeline />} /> {/* Added Route */}
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/insights" element={<Insights />} />
             <Route path="/tags" element={<TagsAnalysis />} />

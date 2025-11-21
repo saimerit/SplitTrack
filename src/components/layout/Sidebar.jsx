@@ -2,11 +2,11 @@ import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, PlusCircle, History, Database, 
   BarChart2, Calendar, Activity, Tag, Target, FileText, 
-  Settings, LogOut, Moon, Sun 
+  Settings, LogOut, Moon, Sun, List 
 } from 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
-import OfflineBanner from './OfflineBanner'; // Import
+import OfflineBanner from './OfflineBanner';
 
 const Sidebar = () => {
   const { theme, toggleTheme } = useTheme();
@@ -22,7 +22,6 @@ const Sidebar = () => {
   return (
     <nav className="hidden md:flex md:flex-col md:w-64 h-full bg-white border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700">
       
-      {/* Use extracted component */}
       <OfflineBanner />
 
       <div className="px-4 pt-5 pb-2">
@@ -36,6 +35,7 @@ const Sidebar = () => {
         <NavLink to="/history" className={navClass}><History size={20}/> History</NavLink>
         <NavLink to="/data" className={navClass}><Database size={20}/> Manage Data</NavLink>
         <NavLink to="/analytics" className={navClass}><BarChart2 size={20}/> Analytics</NavLink>
+        <NavLink to="/timeline" className={navClass}><List size={20}/> Timeline</NavLink> {/* Added Link */}
         <NavLink to="/calendar" className={navClass}><Calendar size={20}/> Calendar</NavLink>
         <NavLink to="/insights" className={navClass}><Activity size={20}/> Insights</NavLink>
         <NavLink to="/tags" className={navClass}><Tag size={20}/> Tags</NavLink>

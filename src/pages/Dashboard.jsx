@@ -1,13 +1,15 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import useAppStore from '../store/useAppStore';
 import { formatCurrency } from '../utils/formatters';
 import CategoryDoughnut from '../components/charts/CategoryDoughnut';
 import Button from '../components/common/Button';
 import { useNavigate } from 'react-router-dom';
+import ConfirmModal from '../components/modals/ConfirmModal';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { transactions, participants, loading } = useAppStore();
+  const [showSummary, setShowSummary] = useState(false);
 
   // --- Core Balance Logic ---
   const stats = useMemo(() => {
@@ -33,9 +35,11 @@ const Dashboard = () => {
       const splits = txn.splits || {};
       const amount = txn.amount || 0; 
 
+      // Income Logic
       if (txn.type === 'income') {
         if (txn.timestamp) {
-          const d = txn.timestamp.toDate();
+          // Handle both Firestore Timestamp and Date objects for robustness
+          const d = txn.timestamp.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp);
           if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
             monthlyIncome += (amount / 100);
           }
@@ -100,23 +104,36 @@ const Dashboard = () => {
 
   }, [transactions, participants]);
 
-  const getParticipantName = (uid) => {
-    const p = participants.find(x => x.uniqueId === uid);
-    return p ? p.name : uid;
-  };
-
   const handleSettleUp = (uid, amount) => {
     navigate('/add', { 
       state: { 
         type: 'expense', 
         isReturn: true,
         payer: 'me',
-        participants: [uid], // Fix: Pass as array for the form logic
+        participants: [uid],
         amount: Math.abs(amount/100),
         description: 'Settlement'
       } 
     });
   };
+
+  // --- Who Owes Whom Logic (Fixed Dependency Issue) ---
+  const debtSummaryHtml = useMemo(() => {
+     if (!stats) return "";
+     const lines = Object.entries(stats.myPersonalBalances)
+        .filter(([, val]) => Math.abs(val) > 1)
+        .map(([uid, val]) => {
+            // FIX: Inline lookup to avoid external dependency in useMemo
+            const p = participants.find(x => x.uniqueId === uid);
+            const name = p ? p.name : uid;
+            
+            if (val > 0) return `<li class="text-green-600">${name} owes you ${formatCurrency(val)}</li>`;
+            return `<li class="text-red-600">You owe ${name} ${formatCurrency(Math.abs(val))}</li>`;
+        });
+     
+     if (lines.length === 0) return "Everyone is settled up!";
+     return `<ul class="space-y-2 list-disc list-inside">${lines.join('')}</ul>`;
+  }, [stats, participants]); 
 
   if (loading) return <div className="text-center text-gray-500 mt-10">Calculating balances...</div>;
 
@@ -124,7 +141,7 @@ const Dashboard = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Balances</h2>
-        <Button variant="primary" onClick={() => alert("Summary feature coming in next update!")}>
+        <Button variant="primary" onClick={() => setShowSummary(true)}>
           Who Owes Whom?
         </Button>
       </div>
@@ -182,7 +199,9 @@ const Dashboard = () => {
             ) : (
               Object.entries(stats.myPersonalBalances).map(([uid, val]) => {
                 if (Math.abs(val) < 1) return null;
-                const name = getParticipantName(uid);
+                // Lookup logic was moved to useMemo, here we just display
+                const p = participants.find(x => x.uniqueId === uid);
+                const name = p ? p.name : uid;
                 
                 return (
                   <div key={uid} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -219,6 +238,16 @@ const Dashboard = () => {
         </div>
 
       </div>
+
+      {/* Who Owes Whom Modal */}
+      <ConfirmModal 
+        isOpen={showSummary}
+        title="Who Owes Whom?"
+        message={debtSummaryHtml}
+        confirmText="Close"
+        onConfirm={() => setShowSummary(false)}
+        onCancel={() => setShowSummary(false)}
+      />
     </div>
   );
 };

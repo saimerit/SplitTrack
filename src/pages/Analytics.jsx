@@ -12,8 +12,6 @@ const Analytics = () => {
     const monthlyStats = {};
     const placeStats = {};
     const categoryStats = {};
-    
-    // For Heatmap & Forecast
     const currentMonthCatStats = {};
     const heatmapData = {}; 
     const activeDays = new Set();
@@ -24,28 +22,28 @@ const Analytics = () => {
     let totalSpend = 0;
     let currentMonthSpend = 0;
     
-    // Net Balance History Arrays
     const balanceLabels = [];
     const balancePoints = [];
     let runningBalance = 0;
 
-    // Sort oldest to newest for cumulative calc
     const sortedTxns = [...transactions].sort((a, b) => a.timestamp - b.timestamp);
 
     sortedTxns.forEach(txn => {
       if (!txn.timestamp) return;
       
-      const date = txn.timestamp.toDate();
+      // ROBUST DATE PARSING (Fixes crash on legacy data)
+      const date = txn.timestamp.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp);
+      if (isNaN(date.getTime())) return; // Skip invalid dates
+
       const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const day = date.getDate();
 
-      // --- Net Balance Calc ---
       let amountIPaid = (txn.payer === 'me') ? (txn.amount / 100) : 0;
       let myConsumption = 0;
       
       if (txn.type === 'income') {
-          amountIPaid = (txn.amount / 100); // Income adds to balance
+          amountIPaid = (txn.amount / 100);
       } else if (txn.splits && txn.splits['me'] !== undefined) {
           myConsumption = txn.splits['me'] / 100;
       }
@@ -54,35 +52,28 @@ const Analytics = () => {
       balanceLabels.push(dateStr);
       balancePoints.push(runningBalance);
 
-      // --- Spending Calc (Expenses Only) ---
       if (txn.type === 'expense' && myConsumption > 0) {
         totalSpend += myConsumption;
         activeDays.add(date.toDateString());
 
-        // Monthly
         monthlyStats[monthKey] = (monthlyStats[monthKey] || 0) + myConsumption;
         
-        // Place
         const place = txn.place || 'Unknown';
         placeStats[place] = (placeStats[place] || 0) + myConsumption;
 
-        // Category
         const cat = txn.category || 'Uncategorized';
         categoryStats[cat] = (categoryStats[cat] || 0) + myConsumption;
 
-        // Current Month Logic
         if (monthKey === currentMonthKey) {
           currentMonthSpend += myConsumption;
           currentMonthCatStats[cat] = (currentMonthCatStats[cat] || 0) + myConsumption;
           
-          // Heatmap (Day 1-31)
           if (!heatmapData[cat]) heatmapData[cat] = new Array(32).fill(0);
           heatmapData[cat][day] += myConsumption;
         }
       }
     });
 
-    // Derived Stats
     const monthlyKeys = Object.keys(monthlyStats).sort();
     let peakMonth = '-'; 
     let peakAmount = 0;
@@ -90,11 +81,10 @@ const Analytics = () => {
     monthlyKeys.forEach(k => {
       if (monthlyStats[k] > peakAmount) {
         peakAmount = monthlyStats[k];
-        peakMonth = k; // "YYYY-MM"
+        peakMonth = k; 
       }
     });
 
-    // Format Peak Month
     if (peakMonth !== '-') {
         const [y, m] = peakMonth.split('-');
         peakMonth = new Date(y, m-1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -102,7 +92,6 @@ const Analytics = () => {
 
     const avgMonthly = monthlyKeys.length > 0 ? (totalSpend / monthlyKeys.length) : 0;
 
-    // Chart Data Prep
     const monthlyChartLabels = monthlyKeys.map(k => {
         const [y, m] = k.split('-');
         return new Date(y, m-1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
@@ -130,7 +119,6 @@ const Analytics = () => {
     <div className="space-y-6 animate-fade-in">
       <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Analytics Dashboard</h2>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Total Spending (All Time)" value={formatCurrency(stats.totalSpend * 100)} />
         <StatCard title="Highest Spending Month" value={stats.peakMonth} subValue={formatCurrency(stats.peakAmount * 100)} />
@@ -138,7 +126,6 @@ const Analytics = () => {
         <StatCard title="Active Days" value={stats.activeDays} />
       </div>
 
-      {/* Main Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="Monthly Spending Trend">
           <MonthlyTrendLine labels={stats.monthlyChart.labels} data={stats.monthlyChart.data} />
@@ -148,7 +135,6 @@ const Analytics = () => {
         </ChartCard>
       </div>
 
-      {/* Category Analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700 lg:col-span-2">
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Spending by Category</h3>
@@ -156,14 +142,11 @@ const Analytics = () => {
                 <CategoryDoughnut data={stats.categoryData} />
             </div>
         </div>
-        {/* Heatmap Panel */}
         <HeatmapPanel data={stats.heatmapData} />
       </div>
     </div>
   );
 };
-
-// --- Sub-Components for Cleaner Code ---
 
 const StatCard = ({ title, value, subValue }) => (
   <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
@@ -204,9 +187,8 @@ const HeatmapPanel = ({ data }) => {
                     return (
                         <>
                            <div key={`label-${cat}`} className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate pr-2">{cat.substring(0,10)}</div>
-                           {/* Render 31 days (indices 1 to 31) */}
                            {[...Array(31)].map((_, i) => {
-                               const val = data[cat][i+1]; // data index corresponds to day
+                               const val = data[cat][i+1];
                                const opacity = val > 0 ? Math.max(0.3, val / (maxDaily || 1)) : 0.1;
                                return (
                                    <div 

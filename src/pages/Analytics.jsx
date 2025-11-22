@@ -44,8 +44,9 @@ const Analytics = () => {
 
   const stats = useMemo(() => {
     // 1. Setup Data Structures
-    const monthlySpendStats = {}; 
-    const monthlyLentStats = {};  
+    const monthlySpendStats = {}; // Personal Consumption
+    const monthlyLentStats = {};  // Lending
+    const monthlyTotalStats = {}; // Spend + Lent (Outflow)
     const monthlyReceivedStats = {};
     
     const categoryStats = {};
@@ -61,8 +62,8 @@ const Analytics = () => {
     
     let totalSpend = 0;     
     let totalLent = 0;      
-    let totalRepaymentSent = 0; // I paid someone back
-    let totalReceived = 0;      // Someone paid me back
+    let totalRepaymentSent = 0; 
+    let totalReceived = 0;
     let totalIncome = 0;
     
     let currentMonthSpend = 0;
@@ -100,7 +101,6 @@ const Analytics = () => {
       } else if (txn.splits && txn.splits['me'] !== undefined) {
           myConsumption = txn.splits['me'] / 100;
       } else if (txn.payer === 'me' && (!txn.splits || Object.keys(txn.splits).length === 0)) {
-          // Legacy Fallback
           if (txn.participants && txn.participants.length > 0) {
              myConsumption = 0; 
           } else {
@@ -108,12 +108,10 @@ const Analytics = () => {
           }
       }
 
-      // Update Net Balance
       runningBalance += (amountIPaid - myConsumption);
       balanceLabels.push(dateStr);
       balancePoints.push(runningBalance);
 
-      // Track Active Days
       if (amountIPaid > 0 || myConsumption > 0) {
           activeDays.add(date.toDateString());
       }
@@ -140,8 +138,6 @@ const Analytics = () => {
               if (txn.payer === 'me') {
                   totalRepaymentSent += (txn.amount / 100);
               } else if (txn.participants.includes('me') || txn.payer !== 'me') {
-                  // Assume if I'm involved and didn't pay, I received it
-                  // Note: recipient is in participants[0]
                   if (txn.participants.includes('me')) {
                       totalReceived += (txn.amount / 100);
                       monthlyReceivedStats[monthKey] = (monthlyReceivedStats[monthKey] || 0) + (txn.amount / 100);
@@ -154,6 +150,9 @@ const Analytics = () => {
                   if (lent > 0.01) {
                       totalLent += lent;
                       monthlyLentStats[monthKey] = (monthlyLentStats[monthKey] || 0) + lent;
+                      // Add to Total Flow
+                      monthlyTotalStats[monthKey] = (monthlyTotalStats[monthKey] || 0) + lent;
+                      
                       if (monthKey === currentMonthKey) currentMonthLent += lent;
                   }
               }
@@ -163,6 +162,9 @@ const Analytics = () => {
                   totalSpend += myConsumption;
                   monthlySpendStats[monthKey] = (monthlySpendStats[monthKey] || 0) + myConsumption;
                   
+                  // Add to Total Flow
+                  monthlyTotalStats[monthKey] = (monthlyTotalStats[monthKey] || 0) + myConsumption;
+
                   const place = txn.place || 'Unknown';
                   placeStats[place] = (placeStats[place] || 0) + myConsumption;
                   
@@ -186,23 +188,50 @@ const Analytics = () => {
       }
     });
 
-    // 3. Aggregation
-    const allMonthKeys = new Set([...Object.keys(monthlySpendStats), ...Object.keys(monthlyLentStats)]);
+    // 3. Aggregation & Peaks
+    const allMonthKeys = new Set([
+        ...Object.keys(monthlySpendStats), 
+        ...Object.keys(monthlyLentStats)
+    ]);
     const monthlyKeys = Array.from(allMonthKeys).sort();
     
-    let peakMonth = '-'; 
-    let peakAmount = 0;
+    // Peak Personal Spending
+    let peakSpendMonth = '-'; 
+    let peakSpendAmount = 0;
+    
+    // Peak Total Outflow (Spend + Lent)
+    let peakOutflowMonth = '-';
+    let peakOutflowAmount = 0;
+
     monthlyKeys.forEach(k => {
-      const val = monthlySpendStats[k] || 0;
-      if (val > peakAmount) { peakAmount = val; peakMonth = k; }
+        // Check Spend
+        const spend = monthlySpendStats[k] || 0;
+        if (spend > peakSpendAmount) {
+            peakSpendAmount = spend;
+            peakSpendMonth = k;
+        }
+        
+        // Check Outflow
+        const total = monthlyTotalStats[k] || 0;
+        if (total > peakOutflowAmount) {
+            peakOutflowAmount = total;
+            peakOutflowMonth = k;
+        }
     });
     
-    if (peakMonth !== '-') {
-        const [y, m] = peakMonth.split('-');
-        peakMonth = new Date(y, m-1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    }
+    // Format Months
+    const formatMonth = (k) => {
+        if (k === '-') return '-';
+        const [y, m] = k.split('-');
+        const dateObj = new Date(parseInt(y), parseInt(m)-1);
+        return dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    };
+
+    peakSpendMonth = formatMonth(peakSpendMonth);
+    peakOutflowMonth = formatMonth(peakOutflowMonth);
     
-    const avgMonthly = monthlyKeys.length > 0 ? (totalSpend / monthlyKeys.length) : 0;
+    const totalActivityAllTime = totalSpend + totalLent;
+    const avgMonthly = monthlyKeys.length > 0 ? (totalActivityAllTime / monthlyKeys.length) : 0;
     
     const monthlyChartLabels = monthlyKeys.map(k => {
         const [y, m] = k.split('-');
@@ -222,15 +251,17 @@ const Analytics = () => {
     const sortedPlaces = Object.entries(placeStats).sort((a,b) => b[1] - a[1]).slice(0, 10);
     const sortedCurrentCats = Object.entries(currentMonthCatStats).sort((a,b) => b[1] - a[1]);
 
-    // --- UPDATED METRIC CALCULATION ---
-    // Cash Flow = Money Out (Spend + Lent) - Money In (Repaid/Received)
     const customCashFlow = (totalSpend + totalLent) - totalReceived;
 
     return {
       totalSpend, totalLent, totalRepaymentSent, totalReceived, totalIncome,
       customCashFlow, 
       activeDays: activeDays.size,
-      peakMonth, peakAmount, avgMonthly,
+      
+      peakSpendMonth, peakSpendAmount,
+      peakOutflowMonth, peakOutflowAmount,
+      
+      avgMonthly,
       currentMonthSpend, currentMonthLent,
       projectedSpend, forecastSpendPercent,
       projectedLending, forecastLentPercent,
@@ -322,20 +353,19 @@ const Analytics = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="My Consumption (Expense)" value={formatCurrency(stats.totalSpend * 100)} />
         <StatCard title="Total Lent (Asset)" value={formatCurrency(stats.totalLent * 100)} color="text-amber-600" />
-        
-        {/* FIXED: Now shows Money Received */}
         <StatCard title="Total Repaid (Received)" value={formatCurrency(stats.totalReceived * 100)} color="text-green-600" />
-        
-        {/* FIXED: Spend + Lent - Received */}
         <StatCard 
             title="Net Cash Flow" 
             value={formatCurrency(stats.customCashFlow * 100)} 
             subValue="Spend + Lent - Received" 
             color="text-purple-600" 
         />
-        
-        <StatCard title="Highest Spend Month" value={stats.peakMonth} subValue={formatCurrency(stats.peakAmount * 100)} />
-        <StatCard title="Avg. Monthly Spend" value={formatCurrency(stats.avgMonthly * 100)} />
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard title="Highest Personal Spend" value={stats.peakSpendMonth} subValue={formatCurrency(stats.peakSpendAmount * 100)} />
+        <StatCard title="Highest Total Outflow" value={stats.peakOutflowMonth} subValue={formatCurrency(stats.peakOutflowAmount * 100)} />
+        <StatCard title="Avg. Monthly Outflow" value={formatCurrency(stats.avgMonthly * 100)} />
         <StatCard title="Active Days" value={stats.activeDays} />
       </div>
 

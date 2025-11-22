@@ -5,7 +5,9 @@ const Button = ({ children, variant = 'primary', className, ...props }) => {
   
   const variants = {
     primary: "bg-sky-600 text-white hover:bg-sky-700 focus:ring-sky-500",
-    secondary: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600",
+    // Fixed: Added dark:hover:bg-gray-600 to prevent white flash in dark mode
+    // Changed light hover to gray-100 for better contrast
+    secondary: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600",
     danger: "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500",
     ghost: "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
   };

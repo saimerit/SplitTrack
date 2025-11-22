@@ -1,13 +1,20 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { addDoc, deleteDoc, doc, collection } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { formatCurrency } from '../utils/formatters';
 import Button from '../components/common/Button';
+import PromptModal from '../components/modals/PromptModal';
+import ConfirmModal from '../components/modals/ConfirmModal';
 
 const Goals = () => {
   const { transactions, goals, showToast } = useAppStore();
+
+  // --- Modal State ---
+  const [promptStep, setPromptStep] = useState(null); // 'name' | 'target' | null
+  const [tempGoalName, setTempGoalName] = useState('');
+  const [deleteId, setDeleteId] = useState(null);
 
   const currentSavings = useMemo(() => {
     let income = 0;
@@ -33,33 +40,44 @@ const Goals = () => {
     return income - expense;
   }, [transactions]);
 
-  const handleAddGoal = async () => {
-    const name = prompt("Enter Goal Name:");
-    if(!name) return;
-    const targetStr = prompt("Enter Target Amount (₹):");
+  // Step 1: Start Add Goal
+  const startAddGoal = () => {
+    setTempGoalName('');
+    setPromptStep('name');
+  };
+
+  // Step 2: Handle Name Submit -> Show Target Prompt
+  const handleNameSubmit = (name) => {
+    setTempGoalName(name);
+    setPromptStep('target');
+  };
+
+  // Step 3: Handle Target Submit -> Save to Firebase
+  const handleTargetSubmit = async (targetStr) => {
+    setPromptStep(null);
     const target = parseFloat(targetStr);
     
     if (target && target > 0) {
         try {
-            await addDoc(collection(db, 'ledgers/main-ledger/goals'), { name, target });
+            await addDoc(collection(db, 'ledgers/main-ledger/goals'), { name: tempGoalName, target });
             showToast("Goal added!");
         } catch {
-            // Fixed: Removed unused (e)
             showToast("Failed to add goal.", true);
         }
+    } else {
+        showToast("Invalid target amount.", true);
     }
   };
 
-  const handleDelete = async (id) => {
-    if(window.confirm("Delete this goal?")) {
-        try {
-            await deleteDoc(doc(db, 'ledgers/main-ledger/goals', id));
-            showToast("Goal deleted.");
-        } catch {
-            // Fixed: Removed unused (e)
-            showToast("Failed to delete.", true);
-        }
+  const handleDeleteConfirm = async () => {
+    if (!deleteId) return;
+    try {
+        await deleteDoc(doc(db, 'ledgers/main-ledger/goals', deleteId));
+        showToast("Goal deleted.");
+    } catch {
+        showToast("Failed to delete.", true);
     }
+    setDeleteId(null);
   };
 
   const totalTarget = goals.reduce((sum, g) => sum + (g.target || 0), 0);
@@ -69,12 +87,12 @@ const Goals = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Savings Goals</h2>
-        <Button onClick={handleAddGoal} className="flex items-center gap-2">
+        <Button onClick={startAddGoal} className="flex items-center gap-2">
             <Plus size={18} /> New Goal
         </Button>
       </div>
 
-      {/* Global Savings Card - Fixed Tailwind class */}
+      {/* Global Savings Card */}
       <div className="bg-linear-to-r from-green-500 to-emerald-600 rounded-lg shadow-lg p-6 text-white">
         <h3 className="text-lg font-medium opacity-90">Total Savings (Income - Expenses)</h3>
         <div className="text-4xl font-bold mt-2">{formatCurrency(currentSavings * 100)}</div>
@@ -93,7 +111,7 @@ const Goals = () => {
                     <div className="flex justify-between mb-2">
                         <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">{g.name}</h3>
                         <button 
-                            onClick={() => handleDelete(g.id)} 
+                            onClick={() => setDeleteId(g.id)} 
                             className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                             <X size={18} />
@@ -113,13 +131,44 @@ const Goals = () => {
         })}
         
         <div 
-            onClick={handleAddGoal}
+            onClick={startAddGoal}
             className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer hover:border-sky-500 hover:bg-sky-50 dark:hover:bg-gray-800 transition"
         >
             <span className="text-3xl text-gray-400 mb-2">+</span>
             <span className="text-sm font-medium text-gray-500">Create Goal</span>
         </div>
       </div>
+
+      {/* --- MODALS --- */}
+      <PromptModal 
+        isOpen={promptStep === 'name'}
+        title="New Savings Goal"
+        label="Goal Name"
+        placeholder="e.g. New Car"
+        onConfirm={handleNameSubmit}
+        onCancel={() => setPromptStep(null)}
+        confirmText="Next"
+      />
+
+      <PromptModal 
+        isOpen={promptStep === 'target'}
+        title={`Target for "${tempGoalName}"`}
+        label="Target Amount (₹)"
+        placeholder="e.g. 50000"
+        inputType="number"
+        onConfirm={handleTargetSubmit}
+        onCancel={() => setPromptStep(null)}
+        confirmText="Save Goal"
+      />
+
+      <ConfirmModal 
+        isOpen={!!deleteId}
+        title="Delete Goal?"
+        message="Are you sure you want to delete this savings goal?"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteId(null)}
+        confirmText="Delete"
+      />
     </div>
   );
 };

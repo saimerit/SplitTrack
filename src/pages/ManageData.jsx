@@ -11,6 +11,7 @@ const LEDGER_ID = 'main-ledger';
 
 const SimpleManager = ({ title, data, collectionName, onDelete }) => {
   const [newItem, setNewItem] = useState('');
+  const { showToast } = useAppStore();
   
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -18,9 +19,9 @@ const SimpleManager = ({ title, data, collectionName, onDelete }) => {
     try {
       await addDoc(collection(db, `ledgers/${LEDGER_ID}/${collectionName}`), { name: newItem });
       setNewItem('');
+      showToast(`${title} added!`);
     } catch {
-      // Removed (error)
-      alert("Error adding item");
+      showToast(`Error adding ${title}`, true);
     }
   };
 

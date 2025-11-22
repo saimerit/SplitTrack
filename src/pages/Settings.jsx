@@ -3,6 +3,8 @@ import useAppStore from '../store/useAppStore';
 import { doc, updateDoc, setDoc, writeBatch, collection } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../hooks/useTheme';
+import { LogOut, Moon, Sun } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
@@ -14,7 +16,8 @@ const Settings = () => {
     userSettings, categories, places, tags, modesOfPayment, 
     setUserSettings, showToast, participantsLookup, transactions, participants
   } = useAppStore();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme(); 
   
   const [loading, setLoading] = useState(false);
   const [newMember, setNewMember] = useState('');
@@ -33,8 +36,25 @@ const Settings = () => {
     title: '',
     message: '',
     confirmInput: '',
+    confirmText: 'Confirm',
     onConfirm: () => {}
   });
+
+  const closeModal = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
+
+  // --- Sign Out Logic ---
+  const handleSignOutRequest = () => {
+    setModalConfig({
+      isOpen: true,
+      title: "Sign Out?",
+      message: "Are you sure you want to sign out of SplitTrack?",
+      confirmText: "Sign Out",
+      onConfirm: () => {
+        logout();
+        closeModal();
+      }
+    });
+  };
 
   const handleSaveDefaults = async (e) => {
     e.preventDefault();
@@ -168,12 +188,43 @@ const Settings = () => {
     });
   };
 
-  const closeModal = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
   const mapOpts = (items) => [{ value: '', label: '-- None --' }, ...items.map(i => ({ value: i.name, label: i.name }))];
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
       
+      {/* App Preferences Section */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
+        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">App Preferences</h3>
+        <div className="flex flex-col sm:flex-row gap-4">
+            <Button 
+              onClick={toggleTheme} 
+              variant="secondary" 
+              className="flex items-center justify-between gap-4 flex-1 py-3 group"
+            >
+                <div className="flex items-center gap-2">
+                    {theme === 'dark' ? <Moon size={18}/> : <Sun size={18}/>}
+                    <span>{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
+                </div>
+                
+                {/* Visual Slider (Toggle Switch) */}
+                <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out ${theme === 'dark' ? 'bg-sky-600' : 'bg-gray-300'}`}>
+                    <span 
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${theme === 'dark' ? 'translate-x-6' : 'translate-x-1'}`} 
+                    />
+                </div>
+            </Button>
+            
+            <Button 
+              onClick={handleSignOutRequest} 
+              variant="danger" 
+              className="flex items-center justify-center gap-2 flex-1 py-3"
+            >
+                <LogOut size={18}/> Sign Out
+            </Button>
+        </div>
+      </div>
+
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
         <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Manage Members</h3>
         <div className="space-y-2 mb-6">

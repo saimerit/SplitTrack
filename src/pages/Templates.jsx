@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trash2, FilePlus } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
@@ -5,20 +6,28 @@ import { deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { formatCurrency } from '../utils/formatters';
 import Button from '../components/common/Button';
+import ConfirmModal from '../components/modals/ConfirmModal';
 
 const Templates = () => {
   const navigate = useNavigate();
   const { templates, showToast } = useAppStore();
+  
+  // Modal State
+  const [deleteData, setDeleteData] = useState(null); // { id, name }
 
-  const handleDelete = async (id, name) => {
-    if(!window.confirm(`Delete template "${name}"?`)) return;
+  const confirmDelete = (id, name) => {
+    setDeleteData({ id, name });
+  };
+
+  const handleDelete = async () => {
+    if (!deleteData) return;
     try {
-        await deleteDoc(doc(db, 'ledgers/main-ledger/templates', id));
+        await deleteDoc(doc(db, 'ledgers/main-ledger/templates', deleteData.id));
         showToast("Template deleted.");
     } catch {
-        // Fixed: Removed unused (error)
         showToast("Failed to delete template.", true);
     }
+    setDeleteData(null);
   };
 
   const handleApply = (template) => {
@@ -69,7 +78,7 @@ const Templates = () => {
                                 Use Template
                             </Button>
                             <button 
-                                onClick={() => handleDelete(t.id, t.name)} 
+                                onClick={() => confirmDelete(t.id, t.name)} 
                                 className="p-2 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
                                 title="Delete"
                             >
@@ -81,6 +90,16 @@ const Templates = () => {
             })
         )}
       </div>
+
+      <ConfirmModal 
+        isOpen={!!deleteData}
+        title="Delete Template?"
+        message={`Are you sure you want to delete template "<strong>${deleteData?.name}</strong>"?`}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteData(null)}
+        confirmInputRequired="DELETE"
+        confirmText="Delete"
+      />
     </div>
   );
 };

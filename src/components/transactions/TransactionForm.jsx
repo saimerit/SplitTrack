@@ -12,6 +12,7 @@ import Button from '../common/Button';
 import SplitAllocator from './SplitAllocator';
 import ParticipantSelector from './ParticipantSelector';
 import ConfirmModal from '../modals/ConfirmModal';
+import PromptModal from '../modals/PromptModal';
 
 const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   const navigate = useNavigate();
@@ -71,11 +72,20 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   const [showDupeModal, setShowDupeModal] = useState(false);
   const [dupeTxn, setDupeTxn] = useState(null);
 
+  // --- MODAL STATE FOR PROMPTS ---
+  const [activePrompt, setActivePrompt] = useState(null); 
+
   const eligibleParents = transactions
     .filter(t => t.amount > 0 && !t.isReturn)
     .sort((a, b) => b.timestamp - a.timestamp);
 
   const isIncome = type === 'income';
+
+  // Filter participants for the split allocator
+  const splitAllocatorParticipants = [
+      ...(includeMe ? [{ uniqueId: 'me', name: 'You' }] : []),
+      ...participants.filter(p => selectedParticipants.includes(p.uniqueId))
+  ];
 
   // --- LIVE VALIDATION ---
   const validation = useMemo(() => {
@@ -106,31 +116,63 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     }
   };
 
-  const handleQuickAdd = async (value, collectionName, label, setter) => {
+  const handleQuickAddRequest = (value, collectionName, label) => {
     if (value === `add_new_${collectionName}`) {
-        const newItemName = prompt(`Enter New ${label} Name:`);
-        if (newItemName) {
-            try {
-                await addDoc(collection(db, `ledgers/main-ledger/${collectionName}`), { name: newItemName });
-                showToast(`${label} added!`);
-                setter(newItemName); 
-            } catch (error) {
-                console.error(error);
-                showToast(`Failed to add ${label}.`, true);
-                setter(''); 
-            }
-        } else {
-            setter(''); 
-        }
+        setActivePrompt({ 
+            type: 'quickAdd', 
+            targetCollection: collectionName,
+            targetLabel: label,
+            title: `Add New ${label}`,
+            label: `New ${label} Name`
+        });
     } else {
-        setter(value);
+        if(collectionName === 'categories') setCategory(value);
+        if(collectionName === 'places') setPlace(value);
+        if(collectionName === 'tags') setTag(value);
+        if(collectionName === 'modesOfPayment') setMode(value);
     }
   };
 
-  const handleSaveTemplate = async () => {
-    const templateName = prompt("Enter Template Name:");
-    if (!templateName) return;
+  const handleTemplateSaveRequest = () => {
+      setActivePrompt({
+          type: 'template',
+          title: 'Save as Template',
+          label: 'Template Name'
+      });
+  };
 
+  // --- NEW: Cancel Handler ---
+  const handleCancel = () => {
+      // Navigate back to previous page (likely History or Dashboard)
+      navigate(-1);
+  };
+
+  const handlePromptConfirm = async (inputValue) => {
+      if (!inputValue) return;
+      const { type: promptType, targetCollection, targetLabel } = activePrompt;
+
+      if (promptType === 'quickAdd') {
+          try {
+              await addDoc(collection(db, `ledgers/main-ledger/${targetCollection}`), { name: inputValue });
+              showToast(`${targetLabel} added!`);
+              
+              if(targetCollection === 'categories') setCategory(inputValue);
+              if(targetCollection === 'places') setPlace(inputValue);
+              if(targetCollection === 'tags') setTag(inputValue);
+              if(targetCollection === 'modesOfPayment') setMode(inputValue);
+          } catch (error) {
+              console.error(error);
+              showToast(`Failed to add ${targetLabel}.`, true);
+          }
+      } 
+      else if (promptType === 'template') {
+          await executeTemplateSave(inputValue);
+      }
+      
+      setActivePrompt(null);
+  };
+
+  const executeTemplateSave = async (templateName) => {
     const amountInRupees = parseFloat(amount);
     const multiplier = type === 'refund' ? -1 : 1;
     const finalAmount = !isNaN(amountInRupees) ? Math.round(amountInRupees * 100) * multiplier : null;
@@ -167,6 +209,28 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
            safeParticipants = ['me'];
        }
 
+       // FIX: CALCULATE SPLITS FOR EQUAL METHOD
+       let finalSplits = { ...splits }; 
+       
+       if (!isReturn && type !== 'income' && splitMethod === 'equal') {
+           const involvedCount = splitAllocatorParticipants.length;
+           if (involvedCount > 0) {
+               const absAmount = Math.abs(amountInPaise);
+               const share = Math.floor(absAmount / involvedCount);
+               const remainder = absAmount % involvedCount;
+               
+               finalSplits = {}; 
+               
+               splitAllocatorParticipants.forEach((p, index) => {
+                   let val = share;
+                   if (index < remainder) {
+                       val += 1;
+                   }
+                   finalSplits[p.uniqueId] = val * multiplier;
+               });
+           }
+       }
+
        const txnData = {
          expenseName: name,
          amount: finalAmount,
@@ -181,16 +245,12 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
          isReturn,
          participants: (type === 'income') ? [] : (isReturn ? [safeParticipants[0]] : safeParticipants),
          splitMethod: (isReturn || type === 'income') ? 'none' : splitMethod,
-         splits: (isReturn || type === 'income') ? {} : splits,
+         splits: (isReturn || type === 'income') ? {} : finalSplits,
          parentTransactionId: refundParentId || null,
          isLinkedRefund: !!refundParentId
        };
 
        try {
-         // REMOVED: Manual offline queue check. 
-         // Firestore handles offline persistence automatically. 
-         // This prevents data from being "hidden" in a local queue.
-
          if (isEditMode) {
             await updateTransaction(initialData.id, txnData, initialData.parentTransactionId);
             showToast("Transaction updated!");
@@ -244,12 +304,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       { value: "", label: "-- Select --" }, 
       ...items.map(i => ({ value: i.name, label: i.name })),
       { value: `add_new_${collectionName}`, label: `+ Add New ${label}`, className: "text-sky-600 font-bold bg-sky-50" }
-  ];
-
-  // Filter participants for the split allocator
-  const splitAllocatorParticipants = [
-      ...(includeMe ? [{ uniqueId: 'me', name: 'You' }] : []),
-      ...participants.filter(p => selectedParticipants.includes(p.uniqueId))
   ];
 
   return (
@@ -334,28 +388,28 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       <Select 
         label="Category" 
         value={category} 
-        onChange={e => handleQuickAdd(e.target.value, 'categories', 'Category', setCategory)} 
+        onChange={e => handleQuickAddRequest(e.target.value, 'categories', 'Category')} 
         options={mapOptions(categories, 'categories', 'Category')} 
         className="col-span-1"
       />
       <Select 
         label="Place" 
         value={place} 
-        onChange={e => handleQuickAdd(e.target.value, 'places', 'Place', setPlace)} 
+        onChange={e => handleQuickAddRequest(e.target.value, 'places', 'Place')} 
         options={mapOptions(places, 'places', 'Place')} 
         className="col-span-1"
       />
       <Select 
         label="Tag" 
         value={tag} 
-        onChange={e => handleQuickAdd(e.target.value, 'tags', 'Tag', setTag)} 
+        onChange={e => handleQuickAddRequest(e.target.value, 'tags', 'Tag')} 
         options={mapOptions(tags, 'tags', 'Tag')} 
         className="col-span-1"
       />
       <Select 
         label="Mode" 
         value={mode} 
-        onChange={e => handleQuickAdd(e.target.value, 'modesOfPayment', 'Mode', setMode)} 
+        onChange={e => handleQuickAddRequest(e.target.value, 'modesOfPayment', 'Mode')} 
         options={mapOptions(modesOfPayment, 'modesOfPayment', 'Mode')} 
         className="col-span-1"
       />
@@ -472,9 +526,15 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       {/* 9. Buttons */}
       <div className="col-span-1 md:col-span-2 lg:col-span-4 flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
          {!isEditMode && (
-            <Button type="button" variant="secondary" onClick={handleSaveTemplate} className="flex-1 py-3">
+            <Button type="button" variant="secondary" onClick={handleTemplateSaveRequest} className="flex-1 py-3">
               Save as Template
             </Button>
+         )}
+         {/* Cancel Button for Edit Mode */}
+         {isEditMode && (
+             <Button type="button" variant="secondary" onClick={handleCancel} className="flex-1 py-3">
+                 Cancel
+             </Button>
          )}
          <Button 
             type="submit" 
@@ -489,6 +549,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       </div>
     </form>
 
+    {/* Duplicate Warning Modal */}
     <ConfirmModal 
        isOpen={showDupeModal} 
        title="Possible Duplicate" 
@@ -496,6 +557,16 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
        confirmText="Add Anyway"
        onConfirm={forceSubmit}
        onCancel={() => setShowDupeModal(false)}
+    />
+
+    {/* Universal Prompt Modal for Quick Adds & Templates */}
+    <PromptModal
+        isOpen={!!activePrompt}
+        title={activePrompt?.title || ''}
+        label={activePrompt?.label || ''}
+        onConfirm={handlePromptConfirm}
+        onCancel={() => setActivePrompt(null)}
+        confirmText="Save"
     />
     </>
   );

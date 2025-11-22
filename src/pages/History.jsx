@@ -64,7 +64,13 @@ const History = () => {
         <Input label="Filter by Date" type="date" value={filterDate} onChange={e => { setFilterDate(e.target.value); setFilterMonth(''); }} />
         <Input label="Filter by Month" type="month" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setFilterDate(''); }} />
         <div className="flex items-end">
-          <Button variant="secondary" onClick={() => { setFilterTag(''); setFilterDate(''); setFilterMonth(''); }} className="w-full">Clear</Button>
+          <Button 
+            variant="secondary" 
+            onClick={() => { setFilterTag(''); setFilterDate(''); setFilterMonth(''); }} 
+            className="w-auto px-6 py-2 text-sm" // Reduced size
+          >
+            Clear
+          </Button>
         </div>
       </div>
 

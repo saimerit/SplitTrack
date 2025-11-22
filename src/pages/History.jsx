@@ -67,7 +67,7 @@ const History = () => {
           <Button 
             variant="secondary" 
             onClick={() => { setFilterTag(''); setFilterDate(''); setFilterMonth(''); }} 
-            className="w-auto px-6 py-2 text-sm" // Reduced size
+            className="w-auto px-6 py-2 text-sm" 
           >
             Clear
           </Button>
@@ -78,16 +78,27 @@ const History = () => {
         {filteredTransactions.length === 0 ? (
           <div className="p-8 text-center text-gray-500">No transactions found.</div>
         ) : (
-          filteredTransactions.map(txn => (
-            <TransactionItem 
-              key={txn.id} 
-              txn={txn}
-              linkedRefunds={transactions.filter(t => t.parentTransactionId === txn.id)}
-              participantsLookup={participantsLookup}
-              onEdit={() => handleEdit(txn)}
-              onDelete={handleDelete}
-            />
-          ))
+          filteredTransactions.map(txn => {
+            // FIX: Find children that link to THIS transaction (either single or multi-link)
+            const linkedRefunds = transactions.filter(t => {
+                // Check legacy single link
+                if (t.parentTransactionId === txn.id) return true;
+                // Check new multi-link array
+                if (t.parentTransactionIds && t.parentTransactionIds.includes(txn.id)) return true;
+                return false;
+            });
+
+            return (
+                <TransactionItem 
+                  key={txn.id} 
+                  txn={txn}
+                  linkedRefunds={linkedRefunds}
+                  participantsLookup={participantsLookup}
+                  onEdit={() => handleEdit(txn)}
+                  onDelete={handleDelete}
+                />
+            );
+          })
         )}
       </div>
     </div>

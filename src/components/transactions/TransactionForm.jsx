@@ -141,9 +141,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       });
   };
 
-  // --- NEW: Cancel Handler ---
   const handleCancel = () => {
-      // Navigate back to previous page (likely History or Dashboard)
       navigate(-1);
   };
 
@@ -209,7 +207,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
            safeParticipants = ['me'];
        }
 
-       // FIX: CALCULATE SPLITS FOR EQUAL METHOD
        let finalSplits = { ...splits }; 
        
        if (!isReturn && type !== 'income' && splitMethod === 'equal') {
@@ -421,9 +418,9 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         placeholder="Short notes..."
       />
 
-      {/* 6. Return Checkbox */}
+      {/* 6. Options (Return & Include Me) */}
       {type === 'expense' && (
-         <div className="col-span-1 md:col-span-2 lg:col-span-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+         <div className="col-span-1 md:col-span-2 lg:col-span-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-6">
            <div className="flex items-center">
              <input 
                 type="checkbox" 
@@ -436,6 +433,21 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                 Is this a return transaction? (Repayment)
              </label>
            </div>
+
+           {!isReturn && (
+             <div className="flex items-center">
+                <input 
+                    type="checkbox" 
+                    id="includeMe" 
+                    checked={includeMe} 
+                    onChange={e => setIncludeMe(e.target.checked)}
+                    className="h-5 w-5 text-sky-600 border-gray-300 rounded focus:ring-sky-500 dark:bg-gray-700 dark:border-gray-600"
+                />
+                <label htmlFor="includeMe" className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                    Include <strong>Me</strong> in this split?
+                </label>
+            </div>
+           )}
          </div>
       )}
 
@@ -470,20 +482,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                    onAdd={uid => setSelectedParticipants([...selectedParticipants, uid])} 
                    onRemove={uid => setSelectedParticipants(selectedParticipants.filter(x => x !== uid))} 
                 />
-                
-                {/* Include Me Toggle */}
-                <div className="flex items-center bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
-                    <input 
-                        type="checkbox" 
-                        id="includeMe" 
-                        checked={includeMe} 
-                        onChange={e => setIncludeMe(e.target.checked)}
-                        className="h-4 w-4 text-sky-600 rounded dark:bg-gray-700 dark:border-gray-500"
-                    />
-                    <label htmlFor="includeMe" className="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                        Include <strong>Me</strong> in this split?
-                    </label>
-                </div>
             </div>
             
             <div className="col-span-1 md:col-span-2 lg:col-span-2 space-y-4">

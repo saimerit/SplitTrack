@@ -23,8 +23,7 @@ ChartJS.register(
   Filler
 );
 
-// Modified to accept simple 'data' array again, removing 'lentData'
-const MonthlyTrendLine = ({ labels, data }) => {
+const MonthlyTrendLine = ({ labels, spendData, lentData }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const textColor = isDark ? '#d1d5db' : '#374151';
@@ -34,11 +33,19 @@ const MonthlyTrendLine = ({ labels, data }) => {
     labels,
     datasets: [
       {
-        label: 'My Monthly Spending',
-        data,
+        label: 'My Expense',
+        data: spendData,
         fill: true,
         borderColor: '#0ea5e9', // sky-500
-        backgroundColor: 'rgba(14, 165, 233, 0.1)',
+        backgroundColor: 'rgba(14, 165, 233, 0.2)',
+        tension: 0.3,
+      },
+      {
+        label: 'Lent to Others',
+        data: lentData,
+        fill: true,
+        borderColor: '#f59e0b', // amber-500
+        backgroundColor: 'rgba(245, 158, 11, 0.2)',
         tension: 0.3,
       },
     ],
@@ -48,12 +55,15 @@ const MonthlyTrendLine = ({ labels, data }) => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { display: false },
+      legend: { 
+          display: true,
+          labels: { color: textColor, boxWidth: 12 }
+      },
       tooltip: {
         mode: 'index',
         intersect: false,
         callbacks: {
-            label: (ctx) => ` ₹${ctx.raw.toFixed(2)}`
+            label: (ctx) => ` ${ctx.dataset.label}: ₹${Number(ctx.raw).toFixed(2)}`
         }
       },
     },
@@ -63,6 +73,7 @@ const MonthlyTrendLine = ({ labels, data }) => {
         grid: { color: gridColor },
       },
       y: {
+        stacked: true,
         ticks: { color: textColor },
         grid: { color: gridColor },
         beginAtZero: true,

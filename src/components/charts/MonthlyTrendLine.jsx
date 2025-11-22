@@ -23,6 +23,7 @@ ChartJS.register(
   Filler
 );
 
+// Modified to accept simple 'data' array again, removing 'lentData'
 const MonthlyTrendLine = ({ labels, data }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -33,7 +34,7 @@ const MonthlyTrendLine = ({ labels, data }) => {
     labels,
     datasets: [
       {
-        label: 'Monthly Spending',
+        label: 'My Monthly Spending',
         data,
         fill: true,
         borderColor: '#0ea5e9', // sky-500

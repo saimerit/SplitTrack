@@ -1,5 +1,27 @@
 import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
 import { useTheme } from '../../hooks/useTheme';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 const NetBalanceLine = ({ labels, data }) => {
   const { theme } = useTheme();
@@ -16,7 +38,7 @@ const NetBalanceLine = ({ labels, data }) => {
         fill: true,
         borderColor: '#8b5cf6', // violet-500
         backgroundColor: 'rgba(139, 92, 246, 0.1)',
-        pointRadius: 0, // clean look like original
+        pointRadius: 0, 
         hitRadius: 10,
         tension: 0.1,
       },
@@ -35,7 +57,7 @@ const NetBalanceLine = ({ labels, data }) => {
       }
     },
     scales: {
-      x: { display: false }, // Hide X labels for cleaner look on cumulative charts
+      x: { display: false }, 
       y: {
         ticks: { color: textColor },
         grid: { color: gridColor },

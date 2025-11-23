@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import useAppStore from '../store/useAppStore';
 import Select from '../components/common/Select';
-// Removed unused formatCurrency import
 
 const Calendar = () => {
   const { transactions } = useAppStore();
@@ -19,8 +18,19 @@ const Calendar = () => {
 
     transactions.forEach(txn => {
       if (!txn.timestamp) return;
-      const d = txn.timestamp.toDate();
       
+      // --- FIX: Safe Date Parsing with Optional Catch Binding ---
+      let d;
+      try {
+        d = txn.timestamp.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp);
+      } catch {
+        // Fixed: Removed (e) to satisfy ESLint "no-unused-vars"
+        return; // Skip invalid dates
+      }
+      
+      if (isNaN(d.getTime())) return;
+      // ----------------------------------------------------------
+
       if (d.getFullYear() === parseInt(selectedYear) && d.getMonth() === parseInt(selectedMonth) && !txn.isReturn) {
         const val = (txn.splits?.me || txn.amount || 0) / 100;
         dailyTotals[d.getDate()] += val;

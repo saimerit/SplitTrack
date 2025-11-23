@@ -7,7 +7,7 @@ const QUEUE_KEY = 'splitTrack_offline_queue';
 const LEDGER_ID = 'main-ledger';
 
 export const useOfflineQueue = () => {
-  // FIX 1: Lazy initialization. Read LS immediately on load, not in useEffect.
+  // FIX 1: Lazy initialization. Read LS immediately on load.
   const [queueLength, setQueueLength] = useState(() => {
     try {
       const q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
@@ -19,7 +19,7 @@ export const useOfflineQueue = () => {
   
   const [isSyncing, setIsSyncing] = useState(false);
   
-  // FIX 2: Destructure showToast and actually use it below
+  // FIX 2: Destructure showToast
   const { showToast } = useAppStore(); 
 
   const updateLength = useCallback(() => {
@@ -31,26 +31,29 @@ export const useOfflineQueue = () => {
     }
   }, []);
 
-  // FIX 1 (Cont): useEffect now ONLY handles the event listener, no immediate setState
   useEffect(() => {
     window.addEventListener('storage', updateLength);
     return () => window.removeEventListener('storage', updateLength);
   }, [updateLength]);
 
   const addToQueue = (transactionData) => {
-    const q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
-    const serializableData = {
-      ...transactionData,
-      // Handle timestamp conversion safely
-      timestamp: transactionData.timestamp?.toMillis 
-        ? transactionData.timestamp.toMillis() 
-        : Date.now()
-    };
-    q.push(serializableData);
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
-    updateLength();
-    // Optional: Show toast when saving offline
-    showToast('Saved offline. Will sync when online.', false);
+    try {
+      const q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+      const serializableData = {
+        ...transactionData,
+        // Handle timestamp conversion safely
+        timestamp: transactionData.timestamp?.toMillis 
+          ? transactionData.timestamp.toMillis() 
+          : Date.now()
+      };
+      q.push(serializableData);
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+      updateLength();
+      showToast('Saved offline. Will sync when online.', false);
+    } catch (e) {
+      console.error("Offline save failed:", e);
+      showToast('Device storage full! Cannot save offline.', true);
+    }
   };
 
   const syncQueue = async () => {
@@ -81,7 +84,6 @@ export const useOfflineQueue = () => {
     updateLength();
     setIsSyncing(false);
 
-    // FIX 2 & 3: Using showToast and failCount
     if (failCount > 0) {
       showToast(`Synced ${successCount}, Failed ${failCount}. Retrying later.`, true);
     } else if (successCount > 0) {

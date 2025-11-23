@@ -20,13 +20,24 @@ const History = () => {
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       if (filterTag && t.tag !== filterTag) return false;
+
+      // --- FIX: Safe Date Parsing (Matches Timeline/Calendar) ---
+      let dObj;
+      try {
+        if (!t.timestamp) return false;
+        dObj = t.timestamp.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
+      } catch {
+        return false;
+      }
+      if (isNaN(dObj.getTime())) return false;
+      // ---------------------------------------------------------
+
       if (filterDate) {
-        const d = t.timestamp.toDate().toISOString().split('T')[0];
-        if (d !== filterDate) return false;
+        const dStr = dObj.toISOString().split('T')[0];
+        if (dStr !== filterDate) return false;
       } 
       else if (filterMonth) {
-        const d = t.timestamp.toDate();
-        const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const m = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}`;
         if (m !== filterMonth) return false;
       }
       return true;

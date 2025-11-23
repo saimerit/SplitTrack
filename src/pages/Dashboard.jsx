@@ -48,7 +48,11 @@ const Dashboard = () => {
       }
 
       if (txn.isReturn) {
-        const recipient = txn.participants[0];
+        const recipient = txn.participants?.[0];
+        
+        // Guard clause: skip if data is malformed
+        if (!recipient) return; 
+
         if (payer === 'me') {
           if (recipient && recipient !== 'me') {
             myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;

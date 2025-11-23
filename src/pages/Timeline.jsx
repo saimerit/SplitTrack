@@ -7,7 +7,12 @@ const Timeline = () => {
 
   const groups = useMemo(() => {
     const grouped = {};
-    const sorted = [...transactions].sort((a, b) => b.timestamp - a.timestamp);
+    const sorted = [...transactions].sort((a, b) => {
+      // Safely handle both Firestore Timestamps and Date objects/strings
+      const tA = a.timestamp?.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
+      const tB = b.timestamp?.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
+      return tB - tA; // Descending order (Newest first)
+    });
 
     sorted.forEach(txn => {
       if (!txn.timestamp) return;

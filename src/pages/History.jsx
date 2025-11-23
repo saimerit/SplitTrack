@@ -45,6 +45,19 @@ const History = () => {
   }, [transactions, filterTag, filterDate, filterMonth]);
 
   const handleDelete = async (id, parentId) => {
+    // --- FEATURE: Safety Lock (Dependencies) ---
+    // Check if any other transaction has THIS id as its parent
+    const hasChildren = transactions.some(t => 
+      t.parentTransactionId === id || 
+      (t.parentTransactionIds && t.parentTransactionIds.includes(id))
+    );
+
+    if (hasChildren) {
+      alert("Cannot delete: This transaction has linked refunds/repayments. Please delete them first.");
+      return;
+    }
+    // -------------------------------------------
+
     if (window.confirm("Are you sure you want to delete this transaction?")) {
       try {
         await deleteTransaction(id, parentId);

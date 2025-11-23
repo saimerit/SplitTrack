@@ -4,11 +4,11 @@ import { doc, updateDoc, setDoc, writeBatch, collection } from 'firebase/firesto
 import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
-import { LogOut, Moon, Sun } from 'lucide-react';
+import { LogOut, Moon, Sun, Download } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
-import { exportToCSV, exportFullBackup, importFromBackup, importFromCSV, nukeCollection } from '../services/exportImportService';
+import { exportToCSV, exportFullBackup, importFromBackup, importFromCSV, nukeCollection, downloadCSVTemplate } from '../services/exportImportService';
 import ConfirmModal from '../components/modals/ConfirmModal';
 
 const Settings = () => {
@@ -266,6 +266,9 @@ const Settings = () => {
               <hr className="dark:border-gray-700"/>
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Import CSV (Legacy or Backup)</p>
+                <button onClick={downloadCSVTemplate} className="text-xs text-sky-600 hover:underline mb-3 block">
+                  Download CSV Import Template
+                </button>
                 <input type="file" accept=".csv" onChange={e => setCsvFile(e.target.files[0])} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 dark:file:bg-gray-700 dark:file:text-gray-200"/>
                 <Button onClick={handleCSVImport} disabled={!csvFile || loading} className="w-full mt-2">
                   {loading ? 'Importing...' : 'Import Transactions'}

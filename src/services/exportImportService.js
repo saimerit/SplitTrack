@@ -77,6 +77,37 @@ const downloadFile = (content, fileName, mimeType) => {
 
 // --- EXPORT FEATURES ---
 
+export const downloadCSVTemplate = () => {
+  const headers = [
+    "ID", "Date", "Name", "Amount (Rupees)", "Payer", "Category", 
+    "Place", "Tag", "Mode of Payment", "Description", "Is Repayment?", 
+    "Participants (IDs)", "Splits (JSON)"
+  ];
+  
+  const exampleRow = [
+    "", "Nov 20, 2025", "Dynamic Split Lunch", "1500", "You (me)", "Food", 
+    "Main Canteen", "Project X", "Credit Card", "Client meeting", "FALSE", 
+    "me,P-1234,P-5678", `"{""me"":50000, ""P-1234"":25000, ""P-5678"":75000}"` // Amounts in Paise
+  ];
+  const exampleEqual = [
+    "", "Nov 20, 2025", "Equal Split Coffee", "300", "Aryan Puri", "Food", 
+    "Cafe", "Project X", "GPAY", "Quick coffee", "FALSE", 
+    "P-1234,P-5678", "" // Empty split = equal
+  ];
+  const exampleReturn = [
+    "", "Nov 21, 2025", "Repayment", "500", "Aryan Puri", "Repayment", 
+    "", "", "GPAY", "Paid me back", "TRUE", 
+    "me", ""
+  ];
+
+  let csvContent = headers.join(",") + "\n" + 
+                   exampleRow.join(",") + "\n" + 
+                   exampleEqual.join(",") + "\n" + 
+                   exampleReturn.join(",");
+
+  downloadFile(csvContent, "import_transactions_template.csv", "text/csv;charset=utf-8;");
+};
+
 export const exportToCSV = (transactions, participantsLookup) => {
   if (!transactions || transactions.length === 0) {
     alert("No transactions to export.");

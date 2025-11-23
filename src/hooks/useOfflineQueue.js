@@ -7,7 +7,7 @@ const QUEUE_KEY = 'splitTrack_offline_queue';
 const LEDGER_ID = 'main-ledger';
 
 export const useOfflineQueue = () => {
-  // FIX 1: Lazy initialization. Read LS immediately on load.
+  // FIX 1: Lazy initialization. Read LS immediately on load, not in useEffect.
   const [queueLength, setQueueLength] = useState(() => {
     try {
       const q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
@@ -19,7 +19,7 @@ export const useOfflineQueue = () => {
   
   const [isSyncing, setIsSyncing] = useState(false);
   
-  // FIX 2: Destructure showToast
+  // FIX 2: Destructure showToast and actually use it below
   const { showToast } = useAppStore(); 
 
   const updateLength = useCallback(() => {
@@ -31,6 +31,7 @@ export const useOfflineQueue = () => {
     }
   }, []);
 
+  // FIX 1 (Cont): useEffect now ONLY handles the event listener, no immediate setState
   useEffect(() => {
     window.addEventListener('storage', updateLength);
     return () => window.removeEventListener('storage', updateLength);
@@ -49,10 +50,11 @@ export const useOfflineQueue = () => {
       q.push(serializableData);
       localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
       updateLength();
+      // Optional: Show toast when saving offline
       showToast('Saved offline. Will sync when online.', false);
-    } catch (e) {
-      console.error("Offline save failed:", e);
-      showToast('Device storage full! Cannot save offline.', true);
+    } catch (error) {
+      console.error("Offline save failed (Quota Exceeded?):", error);
+      showToast('Storage full! Cannot save offline transaction.', true);
     }
   };
 
@@ -84,6 +86,7 @@ export const useOfflineQueue = () => {
     updateLength();
     setIsSyncing(false);
 
+    // FIX 2 & 3: Using showToast and failCount
     if (failCount > 0) {
       showToast(`Synced ${successCount}, Failed ${failCount}. Retrying later.`, true);
     } else if (successCount > 0) {

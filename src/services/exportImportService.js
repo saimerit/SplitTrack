@@ -196,7 +196,13 @@ const processCSVRows = (rows, allParticipants) => {
     const isReturn = row['Is Repayment?']?.trim().toUpperCase() === 'TRUE';
     
     const amountPaise = Math.round(parseFloat(row['Amount (Rupees)']) * 100);
+    
+    // --- DATE FIX ---
     const date = new Date(row.Date);
+    if (isNaN(date.getTime())) {
+        console.warn(`Skipping row ${index + 1}: Invalid date "${row.Date}"`);
+        return; // Skip this row
+    }
     date.setHours(12, 0, 0, 0);
 
     if (row.Category) newMeta.categories.add(row.Category.trim());

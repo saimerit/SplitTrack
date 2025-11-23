@@ -431,8 +431,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         return;
     }
     
-    // --- VALIDATION: Check Product Refund Limits ---
-    // We only block if it's a PRODUCT REFUND. Settlements are allowed to exceed.
     if (isProductRefund && linkedTxns.length > 0) {
         for (const link of linkedTxns) {
             const allocatedPaise = Math.round(parseFloat(link.allocated) * 100);
@@ -449,10 +447,17 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
     if (!isEditMode) {
         const checkAmount = Math.round(amountInRupees * 100);
-        const potentialDupe = transactions.find(t => 
-            Math.abs(t.amount) === checkAmount && t.expenseName === name &&
-            t.timestamp.toDate().toISOString().split('T')[0] === date
-        );
+        const potentialDupe = transactions.find(t => {
+            // FIXED: Safe date checking to prevent crashes
+            if (!t.timestamp) return false;
+            const tDate = t.timestamp.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
+            if (isNaN(tDate.getTime())) return false;
+            
+            return Math.abs(t.amount) === checkAmount && 
+                   t.expenseName === name &&
+                   tDate.toISOString().split('T')[0] === date;
+        });
+        
         if (potentialDupe) {
             setDupeTxn(potentialDupe);
             setShowDupeModal(true);

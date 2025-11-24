@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { addDoc, collection, Timestamp } from 'firebase/firestore';
+import { setDoc, doc, collection, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import useAppStore from '../store/useAppStore';
 
@@ -7,7 +7,6 @@ const QUEUE_KEY = 'splitTrack_offline_queue';
 const LEDGER_ID = 'main-ledger';
 
 export const useOfflineQueue = () => {
-  // FIX 1: Lazy initialization. Read LS immediately on load, not in useEffect.
   const [queueLength, setQueueLength] = useState(() => {
     try {
       const q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
@@ -18,8 +17,6 @@ export const useOfflineQueue = () => {
   });
   
   const [isSyncing, setIsSyncing] = useState(false);
-  
-  // FIX 2: Destructure showToast and actually use it below
   const { showToast } = useAppStore(); 
 
   const updateLength = useCallback(() => {
@@ -31,7 +28,6 @@ export const useOfflineQueue = () => {
     }
   }, []);
 
-  // FIX 1 (Cont): useEffect now ONLY handles the event listener, no immediate setState
   useEffect(() => {
     window.addEventListener('storage', updateLength);
     return () => window.removeEventListener('storage', updateLength);
@@ -40,20 +36,24 @@ export const useOfflineQueue = () => {
   const addToQueue = (transactionData) => {
     try {
       const q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+      
+      // FIX 2: Generate ID immediately to prevent duplicates during sync retry
+      const newDocRef = doc(collection(db, `ledgers/${LEDGER_ID}/transactions`));
+      
       const serializableData = {
         ...transactionData,
-        // Handle timestamp conversion safely
+        id: newDocRef.id, // Store the pre-generated ID
         timestamp: transactionData.timestamp?.toMillis 
           ? transactionData.timestamp.toMillis() 
           : Date.now()
       };
+      
       q.push(serializableData);
       localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
       updateLength();
-      // Optional: Show toast when saving offline
       showToast('Saved offline. Will sync when online.', false);
     } catch (error) {
-      console.error("Offline save failed (Quota Exceeded?):", error);
+      console.error("Offline save failed:", error);
       showToast('Storage full! Cannot save offline transaction.', true);
     }
   };
@@ -69,11 +69,15 @@ export const useOfflineQueue = () => {
 
     for (const item of q) {
       try {
-        const docData = {
-          ...item,
-          timestamp: Timestamp.fromMillis(item.timestamp)
-        };
-        await addDoc(collection(db, `ledgers/${LEDGER_ID}/transactions`), docData);
+        const docData = { ...item };
+        // Remove ID from data payload as it goes into the doc ref
+        const docId = docData.id;
+        delete docData.id;
+        
+        docData.timestamp = Timestamp.fromMillis(item.timestamp);
+        
+        // FIX 2: Use setDoc with the specific ID we generated earlier
+        await setDoc(doc(db, `ledgers/${LEDGER_ID}/transactions`, docId), docData);
         successCount++;
       } catch (e) {
         console.error("Sync failed for item", e);
@@ -86,7 +90,6 @@ export const useOfflineQueue = () => {
     updateLength();
     setIsSyncing(false);
 
-    // FIX 2 & 3: Using showToast and failCount
     if (failCount > 0) {
       showToast(`Synced ${successCount}, Failed ${failCount}. Retrying later.`, true);
     } else if (successCount > 0) {

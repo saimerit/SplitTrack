@@ -1,6 +1,6 @@
 import { 
-  addDoc, updateDoc, deleteDoc, doc, 
-  collection, getDocs, query, where, getDoc 
+  addDoc, updateDoc, deleteDoc as firestoreDeleteDoc, doc, 
+  collection, getDocs, query, where, getDoc, runTransaction, Timestamp 
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -21,8 +21,9 @@ const updateParentStats = async (parentId) => {
     const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
     
     const children = new Map();
-    snap1.forEach(d => children.set(d.id, d.data()));
-    snap2.forEach(d => children.set(d.id, d.data()));
+    // Filter out deleted children when recalculating stats
+    snap1.forEach(d => { if(!d.data().isDeleted) children.set(d.id, d.data()); });
+    snap2.forEach(d => { if(!d.data().isDeleted) children.set(d.id, d.data()); });
 
     let totalRefunds = 0;
     let lastRefundDate = null;
@@ -70,7 +71,11 @@ const updateParentStats = async (parentId) => {
 };
 
 export const addTransaction = async (txnData) => {
-  const docRef = await addDoc(collection(db, COLLECTION_PATH), txnData);
+  const docRef = await addDoc(collection(db, COLLECTION_PATH), {
+      ...txnData,
+      isDeleted: false, // Feature 8: Initialize soft delete flag
+      createdAt: Timestamp.now()
+  });
   
   if (txnData.parentTransactionIds && txnData.parentTransactionIds.length > 0) {
       await Promise.all(txnData.parentTransactionIds.map(pid => updateParentStats(pid)));
@@ -98,9 +103,59 @@ export const updateTransaction = async (id, txnData, oldParentId) => {
   }
 };
 
+// Fix 3 & Feature 8: Atomic Soft Delete
 export const deleteTransaction = async (id, parentId) => {
-  await deleteDoc(doc(db, COLLECTION_PATH, id));
-  if (parentId) {
-    await updateParentStats(parentId);
+  const txnRef = doc(db, COLLECTION_PATH, id);
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const txnDoc = await transaction.get(txnRef);
+      if (!txnDoc.exists()) throw new Error("Document does not exist!");
+
+      // Fix 3: Atomic check for dependencies
+      // We query for ACTIVE children (not deleted ones)
+      const colRef = collection(db, COLLECTION_PATH);
+      const qChild = query(
+          colRef, 
+          where("parentTransactionIds", "array-contains", id),
+          where("isDeleted", "==", false) 
+      );
+      const qChildLegacy = query(
+          colRef, 
+          where("parentTransactionId", "==", id),
+          where("isDeleted", "==", false)
+      );
+      
+      const [snap1, snap2] = await Promise.all([getDocs(qChild), getDocs(qChildLegacy)]);
+      
+      if (!snap1.empty || !snap2.empty) {
+        throw new Error("Cannot delete: Active linked refunds/repayments exist.");
+      }
+
+      // Feature 8: Soft Delete
+      transaction.update(txnRef, { 
+          isDeleted: true,
+          deletedAt: Timestamp.now()
+      });
+    });
+
+    if (parentId) {
+      await updateParentStats(parentId);
+    }
+  } catch (e) {
+    console.error("Delete failed:", e);
+    throw e;
   }
+};
+
+// Feature 8: Restore Functionality
+export const restoreTransaction = async (id) => {
+    const txnRef = doc(db, COLLECTION_PATH, id);
+    await updateDoc(txnRef, { isDeleted: false, deletedAt: null });
+    // Recalculating parent stats might be needed here if amounts are involved
+};
+
+// Feature 8: Hard Delete (Permanent)
+export const permanentDeleteTransaction = async (id) => {
+    await firestoreDeleteDoc(doc(db, COLLECTION_PATH, id));
 };

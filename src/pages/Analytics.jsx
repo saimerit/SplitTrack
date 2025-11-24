@@ -13,12 +13,16 @@ import {
   Filler
 } from 'chart.js';
 import { Doughnut, Pie, Bar } from 'react-chartjs-2';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import { Download } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { formatCurrency } from '../utils/formatters';
 import MonthlyTrendLine from '../components/charts/MonthlyTrendLine';
 import NetBalanceLine from '../components/charts/NetBalanceLine';
 import CategoryDoughnut from '../components/charts/CategoryDoughnut'; 
 import { useTheme } from '../hooks/useTheme';
+import Button from '../components/common/Button';
 
 // Register ALL components
 ChartJS.register(
@@ -291,6 +295,55 @@ const Analytics = () => {
 
   if (loading) return <div>Loading analytics...</div>;
 
+  // Feature 7: PDF Generation Logic
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(20);
+    doc.text("SplitTrack Monthly Report", 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Generated on: ${new Date().toDateString()}`, 14, 30);
+
+    // Summary Table
+    doc.autoTable({
+      startY: 40,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Total Spent', formatCurrency(stats.totalSpend * 100)],
+        ['Total Lent', formatCurrency(stats.totalLent * 100)],
+        ['Net Cash Flow', formatCurrency(stats.customCashFlow * 100)],
+        ['Highest Spend Month', `${stats.peakSpendMonth} (${formatCurrency(stats.peakSpendAmount*100)})`]
+      ],
+    });
+
+    // Transactions Table (Top 50 to avoid overflow)
+    const recentTxns = [...transactions]
+        .sort((a,b) => {
+            const tA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+            const tB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+            return tB - tA;
+        })
+        .slice(0, 50)
+        .map(t => [
+            t.timestamp ? new Date(t.timestamp.toDate ? t.timestamp.toDate() : t.timestamp).toLocaleDateString() : 'N/A',
+            t.expenseName,
+            t.category,
+            formatCurrency(t.amount),
+            t.payer === 'me' ? 'You' : 'Other'
+        ]);
+
+    doc.text("Recent Transactions (Top 50)", 14, doc.lastAutoTable.finalY + 15);
+    
+    doc.autoTable({
+      startY: doc.lastAutoTable.finalY + 20,
+      head: [['Date', 'Name', 'Category', 'Amount', 'Payer']],
+      body: recentTxns,
+    });
+
+    doc.save(`SplitTrack_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   const commonOptions = {
       responsive: true,
       maintainAspectRatio: false,
@@ -348,7 +401,12 @@ const Analytics = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Analytics Dashboard</h2>
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Analytics Dashboard</h2>
+        <Button onClick={generatePDF} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700">
+            <Download size={18} /> PDF Report
+        </Button>
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="My Consumption (Expense)" value={formatCurrency(stats.totalSpend * 100)} />

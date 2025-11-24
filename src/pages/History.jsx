@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download } from 'lucide-react';
+import { Download, Search } from 'lucide-react'; // Added Search icon
 import useAppStore from '../store/useAppStore';
 import { deleteTransaction } from '../services/transactionService';
 import { exportToCSV } from '../services/exportImportService';
@@ -8,6 +8,7 @@ import Button from '../components/common/Button';
 import Select from '../components/common/Select';
 import Input from '../components/common/Input';
 import TransactionItem from '../components/transactions/TransactionItem';
+import SearchPalette from '../components/common/SearchPalette'; // Imported SearchPalette
 
 const History = () => {
   const navigate = useNavigate();
@@ -16,12 +17,24 @@ const History = () => {
   const [filterTag, setFilterTag] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
+  const [showSearch, setShowSearch] = useState(false); // State for Search Modal
+
+  // --- Keyboard Shortcut for Search (Only active on History page) ---
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowSearch(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       if (filterTag && t.tag !== filterTag) return false;
 
-      // --- FIX: Safe Date Parsing (Matches Timeline/Calendar) ---
       let dObj;
       try {
         if (!t.timestamp) return false;
@@ -30,7 +43,6 @@ const History = () => {
         return false;
       }
       if (isNaN(dObj.getTime())) return false;
-      // ---------------------------------------------------------
 
       if (filterDate) {
         const dStr = dObj.toISOString().split('T')[0];
@@ -45,8 +57,6 @@ const History = () => {
   }, [transactions, filterTag, filterDate, filterMonth]);
 
   const handleDelete = async (id, parentId) => {
-    // --- FEATURE: Safety Lock (Dependencies) ---
-    // Check if any other transaction has THIS id as its parent
     const hasChildren = transactions.some(t => 
       t.parentTransactionId === id || 
       (t.parentTransactionIds && t.parentTransactionIds.includes(id))
@@ -56,7 +66,6 @@ const History = () => {
       alert("Cannot delete: This transaction has linked refunds/repayments. Please delete them first.");
       return;
     }
-    // -------------------------------------------
 
     if (window.confirm("Are you sure you want to delete this transaction?")) {
       try {
@@ -70,7 +79,6 @@ const History = () => {
   };
 
   const handleEdit = (txn) => {
-    // Pass the full transaction object to the Add form
     navigate('/add', { state: { ...txn, isEditMode: true } });
   };
 
@@ -78,9 +86,22 @@ const History = () => {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">History</h2>
-        <Button onClick={() => exportToCSV(transactions, participantsLookup)} className="flex items-center gap-2 bg-green-600 hover:bg-green-700">
-          <Download size={16} /> Export CSV
-        </Button>
+        
+        <div className="flex gap-3">
+            {/* Search Button */}
+            <button 
+                onClick={() => setShowSearch(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:border-sky-500 transition-colors"
+            >
+                <Search size={16} /> 
+                <span>Search</span>
+                <span className="hidden sm:inline-block bg-gray-100 dark:bg-gray-700 px-1.5 rounded text-xs border border-gray-200 dark:border-gray-600">⌘K</span>
+            </button>
+
+            <Button onClick={() => exportToCSV(transactions, participantsLookup)} className="flex items-center gap-2 bg-green-600 hover:bg-green-700">
+                <Download size={16} /> Export CSV
+            </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700">
@@ -103,11 +124,8 @@ const History = () => {
           <div className="p-8 text-center text-gray-500">No transactions found.</div>
         ) : (
           filteredTransactions.map(txn => {
-            // FIX: Find children that link to THIS transaction (either single or multi-link)
             const linkedRefunds = transactions.filter(t => {
-                // Check legacy single link
                 if (t.parentTransactionId === txn.id) return true;
-                // Check new multi-link array
                 if (t.parentTransactionIds && t.parentTransactionIds.includes(txn.id)) return true;
                 return false;
             });
@@ -125,6 +143,9 @@ const History = () => {
           })
         )}
       </div>
+
+      {/* Render Search Palette Modal */}
+      {showSearch && <SearchPalette onClose={() => setShowSearch(false)} />}
     </div>
   );
 };

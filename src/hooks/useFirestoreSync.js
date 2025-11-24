@@ -21,7 +21,6 @@ export const useFirestoreSync = () => {
     setGoals,
     setUserSettings,
     setLoading
-    // 'participants' removed from here to fix ESLint error
   } = useAppStore();
 
   useEffect(() => {
@@ -42,17 +41,17 @@ export const useFirestoreSync = () => {
     const unsubs = [
       onSnapshot(refs.participants, s => setParticipants(s.docs.map(d => ({id: d.id, ...d.data()})))),
       
-      // Update transactions AND run integrity checks
+      // Feature 8: Filter out soft-deleted transactions from main state
       onSnapshot(refs.transactions, s => {
-        const txns = s.docs.map(d => ({id: d.id, ...d.data()}));
-        setTransactions(txns);
+        const allTxns = s.docs.map(d => ({id: d.id, ...d.data()}));
+        const activeTxns = allTxns.filter(t => !t.isDeleted);
+        setTransactions(activeTxns);
         
-        // Run checks after a brief delay to ensure participants are loaded
+        // Run checks after a brief delay
         setTimeout(() => {
-            // Access store state directly to avoid dependency cycle/unused vars
             const currentParticipants = useAppStore.getState().participants;
             if (currentParticipants.length > 0) {
-                runLedgerIntegrityChecks(txns, currentParticipants);
+                runLedgerIntegrityChecks(activeTxns, currentParticipants);
             }
         }, 1000);
       }),

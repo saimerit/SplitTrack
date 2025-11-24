@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import useAppStore from '../store/useAppStore';
-import { doc, updateDoc, setDoc, writeBatch, collection } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, writeBatch, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
@@ -10,6 +10,8 @@ import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import { exportToCSV, exportFullBackup, importFromBackup, importFromCSV, nukeCollection, downloadCSVTemplate } from '../services/exportImportService';
 import ConfirmModal from '../components/modals/ConfirmModal';
+import { restoreTransaction, permanentDeleteTransaction } from '../services/transactionService';
+import { formatCurrency } from '../utils/formatters';
 
 const Settings = () => {
   const { 
@@ -29,6 +31,8 @@ const Settings = () => {
   });
   
   const [csvFile, setCsvFile] = useState(null);
+  const [trashItems, setTrashItems] = useState([]);
+  const [showTrash, setShowTrash] = useState(false);
 
   // Modal State
   const [modalConfig, setModalConfig] = useState({
@@ -188,6 +192,28 @@ const Settings = () => {
     });
   };
 
+  // Feature 8: Trash Logic
+  const fetchTrash = async () => {
+    const q = query(collection(db, 'ledgers/main-ledger/transactions'), where('isDeleted', '==', true));
+    const snap = await getDocs(q);
+    setTrashItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    setShowTrash(true);
+  };
+
+  const handleRestore = async (id) => {
+      await restoreTransaction(id);
+      setTrashItems(prev => prev.filter(t => t.id !== id));
+      showToast("Restored transaction.");
+  };
+
+  const handleHardDelete = async (id) => {
+      if(window.confirm("Permanently delete this? This cannot be undone.")) {
+          await permanentDeleteTransaction(id);
+          setTrashItems(prev => prev.filter(t => t.id !== id));
+          showToast("Permanently deleted.");
+      }
+  };
+
   const mapOpts = (items) => [{ value: '', label: '-- None --' }, ...items.map(i => ({ value: i.name, label: i.name }))];
 
   return (
@@ -207,7 +233,6 @@ const Settings = () => {
                     <span>{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
                 </div>
                 
-                {/* Visual Slider (Toggle Switch) */}
                 <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out ${theme === 'dark' ? 'bg-sky-600' : 'bg-gray-300'}`}>
                     <span 
                         className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${theme === 'dark' ? 'translate-x-6' : 'translate-x-1'}`} 
@@ -223,6 +248,32 @@ const Settings = () => {
                 <LogOut size={18}/> Sign Out
             </Button>
         </div>
+      </div>
+
+      {/* Feature 8: Trash Zone */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+          <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Recycle Bin</h3>
+          {!showTrash ? (
+              <Button onClick={fetchTrash} variant="secondary">View Deleted Items</Button>
+          ) : (
+              <div className="space-y-2">
+                  {trashItems.length === 0 ? <p className="text-gray-500">Trash is empty.</p> : 
+                    trashItems.map(item => (
+                        <div key={item.id} className="flex justify-between items-center p-3 bg-red-50 dark:bg-red-900/20 rounded border border-red-100 dark:border-red-900">
+                            <div>
+                                <p className="font-medium dark:text-gray-200">{item.expenseName}</p>
+                                <p className="text-xs text-gray-500">{formatCurrency(item.amount)}</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleRestore(item.id)} className="text-green-600 hover:underline text-sm">Restore</button>
+                                <button onClick={() => handleHardDelete(item.id)} className="text-red-600 hover:underline text-sm">Delete Forever</button>
+                            </div>
+                        </div>
+                    ))
+                  }
+                  <Button onClick={() => setShowTrash(false)} variant="ghost" className="mt-4">Hide Trash</Button>
+              </div>
+          )}
       </div>
 
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">

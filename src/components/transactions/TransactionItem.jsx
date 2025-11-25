@@ -1,18 +1,39 @@
 import { useState } from 'react';
 import { Trash2, Edit2, ChevronDown, ChevronRight, RefreshCw, ArrowDownLeft, ArrowUpRight, 
-  Utensils, ShoppingCart, Car, Zap, Smartphone, Plane 
+  Utensils, ShoppingCart, Car, Zap, Smartphone, Plane, 
+  IceCream, BookOpen, Coffee 
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 
 // Feature 6: Category Icon Mapping
 const getCategoryIcon = (category) => {
   const cat = (category || '').toLowerCase();
-  if (cat.includes('food') || cat.includes('dinner') || cat.includes('lunch')) return <Utensils size={20} className="text-orange-500" />;
-  if (cat.includes('grocer')) return <ShoppingCart size={20} className="text-green-500" />;
-  if (cat.includes('travel') || cat.includes('transport') || cat.includes('fuel')) return <Car size={20} className="text-blue-500" />;
-  if (cat.includes('bill') || cat.includes('rent') || cat.includes('utilities')) return <Zap size={20} className="text-yellow-500" />;
-  if (cat.includes('shopping')) return <Smartphone size={20} className="text-purple-500" />;
-  if (cat.includes('trip') || cat.includes('flight')) return <Plane size={20} className="text-sky-500" />;
+
+  // 1. Beverages (Unified - Coffee, Tea, Juice, Shakes, Water)
+  if (cat.includes('coffee') || cat.includes('tea') || cat.includes('espresso') || cat.includes('latte') || 
+      cat.includes('juice') || cat.includes('shake') || cat.includes('smoothie') || cat.includes('beverage') || 
+      cat.includes('drink') || cat.includes('soda') || cat.includes('water') || cat.includes('cold')) {
+    return <Coffee size={20} className="text-amber-700" />;
+  }
+
+  // 2. Desserts (Ice Cream, Sweets)
+  if (cat.includes('dessert') || cat.includes('desert') || cat.includes('ice cream') || cat.includes('sweet') || cat.includes('cake') || cat.includes('chocolate')) {
+    return <IceCream size={20} className="text-pink-500" />;
+  }
+
+  // 3. Education (Books, Courses)
+  if (cat.includes('stationary') || cat.includes('course') || cat.includes('study') || cat.includes('education') || cat.includes('book') || cat.includes('tuition') || cat.includes('class') || cat.includes('college') || cat.includes('school')) {
+    return <BookOpen size={20} className="text-indigo-500" />;
+  }
+
+  // 4. Standard Categories
+  if (cat.includes('food') || cat.includes('dinner') || cat.includes('lunch') || cat.includes('breakfast') || cat.includes('snack')) return <Utensils size={20} className="text-orange-500" />;
+  if (cat.includes('grocer') || cat.includes('mart') || cat.includes('store')) return <ShoppingCart size={20} className="text-green-500" />;
+  if (cat.includes('travel') || cat.includes('transport') || cat.includes('fuel') || cat.includes('uber') || cat.includes('ola') || cat.includes('cab') || cat.includes('bus') || cat.includes('train')) return <Car size={20} className="text-blue-500" />;
+  if (cat.includes('bill') || cat.includes('rent') || cat.includes('utilities') || cat.includes('recharge') || cat.includes('wifi')) return <Zap size={20} className="text-yellow-500" />;
+  if (cat.includes('shopping') || cat.includes('clothes') || cat.includes('accessories') || cat.includes('electronics') || cat.includes('phone')) return <Smartphone size={20} className="text-purple-500" />;
+  if (cat.includes('trip') || cat.includes('flight') || cat.includes('hotel') || cat.includes('vacation')) return <Plane size={20} className="text-sky-500" />;
+  
   return <div className="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700" />; // Default placeholder
 };
 

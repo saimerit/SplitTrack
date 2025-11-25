@@ -1,13 +1,17 @@
 export const runLedgerIntegrityChecks = (transactions, participants) => {
-  console.groupCollapsed("🔐 Ledger Integrity Checks");
+  const report = [];
   let issues = 0;
+
+  const log = (msg, type = 'warning') => {
+    report.push({ type, message: msg });
+    if (type === 'warning' || type === 'error') issues++;
+  };
 
   // 1. Auto-verify parent–child relationships
   transactions.filter(t => t.isLinkedRefund).forEach(refund => {
     const parent = transactions.find(p => p.id === refund.parentTransactionId);
     if (!parent) {
-      console.warn(`Orphan refund found: ID ${refund.id} links to missing parent ${refund.parentTransactionId}`);
-      issues++;
+      log(`Orphan refund found: ID ${refund.id} links to missing parent ${refund.parentTransactionId}`, 'error');
     }
   });
 
@@ -19,8 +23,7 @@ export const runLedgerIntegrityChecks = (transactions, participants) => {
     
     // Tolerance of 1 paise
     if (parent.netAmount !== undefined && Math.abs(parent.netAmount - expectedNet) > 1) {
-      console.warn(`Net Amount mismatch for ${parent.expenseName}. Stored: ${parent.netAmount}, Calc: ${expectedNet}`);
-      issues++;
+      log(`Net Amount mismatch for "${parent.expenseName}". Stored: ${parent.netAmount}, Calc: ${expectedNet}`);
     }
   });
 
@@ -30,14 +33,12 @@ export const runLedgerIntegrityChecks = (transactions, participants) => {
 
   transactions.forEach(t => {
     if (t.payer !== 'me' && !participantIds.has(t.payer)) {
-      console.warn(`Txn ${t.id}: Unknown payer '${t.payer}'`);
-      issues++;
+      log(`Txn "${t.expenseName}": Unknown payer '${t.payer}'`);
     }
     if (t.participants) {
       t.participants.forEach(pId => {
         if (pId !== 'me' && !participantIds.has(pId)) {
-          console.warn(`Txn ${t.id}: Unknown participant '${pId}'`);
-          issues++;
+          log(`Txn "${t.expenseName}": Unknown participant '${pId}'`);
         }
       });
     }
@@ -47,15 +48,11 @@ export const runLedgerIntegrityChecks = (transactions, participants) => {
   transactions.forEach(t => {
     if (!t.isReturn && t.type !== 'income' && t.splits && Object.keys(t.splits).length > 0) {
       const totalSplit = Object.values(t.splits).reduce((a, b) => a + b, 0);
-      // Compare absolute values to handle refunds correctly
       if (Math.abs(Math.abs(totalSplit) - Math.abs(t.amount)) > 1) {
-        console.warn(`Split mismatch ${t.id}. Total: ${t.amount}, Split Sum: ${totalSplit}`);
-        issues++;
+        log(`Split mismatch in "${t.expenseName}". Total: ${t.amount}, Split Sum: ${totalSplit}`);
       }
     }
   });
 
-  if (issues === 0) console.log("✅ No integrity issues found.");
-  else console.warn(`⚠️ Found ${issues} integrity issues.`);
-  console.groupEnd();
+  return { issues, report };
 };

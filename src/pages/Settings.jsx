@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import useAppStore from '../store/useAppStore';
 import { doc, updateDoc, setDoc, writeBatch, collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import {Fb, db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
-import { LogOut, Moon, Sun, Download } from 'lucide-react';
+import { LogOut, Moon, Sun, Download, ShieldCheck, AlertTriangle, CheckCircle } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
@@ -12,6 +12,7 @@ import { exportToCSV, exportFullBackup, importFromBackup, importFromCSV, nukeCol
 import ConfirmModal from '../components/modals/ConfirmModal';
 import { restoreTransaction, permanentDeleteTransaction } from '../services/transactionService';
 import { formatCurrency } from '../utils/formatters';
+import { runLedgerIntegrityChecks } from '../utils/integrityChecks';
 
 const Settings = () => {
   const { 
@@ -33,6 +34,9 @@ const Settings = () => {
   const [csvFile, setCsvFile] = useState(null);
   const [trashItems, setTrashItems] = useState([]);
   const [showTrash, setShowTrash] = useState(false);
+  
+  // Integrity Check State
+  const [healthReport, setHealthReport] = useState(null);
 
   // Modal State
   const [modalConfig, setModalConfig] = useState({
@@ -45,6 +49,17 @@ const Settings = () => {
   });
 
   const closeModal = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
+
+  const handleRunIntegrityCheck = () => {
+    setLoading(true);
+    setTimeout(() => {
+        const result = runLedgerIntegrityChecks(transactions, participants);
+        setHealthReport(result);
+        setLoading(false);
+        if (result.issues === 0) showToast("System is healthy!");
+        else showToast(`Found ${result.issues} issues.`, true);
+    }, 500);
+  };
 
   // --- Sign Out Logic ---
   const handleSignOutRequest = () => {
@@ -217,7 +232,7 @@ const Settings = () => {
   const mapOpts = (items) => [{ value: '', label: '-- None --' }, ...items.map(i => ({ value: i.name, label: i.name }))];
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8 max-w-5xl mx-auto animate-fade-in">
       
       {/* App Preferences Section */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
@@ -248,6 +263,41 @@ const Settings = () => {
                 <LogOut size={18}/> Sign Out
             </Button>
         </div>
+      </div>
+
+      {/* System Health Section (New) */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
+          <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                  <ShieldCheck size={20} className="text-emerald-500" /> System Health
+              </h3>
+              <Button onClick={handleRunIntegrityCheck} disabled={loading} variant="secondary" className="text-sm">
+                  {loading ? "Checking..." : "Run Diagnostics"}
+              </Button>
+          </div>
+          
+          {!healthReport ? (
+              <p className="text-sm text-gray-500">Run diagnostics to check for orphan refunds, missing participants, or calculation errors.</p>
+          ) : (
+              <div className="space-y-3">
+                  <div className={`p-3 rounded-lg border flex items-center gap-3 ${healthReport.issues === 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-yellow-50 border-yellow-200 text-yellow-700'}`}>
+                      {healthReport.issues === 0 ? <CheckCircle size={20} /> : <AlertTriangle size={20} />}
+                      <span className="font-medium">
+                          {healthReport.issues === 0 ? "System healthy. No issues found." : `Found ${healthReport.issues} potential issue(s).`}
+                      </span>
+                  </div>
+                  
+                  {healthReport.report.length > 0 && (
+                      <div className="mt-2 max-h-40 overflow-y-auto border rounded p-2 bg-gray-50 dark:bg-gray-900 dark:border-gray-700">
+                          {healthReport.report.map((log, idx) => (
+                              <div key={idx} className="text-xs font-mono py-1 border-b last:border-0 border-gray-200 dark:border-gray-700 dark:text-gray-300">
+                                  <span className={`font-bold ${log.type === 'error' ? 'text-red-500' : 'text-yellow-600'}`}>[{log.type.toUpperCase()}]</span> {log.message}
+                              </div>
+                          ))}
+                      </div>
+                  )}
+              </div>
+          )}
       </div>
 
       {/* Feature 8: Trash Zone */}

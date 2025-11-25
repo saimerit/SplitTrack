@@ -83,7 +83,10 @@ const Analytics = () => {
         return isNaN(d.getTime()) ? 0 : d.getTime();
     };
     
-    const sortedTxns = [...transactions].sort((a, b) => getMillis(a) - getMillis(b));
+    // Safety filter for deleted items
+    const sortedTxns = [...transactions]
+        .filter(t => !t.isDeleted)
+        .sort((a, b) => getMillis(a) - getMillis(b));
 
     // 2. Process Transactions
     sortedTxns.forEach(txn => {
@@ -319,6 +322,7 @@ const Analytics = () => {
 
     // Transactions Table (Top 50 to avoid overflow)
     const recentTxns = [...transactions]
+        .filter(t => !t.isDeleted) // Safety Filter
         .sort((a,b) => {
             const tA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
             const tB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);

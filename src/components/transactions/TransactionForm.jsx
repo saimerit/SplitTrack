@@ -6,7 +6,8 @@ import useAppStore from '../../store/useAppStore';
 import { addTransaction, updateTransaction } from '../../services/transactionService';
 import { validateSplits } from '../../utils/validators';
 import { formatCurrency } from '../../utils/formatters';
-import { Trash2, RefreshCw, HandCoins, Filter } from 'lucide-react';
+import { Trash2, RefreshCw, HandCoins, Filter, Sparkles } from 'lucide-react';
+import Fuse from 'fuse.js';
 
 import Input from '../common/Input';
 import Select from '../common/Select';
@@ -101,6 +102,56 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   const [showDupeModal, setShowDupeModal] = useState(false);
   const [dupeTxn, setDupeTxn] = useState(null);
   const [activePrompt, setActivePrompt] = useState(null); 
+  
+  // Smart Suggestion State
+  const [suggestion, setSuggestion] = useState(null);
+
+  // --- FEATURE: Smart Category Suggestions ---
+  useEffect(() => {
+        if (isEditMode || !name || name.length < 3) {
+            if (suggestion !== null) {
+                Promise.resolve().then(() => setSuggestion(null));
+            }
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            const fuse = new Fuse(transactions.slice(0, 500), {
+                keys: ['expenseName'],
+                threshold: 0.3
+            });
+            const result = fuse.search(name);
+
+            if (result.length > 0) {
+                const bestMatch = result[0].item;
+
+                if ((!category && bestMatch.category) ||
+                    (!place && bestMatch.place) ||
+                    (!tag && bestMatch.tag)) 
+                {
+                    setSuggestion(bestMatch);
+                } else {
+                    Promise.resolve().then(() => setSuggestion(null));
+                }
+            } else {
+                Promise.resolve().then(() => setSuggestion(null));
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+
+    }, [name, isEditMode, transactions, category, place, tag, suggestion]);
+
+
+
+  const applySuggestion = () => {
+      if (!suggestion) return;
+      if (suggestion.category && !category) setCategory(suggestion.category);
+      if (suggestion.place && !place) setPlace(suggestion.place);
+      if (suggestion.tag && !tag) setTag(suggestion.tag);
+      setSuggestion(null);
+      showToast("Autofilled details!");
+  };
 
   // --- FEATURE: Include Payer Logic ---
     useEffect(() => {
@@ -221,17 +272,15 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   const eligibleParents = useMemo(() => {
     if (!isSettlement) {
         return transactions
-            .filter(t => t.amount > 0 && !t.isReturn) 
+            .filter(t => t.amount > 0 && !t.isReturn && !t.isDeleted) // Safety Patch: Filter deleted
             .filter(t => !linkedTxns.some(l => l.id === t.id))
             .sort((a, b) => getTxnTime(b) - getTxnTime(a));
     }
 
     // SETTLEMENT LOGIC
-    
-
     // 1. Debts I Owe (Positive Link)
     const debtsIOwe = transactions.filter(t => 
-        !t.isReturn && t.payer !== 'me' && t.splits?.['me'] > 0
+        !t.isReturn && t.payer !== 'me' && t.splits?.['me'] > 0 && !t.isDeleted
     ).map(t => ({ 
         ...t, 
         relationType: 'owed_by_me', // I owe them
@@ -241,7 +290,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
     // 2. Debts Others Owe Me (Negative Link / Offset)
     const debtsTheyOwe = transactions.filter(t => 
-        !t.isReturn && t.payer === 'me' && 
+        !t.isReturn && t.payer === 'me' && !t.isDeleted &&
         Object.keys(t.splits || {}).some(uid => uid !== 'me' && t.splits[uid] > 0)
     ).flatMap(t => {
         return Object.keys(t.splits)
@@ -274,7 +323,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         .sort((a, b) => getTxnTime(b) - getTxnTime(a));
 
     // FIX APPLIED: Strictly remove duplicates by ID
-    // This handles cases where the state might accidentally double-count or process a transaction twice
     return [...new Map(result.map(item => [item.id, item])).values()];
 
   }, [transactions, linkedTxns, isSettlement, payer, selectedParticipants, repaymentFilter, getOutstandingDebt]);
@@ -472,6 +520,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       setIncludeMe(true);
       setIncludePayer(false);
       setDescription('');
+      setSuggestion(null);
       window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -707,7 +756,26 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
           </div>
       )}
 
-      <Input label="Expense Name" value={name} onChange={e => setName(e.target.value)} required className="col-span-1 md:col-span-2 lg:col-span-4" placeholder={isSettlement ? "Repayment" : "e.g. Dinner at Taj"} />
+      <div className="col-span-1 md:col-span-2 lg:col-span-4 relative">
+        <Input 
+            label="Expense Name" 
+            value={name} 
+            onChange={e => setName(e.target.value)} 
+            required 
+            placeholder={isSettlement ? "Repayment" : "e.g. Dinner at Taj"} 
+        />
+        {suggestion && (
+            <div 
+                onClick={applySuggestion}
+                className="absolute z-10 top-[70px] left-0 right-0 bg-indigo-50 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800 rounded-lg p-3 shadow-lg cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors flex items-center gap-3 animate-fade-in"
+            >
+                <Sparkles size={18} className="text-indigo-600 dark:text-indigo-400" />
+                <div className="text-sm text-indigo-900 dark:text-indigo-200">
+                    <span className="font-bold">Suggestion found:</span> {suggestion.category} • {suggestion.place} • {suggestion.tag}
+                </div>
+            </div>
+        )}
+      </div>
 
       {/* MOVED: Payer & Recipient Selectors (Above Linking) */}
       <div className="col-span-1 md:col-span-1 lg:col-span-2">

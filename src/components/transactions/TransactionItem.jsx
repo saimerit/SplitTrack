@@ -1,13 +1,23 @@
 import { useState } from 'react';
 import { Trash2, Edit2, ChevronDown, ChevronRight, RefreshCw, ArrowDownLeft, ArrowUpRight, 
   Utensils, ShoppingCart, Car, Zap, Smartphone, Plane, 
-  IceCream, BookOpen, Coffee 
+  IceCream, BookOpen, Coffee, Package, HandCoins 
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 
 // Feature 6: Category Icon Mapping
 const getCategoryIcon = (category) => {
   const cat = (category || '').toLowerCase();
+
+  // 0. Settlements / Repayments
+  if (cat.includes('settlement') || cat.includes('repayment') || cat.includes('settle') || cat.includes('payback') || cat.includes('refund') || cat.includes('return')) {
+    return <HandCoins size={20} className="text-emerald-600" />;
+  }
+
+  // 0.5 Online Orders / Amazon
+  if (cat.includes('amazon') || cat.includes('delivery') || cat.includes('courier') || cat.includes('flipkart') || cat.includes('package')) {
+    return <Package size={20} className="text-orange-600" />;
+  }
 
   // 1. Beverages (Unified - Coffee, Tea, Juice, Shakes, Water)
   if (cat.includes('coffee') || cat.includes('tea') || cat.includes('espresso') || cat.includes('latte') || 

@@ -5,7 +5,7 @@ import { doc, updateDoc, setDoc, writeBatch, collection, getDocs, query, where }
 import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
-import { LogOut, Moon, Sun, ShieldCheck, AlertTriangle, CheckCircle, Archive, Layers } from 'lucide-react';
+import { LogOut, Moon, Sun, ShieldCheck, AlertTriangle, CheckCircle } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
@@ -188,11 +188,14 @@ const Settings = () => {
   };
 
   const handleNuke = async (collectionName) => {
+    // UPDATED: Dynamically set the confirmation keyword (e.g., "DELETE TRANSACTIONS")
+    const confirmKeyword = `DELETE ${collectionName.toUpperCase()}`;
+    
     setModalConfig({
       isOpen: true,
       title: `Delete All ${collectionName}?`,
       message: `Permanently delete <strong>ALL</strong> ${collectionName}? This cannot be undone.`,
-      confirmInput: "DELETE",
+      confirmInput: confirmKeyword, 
       confirmText: "Delete All",
       onConfirm: async () => {
         setLoading(true);
@@ -236,8 +239,6 @@ const Settings = () => {
 
   const mapOpts = (items) => [{ value: '', label: '-- None --' }, ...items.map(i => ({ value: i.name, label: i.name }))];
 
-  // ... [Render remains mostly the same, ensuring modalConfig is used] ...
-
   return (
     <div className="space-y-8 max-w-5xl mx-auto animate-fade-in">
       
@@ -272,7 +273,7 @@ const Settings = () => {
         </div>
       </div>
 
-      {/* ... [System Health Section] ... */}
+      {/* System Health Section */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
           <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
@@ -333,7 +334,7 @@ const Settings = () => {
           )}
       </div>
 
-      {/* ... [Manage Members Section] ... */}
+      {/* Manage Members Section */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
         <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Manage Members</h3>
         <div className="space-y-2 mb-6">
@@ -352,7 +353,7 @@ const Settings = () => {
         </form>
       </div>
 
-      {/* ... [Default Values Section] ... */}
+      {/* Default Values Section */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
         <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Default Values</h3>
         <form onSubmit={handleSaveDefaults} className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -366,7 +367,7 @@ const Settings = () => {
         </form>
       </div>
 
-      {/* ... [CSV and Backup Sections] ... */}
+      {/* CSV and Backup Sections */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
             <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">CSV Data</h3>

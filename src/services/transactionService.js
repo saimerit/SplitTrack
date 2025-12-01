@@ -1,6 +1,6 @@
 import { 
   addDoc, updateDoc, deleteDoc as firestoreDeleteDoc, doc, 
-  collection, getDocs, query, where, getDoc, runTransaction, Timestamp 
+  collection, getDocs, query, where, getDoc, runTransaction, Timestamp, writeBatch 
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -8,6 +8,7 @@ const LEDGER_ID = 'main-ledger';
 const COLLECTION_PATH = `ledgers/${LEDGER_ID}/transactions`;
 
 // Helper: Recalculate parent stats
+// Updated to handle cases where parent/child might temporarily have different groups (integrity safe)
 const updateParentStats = async (parentId) => {
   if (!parentId) return;
   
@@ -21,7 +22,7 @@ const updateParentStats = async (parentId) => {
     const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
     
     const children = new Map();
-    // Filter out deleted children when recalculating stats
+    // Filter out deleted children
     snap1.forEach(d => { if(!d.data().isDeleted) children.set(d.id, d.data()); });
     snap2.forEach(d => { if(!d.data().isDeleted) children.set(d.id, d.data()); });
 
@@ -29,7 +30,7 @@ const updateParentStats = async (parentId) => {
     let lastRefundDate = null;
     
     children.forEach((data) => {
-      // Skip Repayments for Net Cost calculation
+      // Skip Repayments for Net Cost calculation (they are settlements, not cost reduction)
       if (data.isReturn) return;
 
       let allocatedAmount = 0;
@@ -73,7 +74,7 @@ const updateParentStats = async (parentId) => {
 export const addTransaction = async (txnData) => {
   const docRef = await addDoc(collection(db, COLLECTION_PATH), {
       ...txnData,
-      isDeleted: false, // Feature 8: Initialize soft delete flag
+      isDeleted: false, 
       createdAt: Timestamp.now()
   });
   
@@ -158,4 +159,26 @@ export const restoreTransaction = async (id) => {
 // Feature 8: Hard Delete (Permanent)
 export const permanentDeleteTransaction = async (id) => {
     await firestoreDeleteDoc(doc(db, COLLECTION_PATH, id));
+};
+
+// Feature 9: Group Move
+export const moveTransactionToGroup = async (id, newGroupId) => {
+    const txnRef = doc(db, COLLECTION_PATH, id);
+    const colRef = collection(db, COLLECTION_PATH);
+    
+    // Find all children linked to this transaction
+    const qChildren = query(colRef, where("parentTransactionId", "==", id));
+    const snap = await getDocs(qChildren);
+    
+    const batch = writeBatch(db);
+    
+    // Move parent
+    batch.update(txnRef, { groupId: newGroupId });
+    
+    // Move all children
+    snap.forEach(childDoc => {
+        batch.update(childDoc.ref, { groupId: newGroupId });
+    });
+    
+    await batch.commit();
 };

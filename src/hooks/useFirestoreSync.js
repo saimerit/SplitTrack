@@ -19,6 +19,7 @@ export const useFirestoreSync = () => {
     setModes,
     setTemplates,
     setGoals,
+    setGroups, // New Action
     setUserSettings,
     setLoading
   } = useAppStore();
@@ -35,21 +36,23 @@ export const useFirestoreSync = () => {
       modes: query(collection(db, `ledgers/${LEDGER_ID}/modesOfPayment`), orderBy('name')),
       templates: query(collection(db, `ledgers/${LEDGER_ID}/templates`), orderBy('name')),
       goals: query(collection(db, `ledgers/${LEDGER_ID}/goals`), orderBy('name')),
+      groups: query(collection(db, `ledgers/${LEDGER_ID}/groups`), orderBy('name')), // New Collection
       settings: doc(db, `ledgers/${LEDGER_ID}`),
     };
 
     const unsubs = [
+      // Sync raw participants
       onSnapshot(refs.participants, s => setParticipants(s.docs.map(d => ({id: d.id, ...d.data()})))),
       
-      // Feature 8: Filter out soft-deleted transactions from main state
+      // Sync raw transactions (Feature 8: Filter out soft-deleted)
       onSnapshot(refs.transactions, s => {
         const allTxns = s.docs.map(d => ({id: d.id, ...d.data()}));
         const activeTxns = allTxns.filter(t => !t.isDeleted);
-        setTransactions(activeTxns);
+        setTransactions(activeTxns); // Store will handle group filtering
         
-        // Run checks after a brief delay
+        // Integrity Checks
         setTimeout(() => {
-            const currentParticipants = useAppStore.getState().participants;
+            const currentParticipants = useAppStore.getState().rawParticipants; // Check against raw
             if (currentParticipants.length > 0) {
                 runLedgerIntegrityChecks(activeTxns, currentParticipants);
             }
@@ -62,6 +65,8 @@ export const useFirestoreSync = () => {
       onSnapshot(refs.modes, s => setModes(s.docs.map(d => ({id: d.id, ...d.data()})))),
       onSnapshot(refs.templates, s => setTemplates(s.docs.map(d => ({id: d.id, ...d.data()})))),
       onSnapshot(refs.goals, s => setGoals(s.docs.map(d => ({id: d.id, ...d.data()})))),
+      onSnapshot(refs.groups, s => setGroups(s.docs.map(d => ({id: d.id, ...d.data()})))), // New Sync
+      
       onSnapshot(refs.settings, s => {
         if(s.exists()) setUserSettings(s.data());
         setLoading(false);
@@ -79,6 +84,7 @@ export const useFirestoreSync = () => {
     setModes, 
     setTemplates, 
     setGoals, 
+    setGroups,
     setUserSettings, 
     setLoading
   ]);

@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import useAppStore from '../store/useAppStore';
 import { doc, updateDoc, setDoc, writeBatch, collection, getDocs, query, where } from 'firebase/firestore';
-import {Fb, db } from '../config/firebase';
+import { db } from '../config/firebase'; // Fixed: Removed 'Fb'
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
-import { LogOut, Moon, Sun, Download, ShieldCheck, AlertTriangle, CheckCircle } from 'lucide-react';
+import { LogOut, Moon, Sun, ShieldCheck, AlertTriangle, CheckCircle, Archive, Layers } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';

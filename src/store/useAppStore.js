@@ -1,24 +1,32 @@
 import { create } from 'zustand';
 
-// Removed 'get' from the parameter list
-const useAppStore = create((set) => ({
-  // Data Arrays
+const useAppStore = create((set, get) => ({
+  // --- Master Data (Raw Sync from Firestore) ---
+  rawTransactions: [],
+  rawParticipants: [],
+  
+  // --- Derived Data (Visible to UI) ---
   transactions: [],
   participants: [],
+  
+  // --- Auxiliary Data ---
   categories: [],
   places: [],
   tags: [],
   modesOfPayment: [],
   templates: [],
   goals: [],
-  
-  // Settings & User State
+  groups: [], 
+
+  // --- State & Settings ---
+  activeGroupId: localStorage.getItem('activeGroupId') || 'personal', 
   userSettings: {},
   currentUser: null,
   loading: true,
-  // ... existing state
   toast: { show: false, message: '', isError: false },
-  
+
+  // --- Actions ---
+
   showToast: (message, isError = false) => {
     set({ toast: { show: true, message, isError } });
     setTimeout(() => {
@@ -29,14 +37,49 @@ const useAppStore = create((set) => ({
   // Lookup Maps
   participantsLookup: new Map(),
 
-  // Actions
-  setTransactions: (data) => set({ transactions: data }),
-  
-  setParticipants: (data) => {
+  // Helper to re-filter data when Group or Raw Data changes
+  refreshViews: () => {
+    const { rawTransactions, rawParticipants, activeGroupId } = get();
+    
+    // Filter Transactions (Still scoped to Active Group)
+    // Backwards compatibility: If txn.groupId is missing, assume 'personal'
+    const filteredTxns = rawTransactions.filter(t => 
+      (t.groupId || 'personal') === activeGroupId
+    );
+
+    // --- CHANGE: Participants are now GLOBAL (No filtering) ---
+    const filteredParts = [...rawParticipants];
+
+    // Update Lookup
     const lookup = new Map();
     lookup.set('me', { name: 'You (me)', uniqueId: 'me' });
-    data.forEach(p => lookup.set(p.uniqueId, p));
-    set({ participants: data, participantsLookup: lookup });
+    filteredParts.forEach(p => lookup.set(p.uniqueId, p));
+
+    set({ 
+      transactions: filteredTxns, 
+      participants: filteredParts, 
+      participantsLookup: lookup 
+    });
+  },
+
+  // --- Setters ---
+
+  setActiveGroupId: (id) => {
+    localStorage.setItem('activeGroupId', id);
+    set({ activeGroupId: id });
+    get().refreshViews();
+  },
+
+  setGroups: (data) => set({ groups: data }),
+
+  setTransactions: (data) => {
+    set({ rawTransactions: data });
+    get().refreshViews();
+  },
+  
+  setParticipants: (data) => {
+    set({ rawParticipants: data });
+    get().refreshViews();
   },
 
   setCategories: (data) => set({ categories: data }),

@@ -1,5 +1,5 @@
 import { renderHook, act} from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useOfflineQueue } from './useOfflineQueue';
 import { setDoc } from 'firebase/firestore';
 
@@ -7,9 +7,10 @@ import { setDoc } from 'firebase/firestore';
 vi.mock('firebase/firestore', () => ({
   getFirestore: vi.fn(),
   collection: vi.fn(),
-  doc: vi.fn(() => 'mock-doc-ref'),
+  // FIX: Return an object with an ID, not just a string
+  doc: vi.fn(() => ({ id: 'mock-doc-ref-id' })),
   setDoc: vi.fn(),
-  Timestamp: { fromMillis: (ms) => ms } // Simple pass-through for test
+  Timestamp: { fromMillis: (ms) => ms } 
 }));
 
 vi.mock('../config/firebase', () => ({
@@ -25,6 +26,10 @@ vi.mock('../store/useAppStore', () => ({
 describe('useOfflineQueue Hook', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  afterEach(() => {
     localStorage.clear();
   });
 

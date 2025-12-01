@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Archive, RefreshCw } from 'lucide-react';
+import { Trash2, Archive, RefreshCw, Layers } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { addDoc, collection, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -56,7 +56,7 @@ const SimpleManager = ({ title, data, collectionName, onDelete }) => {
 const ManageData = () => {
   const [activeTab, setActiveTab] = useState('participants');
   const { 
-    participants, categories, places, tags, modesOfPayment, 
+    participants, categories, places, tags, modesOfPayment, groups,
     showToast, transactions 
   } = useAppStore();
 
@@ -70,7 +70,12 @@ const ManageData = () => {
     if (collectionName === 'categories') isUsed = transactions.some(t => t.category === name);
     else if (collectionName === 'places') isUsed = transactions.some(t => t.place === name);
     else if (collectionName === 'tags') isUsed = transactions.some(t => t.tag === name);
-    else if (collectionName === 'modesOfPayment') isUsed = transactions.some(t => t.modeOfPayment === name);
+    
+    // For groups, check if transactions exist in it
+    if (collectionName === 'groups') {
+       // Since 'transactions' in store are filtered, checking strict usage is harder locally.
+       // We proceed with a warning modal implicitly.
+    }
 
     if (isUsed) {
       showToast("Cannot delete: Item is used in existing transactions.", true);
@@ -103,6 +108,7 @@ const ManageData = () => {
       await addDoc(collection(db, `ledgers/${LEDGER_ID}/participants`), {
         name,
         uniqueId: `P-${randomCode}`,
+        // CHANGE: Removed groupId to make participants global
         isArchived: false
       });
       e.target.reset();
@@ -124,7 +130,8 @@ const ManageData = () => {
   };
 
   const tabs = [
-    { id: 'participants', label: 'Participants' },
+    { id: 'participants', label: 'Participants', icon: <Archive size={16} /> },
+    { id: 'groups', label: 'Spaces', icon: <Layers size={16} /> },
     { id: 'categories', label: 'Categories' },
     { id: 'places', label: 'Places' },
     { id: 'tags', label: 'Tags' },
@@ -136,18 +143,18 @@ const ManageData = () => {
       <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Manage Data</h2>
 
       <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-8 overflow-x-auto">
+        <nav className="-mb-px flex space-x-4 overflow-x-auto no-scrollbar">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors flex items-center gap-2 ${
                 activeTab === tab.id
                   ? 'border-sky-600 text-sky-600 dark:border-sky-500 dark:text-sky-500'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
               }`}
             >
-              {tab.label}
+              {tab.icon} {tab.label}
             </button>
           ))}
         </nav>
@@ -158,6 +165,8 @@ const ManageData = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
               <h3 className="text-lg font-semibold mb-4 dark:text-gray-200">Add New Participant</h3>
+              {/* CHANGE: Updated text to indicate global nature */}
+              <p className="text-xs text-gray-500 mb-4">Participants are available in all spaces.</p>
               <form onSubmit={handleAddParticipant} className="space-y-4">
                 <Input name="name" placeholder="Enter Name" required />
                 <Button type="submit" className="w-full">Add Participant</Button>
@@ -183,6 +192,7 @@ const ManageData = () => {
           </div>
         )}
 
+        {activeTab === 'groups' && <SimpleManager title="Space" data={groups} collectionName="groups" onDelete={handleDelete} />}
         {activeTab === 'categories' && <SimpleManager title="Category" data={categories} collectionName="categories" onDelete={handleDelete} />}
         {activeTab === 'places' && <SimpleManager title="Place" data={places} collectionName="places" onDelete={handleDelete} />}
         {activeTab === 'tags' && <SimpleManager title="Tag" data={tags} collectionName="tags" onDelete={handleDelete} />}

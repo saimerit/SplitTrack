@@ -1,12 +1,21 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, PlusCircle, History, Database, 
   BarChart2, Calendar, Activity, Tag, Target, FileText, 
-  Settings, List 
+  Settings, List, ChevronDown, Layers
 } from 'lucide-react';
+import useAppStore from '../../store/useAppStore';
 import OfflineBanner from './OfflineBanner';
 
 const Sidebar = () => {
+  const { groups, activeGroupId, setActiveGroupId } = useAppStore();
+  const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
+
+  // Find active group name
+  const activeGroup = groups.find(g => g.id === activeGroupId);
+  const activeGroupName = activeGroup ? activeGroup.name : 'Personal';
+
   const navClass = ({ isActive }) => 
     `w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
       isActive 
@@ -14,17 +23,57 @@ const Sidebar = () => {
       : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
     }`;
 
+  const switchGroup = (id) => {
+    setActiveGroupId(id);
+    setIsGroupMenuOpen(false);
+  };
+
   return (
     <nav className="hidden md:flex md:flex-col md:w-64 h-full bg-white border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700">
       
       <OfflineBanner />
 
-      <div className="px-4 pt-5 pb-2">
-        <h1 className="text-2xl font-bold text-sky-600 dark:text-sky-500">SplitTrack</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Web CLI Edition</p>
+      <div className="px-4 pt-5 pb-4 border-b border-gray-100 dark:border-gray-700">
+        <h1 className="text-xl font-bold text-sky-600 dark:text-sky-500 mb-4">SplitTrack</h1>
+        
+        {/* Group Switcher */}
+        <div className="relative">
+          <button 
+            onClick={() => setIsGroupMenuOpen(!isGroupMenuOpen)}
+            className="w-full flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 hover:border-sky-300 transition-colors"
+          >
+            <div className="flex items-center gap-2 overflow-hidden">
+              <div className="w-6 h-6 rounded bg-sky-100 text-sky-600 flex items-center justify-center text-xs font-bold shrink-0">
+                {activeGroupName.charAt(0)}
+              </div>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{activeGroupName} Space</span>
+            </div>
+            <ChevronDown size={16} className={`text-gray-400 transition-transform ${isGroupMenuOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isGroupMenuOpen && (
+            <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-600 z-50 overflow-hidden animate-fade-in">
+              <div className="p-1 max-h-48 overflow-y-auto">
+                <button onClick={() => switchGroup('personal')} className="w-full text-left px-3 py-2 text-sm rounded hover:bg-sky-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-2">
+                   <span className="w-2 h-2 rounded-full bg-emerald-400"></span> Personal
+                </button>
+                {groups.map(g => (
+                  <button key={g.id} onClick={() => switchGroup(g.id)} className="w-full text-left px-3 py-2 text-sm rounded hover:bg-sky-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-2">
+                     <span className="w-2 h-2 rounded-full bg-indigo-400"></span> {g.name}
+                  </button>
+                ))}
+              </div>
+              <div className="border-t border-gray-100 dark:border-gray-700 p-2 bg-gray-50 dark:bg-gray-700/30">
+                 <NavLink to="/data" onClick={() => setIsGroupMenuOpen(false)} className="text-xs text-sky-600 hover:underline flex items-center justify-center gap-1">
+                    <PlusCircle size={12} /> Manage Spaces
+                 </NavLink>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 px-2 pb-2 space-y-1 overflow-y-auto no-scrollbar">
+      <div className="flex-1 px-2 pb-2 mt-2 space-y-1 overflow-y-auto no-scrollbar">
         <NavLink to="/" className={navClass}><LayoutDashboard size={20}/> Balances</NavLink>
         <NavLink to="/add" className={navClass}><PlusCircle size={20}/> Add Transaction</NavLink>
         <NavLink to="/history" className={navClass}><History size={20}/> History</NavLink>

@@ -1,19 +1,23 @@
+// src/pages/Login.jsx
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { loginWithGoogle } from '../services/authService';
 
 const Login = () => {
   const { user, authLoading } = useAuth();
+  const [errorMsg, setErrorMsg] = useState('');
 
   if (authLoading) return null; 
   if (user) return <Navigate to="/" replace />;
 
   const handleLogin = async () => {
+    setErrorMsg('');
     try {
       await loginWithGoogle();
-    } catch {
-      // Fixed: Removed unused error variable
-      alert("Login failed. Please try again.");
+    } catch (e) {
+      setErrorMsg("Login failed. Please try again.");
+      console.error(e);
     }
   };
 
@@ -25,6 +29,12 @@ const Login = () => {
           Please sign in to continue.
         </p>
         
+        {errorMsg && (
+          <div className="mb-4 p-3 bg-red-50 text-red-600 rounded text-sm text-center">
+            {errorMsg}
+          </div>
+        )}
+
         <button 
           onClick={handleLogin}
           className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-white hover:bg-gray-50 dark:bg-gray-700 dark:hover:bg-gray-600 dark:border-gray-600 transition-colors"

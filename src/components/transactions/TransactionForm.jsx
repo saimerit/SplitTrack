@@ -16,7 +16,7 @@ import SplitAllocator from './SplitAllocator';
 import ParticipantSelector from './ParticipantSelector';
 import ConfirmModal from '../modals/ConfirmModal';
 import PromptModal from '../modals/PromptModal';
-
+import SuccessAnimation from '../common/SuccessAnimation';
 // --- HELPERS ---
 
 const getTxnTime = (txn) => {
@@ -132,6 +132,9 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   } = useAppStore();
   
   const wasMeIncluded = initialData?.splits ? (initialData.splits['me'] !== undefined) : true;
+
+  // State for Success Animation
+  const [showSuccess, setShowSuccess] = useState(false);
 
   // --- 1. GROUP LOGIC ---
   const [formGroupId, setFormGroupId] = useState(initialData?.groupId || activeGroupId || 'personal');
@@ -670,12 +673,18 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
        try {
          if (isEditMode) {
             await updateTransaction(initialData.id, txnData, initialData.parentTransactionId);
-            showToast("Transaction updated!");
-            navigate(-1);
+            setShowSuccess(true);
+            setTimeout(() => {
+                setShowSuccess(false);
+                navigate(-1);
+            }, 1800);
          } else {
             await addTransaction(txnData);
-            showToast("Transaction added successfully!");
-            resetForm(); 
+            setShowSuccess(true);
+            setTimeout(() => {
+                setShowSuccess(false);
+                resetForm();
+            }, 1800);
          }
        } catch(e) { console.error(e); showToast("Error saving: " + e.message, true); }
   };
@@ -724,6 +733,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
   return (
     <>
+    {showSuccess && <SuccessAnimation message={isEditMode ? "Transaction Updated!" : "Transaction Logged!"} />}
     <form onSubmit={handleSubmit} className="max-w-7xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       
       <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-sky-50 dark:bg-sky-900/10 p-3 rounded-lg border border-sky-100 dark:border-sky-900 mb-2 flex items-center justify-between">

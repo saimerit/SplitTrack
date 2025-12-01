@@ -1,7 +1,8 @@
+// src/pages/Settings.jsx
 import { useState } from 'react';
 import useAppStore from '../store/useAppStore';
 import { doc, updateDoc, setDoc, writeBatch, collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../config/firebase'; // Fixed: Removed 'Fb'
+import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { LogOut, Moon, Sun, ShieldCheck, AlertTriangle, CheckCircle, Archive, Layers } from 'lucide-react';
@@ -35,7 +36,6 @@ const Settings = () => {
   const [trashItems, setTrashItems] = useState([]);
   const [showTrash, setShowTrash] = useState(false);
   
-  // Integrity Check State
   const [healthReport, setHealthReport] = useState(null);
 
   // Modal State
@@ -61,7 +61,6 @@ const Settings = () => {
     }, 500);
   };
 
-  // --- Sign Out Logic ---
   const handleSignOutRequest = () => {
     setModalConfig({
       isOpen: true,
@@ -207,7 +206,6 @@ const Settings = () => {
     });
   };
 
-  // Feature 8: Trash Logic
   const fetchTrash = async () => {
     const q = query(collection(db, 'ledgers/main-ledger/transactions'), where('isDeleted', '==', true));
     const snap = await getDocs(q);
@@ -222,14 +220,23 @@ const Settings = () => {
   };
 
   const handleHardDelete = async (id) => {
-      if(window.confirm("Permanently delete this? This cannot be undone.")) {
-          await permanentDeleteTransaction(id);
-          setTrashItems(prev => prev.filter(t => t.id !== id));
-          showToast("Permanently deleted.");
-      }
+      setModalConfig({
+        isOpen: true,
+        title: "Permanently Delete?",
+        message: "Are you sure you want to permanently delete this item? This cannot be undone.",
+        confirmText: "Delete Forever",
+        onConfirm: async () => {
+            await permanentDeleteTransaction(id);
+            setTrashItems(prev => prev.filter(t => t.id !== id));
+            showToast("Permanently deleted.");
+            closeModal();
+        }
+      });
   };
 
   const mapOpts = (items) => [{ value: '', label: '-- None --' }, ...items.map(i => ({ value: i.name, label: i.name }))];
+
+  // ... [Render remains mostly the same, ensuring modalConfig is used] ...
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto animate-fade-in">
@@ -265,7 +272,7 @@ const Settings = () => {
         </div>
       </div>
 
-      {/* System Health Section (New) */}
+      {/* ... [System Health Section] ... */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
           <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
@@ -326,6 +333,7 @@ const Settings = () => {
           )}
       </div>
 
+      {/* ... [Manage Members Section] ... */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
         <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Manage Members</h3>
         <div className="space-y-2 mb-6">
@@ -344,6 +352,7 @@ const Settings = () => {
         </form>
       </div>
 
+      {/* ... [Default Values Section] ... */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
         <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Default Values</h3>
         <form onSubmit={handleSaveDefaults} className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -357,6 +366,7 @@ const Settings = () => {
         </form>
       </div>
 
+      {/* ... [CSV and Backup Sections] ... */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
             <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">CSV Data</h3>

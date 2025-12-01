@@ -1,6 +1,7 @@
+// src/pages/History.jsx
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, Search } from 'lucide-react'; // Added Search icon
+import { Download, Search } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { deleteTransaction } from '../services/transactionService';
 import { exportToCSV } from '../services/exportImportService';
@@ -8,7 +9,8 @@ import Button from '../components/common/Button';
 import Select from '../components/common/Select';
 import Input from '../components/common/Input';
 import TransactionItem from '../components/transactions/TransactionItem';
-import SearchPalette from '../components/common/SearchPalette'; // Imported SearchPalette
+import SearchPalette from '../components/common/SearchPalette';
+import ConfirmModal from '../components/modals/ConfirmModal'; // Added Import
 
 const History = () => {
   const navigate = useNavigate();
@@ -17,9 +19,11 @@ const History = () => {
   const [filterTag, setFilterTag] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
-  const [showSearch, setShowSearch] = useState(false); // State for Search Modal
+  const [showSearch, setShowSearch] = useState(false);
+  
+  // Modal State
+  const [deleteData, setDeleteData] = useState(null); // { id, parentId }
 
-  // --- Keyboard Shortcut for Search (Only active on History page) ---
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -56,26 +60,31 @@ const History = () => {
     });
   }, [transactions, filterTag, filterDate, filterMonth]);
 
-  const handleDelete = async (id, parentId) => {
+  const requestDelete = (id, parentId) => {
     const hasChildren = transactions.some(t => 
       t.parentTransactionId === id || 
       (t.parentTransactionIds && t.parentTransactionIds.includes(id))
     );
 
     if (hasChildren) {
-      alert("Cannot delete: This transaction has linked refunds/repayments. Please delete them first.");
+      // Use Toast or AlertModal for this warning if preferred, but for now alert is replaced
+      // Since ConfirmModal is present, we can reuse it or just showToast error
+      showToast("Cannot delete: Has linked refunds/repayments.", true);
       return;
     }
+    setDeleteData({ id, parentId });
+  };
 
-    if (window.confirm("Are you sure you want to delete this transaction?")) {
-      try {
-        await deleteTransaction(id, parentId);
-        showToast("Transaction deleted.");
-      } catch (error) {
-        console.error(error);
-        showToast("Failed to delete.", true);
-      }
+  const confirmDelete = async () => {
+    if (!deleteData) return;
+    try {
+      await deleteTransaction(deleteData.id, deleteData.parentId);
+      showToast("Transaction deleted.");
+    } catch (error) {
+      console.error(error);
+      showToast("Failed to delete.", true);
     }
+    setDeleteData(null);
   };
 
   const handleEdit = (txn) => {
@@ -88,7 +97,6 @@ const History = () => {
         <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">History</h2>
         
         <div className="flex gap-3">
-            {/* Search Button */}
             <button 
                 onClick={() => setShowSearch(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:border-sky-500 transition-colors"
@@ -137,15 +145,24 @@ const History = () => {
                   linkedRefunds={linkedRefunds}
                   participantsLookup={participantsLookup}
                   onEdit={() => handleEdit(txn)}
-                  onDelete={handleDelete}
+                  onDelete={requestDelete} // Passed the new handler
                 />
             );
           })
         )}
       </div>
 
-      {/* Render Search Palette Modal */}
       {showSearch && <SearchPalette onClose={() => setShowSearch(false)} />}
+      
+      <ConfirmModal 
+        isOpen={!!deleteData}
+        title="Delete Transaction?"
+        message="Are you sure you want to delete this transaction? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteData(null)}
+        confirmText="Delete"
+        confirmInputRequired={null}
+      />
     </div>
   );
 };

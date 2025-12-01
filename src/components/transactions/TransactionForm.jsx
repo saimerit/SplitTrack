@@ -19,7 +19,6 @@ import PromptModal from '../modals/PromptModal';
 
 // --- HELPERS ---
 
-
 const getTxnTime = (txn) => {
     if (!txn?.timestamp) return 0;
     return txn.timestamp.toMillis ? txn.timestamp.toMillis() : new Date(txn.timestamp).getTime();
@@ -35,16 +34,24 @@ const generateSmartName = (links, subTypeStr) => {
 const SearchableSelect = ({ label, value, onChange, options, placeholder, className, disabled }) => {
     const [isOpen, setIsOpen] = useState(false);
     const wrapperRef = useRef(null);
+    const [query, setQuery] = useState("");
 
-    // Sync query with selected value
-    const [query, setQuery] = useState(() => {
-    const selected = options.find(o => o.value === value);
-    return selected ? selected.label : "";
-});
+    // FIX: Sync query with external value changes (e.g., when parent clears selection)
+    useEffect(() => {
+        Promise.resolve().then(() => {
+            if (!value) {
+                setQuery("");
+            } else {
+                const selected = options.find(o => o.value === value);
+                if (selected) setQuery(selected.label);
+            }
+        });
+    }, [value, options]);
 
     const filteredOptions = useMemo(() => {
         if (!query) return options;
         const lowerQuery = query.toLowerCase();
+        // If query exactly matches selected value, show all
         const selected = options.find(o => o.value === value);
         if (selected && selected.label.toLowerCase() === lowerQuery) return options;
         
@@ -54,7 +61,6 @@ const SearchableSelect = ({ label, value, onChange, options, placeholder, classN
     }, [query, options, value]);
 
     const handleSelect = (option) => {
-        // Pass full option object if needed, but standard onChange expects event
         onChange({ target: { value: option.value, option: option } }); 
         setQuery(option.label);
         setIsOpen(false);
@@ -64,6 +70,7 @@ const SearchableSelect = ({ label, value, onChange, options, placeholder, classN
         const handleClickOutside = (event) => {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
                 setIsOpen(false);
+                // On blur, reset query to match value if exists, else clear
                 const selected = options.find(o => o.value === value);
                 if (selected) setQuery(selected.label);
                 else if (!value) setQuery('');
@@ -151,12 +158,11 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         [participantsLookup]
     );
 
-const getTxnDateStr = useCallback((txn) => {
+  const getTxnDateStr = useCallback((txn) => {
         if (!txn?.timestamp) return '';
         const d = txn.timestamp.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp);
         return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
     }, []);
-
 
   // --- MEMOIZED OPTIONS ---
   const generateOptions = (items, collectionName, label) => [
@@ -234,10 +240,9 @@ const getTxnDateStr = useCallback((txn) => {
   const [activePrompt, setActivePrompt] = useState(null); 
   
   const [suggestion, setSuggestion] = useState(null);
+
   const handlePayerChange = (newPayer) => {
       setPayer(newPayer);
-
-      // If same as current recipient in settlement mode, clear recipient
       if (isSettlement && selectedParticipants[0] === newPayer) {
           setSelectedParticipants([]);
       }
@@ -248,13 +253,10 @@ const getTxnDateStr = useCallback((txn) => {
           setSelectedParticipants([]);
           return;
       }
-
-      // Don't allow same person as both payer and recipient in settlement mode
       if (isSettlement && newRecipient === payer) {
           setSelectedParticipants([]);
           return;
       }
-
       setSelectedParticipants([newRecipient]);
   };
 
@@ -291,9 +293,6 @@ const getTxnDateStr = useCallback((txn) => {
   };
 
   // --- AUTO SET PAYER/RECIPIENT ---
-  // If payer selects themselves as recipient, clear recipient (and vice versa)
-  
-
   useEffect(() => {
       if (!isEditMode || !initialData) return;
       const initialPayer = initialData.payer || 'me';
@@ -359,7 +358,9 @@ const getTxnDateStr = useCallback((txn) => {
                   timestamp: getTxnTime(original),
                   fullAmount: full,
                   maxAllocatable: full, 
-                  allocated: (link.amount / 100).toFixed(2)
+                  allocated: (link.amount / 100).toFixed(2),
+                  // Attempt to reconstruct relation type if editing
+                  relationType: (original && original.payer !== 'me' && original.splits?.['me']) ? 'owed_by_me' : 'owed_to_me' 
               };
           });
           shouldUpdate = true;
@@ -375,10 +376,6 @@ const getTxnDateStr = useCallback((txn) => {
       }
   }, [initialData, groupTransactions, rawTransactions, getTxnDateStr]);
 
-
-  
-
-
   const eligibleParents = useMemo(() => {
     if (!isSettlement) {
         return groupTransactions
@@ -386,7 +383,7 @@ const getTxnDateStr = useCallback((txn) => {
             .filter(t => !linkedTxns.some(l => l.id === t.id))
             .sort((a, b) => getTxnTime(b) - getTxnTime(a));
     }
-    // Debt Logic: 
+    
     // owed_by_me: I owe Someone. 
     // owed_to_me: Someone owes Me.
     const debtsIOwe = groupTransactions.filter(t => !t.isReturn && t.payer !== 'me' && t.splits?.['me'] > 0)
@@ -401,12 +398,9 @@ const getTxnDateStr = useCallback((txn) => {
     
     let all = [...debtsIOwe, ...debtsTheyOwe];
     
-    // Filter based on who is selected in form
     if (repaymentFilter) {
         all = all.filter(t => t.counterParty === repaymentFilter);
     } else {
-        // If payer is 'me', show debts involving Recipient (if selected)
-        // If payer is 'Alice', show debts involving Alice
         const targetPerson = payer === 'me' ? selectedParticipants[0] : payer;
         if (targetPerson && targetPerson !== 'me') {
             all = all.filter(t => t.counterParty === targetPerson);
@@ -417,15 +411,17 @@ const getTxnDateStr = useCallback((txn) => {
     return [...new Map(result.map(item => [item.id, item])).values()];
   }, [groupTransactions, linkedTxns, isSettlement, payer, selectedParticipants, repaymentFilter, getOutstandingDebt]);
 
+  // --- COLOR CODING LOGIC ---
   const linkableOptions = useMemo(() => {
     return [
         { value: '', label: '-- Select Expense to Link --' },
         ...eligibleParents.map(t => {
             const isOwedToMe = t.relationType === 'owed_to_me';
             const sign = isOwedToMe ? '+' : '-';
+            // Explicit Red/Green as requested
             const colorClass = isOwedToMe
-                ? 'text-green-600 dark:text-green-400 font-medium'
-                : 'text-red-600 dark:text-red-400';
+                ? 'text-green-600 dark:text-green-400 font-medium' // He owes me
+                : 'text-red-600 dark:text-red-400 font-medium';    // I owe him
 
             const prefix = isOwedToMe
                 ? `[${getName(t.counterParty)} owes You] `
@@ -439,10 +435,7 @@ const getTxnDateStr = useCallback((txn) => {
             };
         }),
     ];
-}, [eligibleParents, getName, getTxnDateStr]);
-
-
-
+  }, [eligibleParents, getName, getTxnDateStr]);
 
   const showIncludePayerCheckbox = payer !== 'me' && !selectedParticipants.includes(payer);
   
@@ -462,8 +455,6 @@ const getTxnDateStr = useCallback((txn) => {
 
   const autoUpdateTotal = (currentLinks) => {
       const total = currentLinks.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0);
-      
-      // If total is negative (net offset > payment), we need to flip
       if (total < 0) {
           handleFlipDirection(Math.abs(total), currentLinks);
       } else {
@@ -477,13 +468,11 @@ const getTxnDateStr = useCallback((txn) => {
       const oldPayer = payer;
       const oldRecipient = selectedParticipants[0];
       
-      if (!oldRecipient || oldRecipient === oldPayer) return; // Can't flip if incomplete
+      if (!oldRecipient || oldRecipient === oldPayer) return; 
 
-      // 1. Swap Payer & Recipient
       setPayer(oldRecipient);
       setSelectedParticipants([oldPayer]);
       
-      // 2. Invert all link allocations (because "My Debt" becomes "Their Debt" relative to new payer)
       const invertedLinks = currentLinks.map(l => ({
           ...l,
           allocated: (parseFloat(l.allocated) * -1).toFixed(2)
@@ -496,7 +485,6 @@ const getTxnDateStr = useCallback((txn) => {
 
   const handleAmountChange = (e) => {
       setAmount(e.target.value);
-      // Auto-allocation logic remains for manual typing...
   };
 
   const addLinkedTxn = (e) => {
@@ -507,37 +495,29 @@ const getTxnDateStr = useCallback((txn) => {
       const parent = selectedOption?.data;
 
       if (parent) {
-           // Auto-set participants if empty
            if (isSettlement && payer === 'me' && selectedParticipants.length === 0) {
                 const inferred = parent.counterParty;
                 if (inferred && inferred !== 'me') setSelectedParticipants([inferred]);
-                // If filter is empty, set it to this person to reduce noise
                 if (!repaymentFilter) setRepaymentFilter(inferred);
            }
 
            const outstandingRupees = parent.outstanding / 100;
-           const isMyDebt = parent.relationType === 'owed_by_me'; // "I owe Them"
-           
-           // Logic: 
-           // If I AM PAYER: 
-           //   - Settling "I owe Them" -> Adds to what I pay (+)
-           //   - Settling "They owe Me" -> Subtracts from what I pay (-)
-           // If THEY ARE PAYER:
-           //   - Settling "I owe Them" -> Subtracts from what they pay (-)
-           //   - Settling "They owe Me" -> Adds to what they pay (+)
+           const isMyDebt = parent.relationType === 'owed_by_me'; 
            
            let allocValue = 0;
            if (payer === 'me') {
+               // If I am paying, settling "My Debt" is standard (+)
+               // Settling "Their Debt" reduces my payment (-)
                allocValue = isMyDebt ? outstandingRupees : -outstandingRupees;
            } else {
-               // Payer is 'Them'
+               // If They are paying, settling "My Debt" reduces their payment (-)
+               // Settling "Their Debt" is standard (+)
                allocValue = isMyDebt ? -outstandingRupees : outstandingRupees;
            }
 
            const currentTotal = parseFloat(amount) || 0;
            let newTotal = currentTotal + allocValue;
            
-           // Check for Flip
            let shouldFlip = false;
            if (newTotal < 0) {
                shouldFlip = true;
@@ -551,8 +531,8 @@ const getTxnDateStr = useCallback((txn) => {
                timestamp: getTxnTime(parent),
                fullAmount: Math.abs(parent.amount), 
                maxAllocatable: parent.outstanding, 
-               allocated: allocValue.toFixed(2), // Initial value before flip check
-               relationType: parent.relationType
+               allocated: allocValue.toFixed(2), 
+               relationType: parent.relationType 
            };
 
            let updatedLinks = [...linkedTxns, newLink];
@@ -566,7 +546,7 @@ const getTxnDateStr = useCallback((txn) => {
            
            updateSmartName(updatedLinks, refundSubType);
       }
-      setTempSelectId('');
+      setTempSelectId(''); // Clear the select immediately
   };
 
   const removeLinkedTxn = (id) => { 
@@ -684,8 +664,6 @@ const getTxnDateStr = useCallback((txn) => {
          splits: (isSettlement || isIncome) ? {} : finalSplits,
          linkedTransactions: linkedTransactionsData, parentTransactionIds: parentIds,
          parentTransactionId: parentIds.length > 0 ? parentIds[0] : null, isLinkedRefund: parentIds.length > 0,
-         
-         // Use the selected Form Group ID
          groupId: formGroupId 
        };
 
@@ -717,7 +695,6 @@ const getTxnDateStr = useCallback((txn) => {
 
     if (!isEditMode) {
         const checkAmount = Math.round(amountInRupees * 100);
-        // Duplicate check within the specific group
         const potentialDupe = groupTransactions.find(t => {
             if (!t.timestamp) return false;
             const tDate = t.timestamp.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
@@ -740,11 +717,6 @@ const getTxnDateStr = useCallback((txn) => {
       if(oldPayer && oldRecipient && oldRecipient !== oldPayer) {
           setPayer(oldRecipient);
           setSelectedParticipants([oldPayer]);
-          
-          // Invert links logic if swapped manually?
-          // Typically user swaps if logic is wrong, but links are tied to debt direction.
-          // Better to clear links to avoid math confusion or invert them.
-          // Let's invert them to be helpful.
           const invertedLinks = linkedTxns.map(l => ({ ...l, allocated: (parseFloat(l.allocated) * -1).toFixed(2) }));
           setLinkedTxns(invertedLinks);
       }
@@ -754,7 +726,6 @@ const getTxnDateStr = useCallback((txn) => {
     <>
     <form onSubmit={handleSubmit} className="max-w-7xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       
-      {/* Group Switcher */}
       <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-sky-50 dark:bg-sky-900/10 p-3 rounded-lg border border-sky-100 dark:border-sky-900 mb-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
               <Layers className="text-sky-600 dark:text-sky-400" size={20} />
@@ -778,7 +749,6 @@ const getTxnDateStr = useCallback((txn) => {
           )}
       </div>
 
-      {/* Transaction Type */}
       <div className="col-span-1 md:col-span-2 lg:col-span-4">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Transaction Type</label>
         <div className="flex flex-col sm:flex-row gap-4">
@@ -848,7 +818,6 @@ const getTxnDateStr = useCallback((txn) => {
                     placeholder="Search recipient..."
                 />
              </div>
-             {/* Manual Swap Button */}
              <button type="button" onClick={handleManualSwap} className="p-3 mb-px bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" title="Swap Payer and Recipient">
                  <ArrowRightLeft size={18} className="text-gray-600 dark:text-gray-300" />
              </button>
@@ -882,13 +851,23 @@ const getTxnDateStr = useCallback((txn) => {
                 {linkedTxns.length > 0 && (
                     <div className="mt-3 space-y-2">
                         {linkedTxns.map((link) => {
-                            const isNegative = parseFloat(link.allocated) < 0;
-                            const colorClass = isNegative ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
+                            // Determine Color Class based on relationType stored
+                            const isOwedToMe = link.relationType === 'owed_to_me';
+                            // Name color logic
+                            const nameColor = isOwedToMe ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
+                            
+                            // Allocation box color logic (visual only)
+                            const isAllocNegative = parseFloat(link.allocated) < 0;
+                            const boxBorder = isAllocNegative ? 'border-green-300' : 'border-red-300';
+                            const boxText = isAllocNegative ? 'text-green-600' : 'text-red-600';
+
                             return (
-                                <div key={link.id} className={`flex items-center gap-2 p-2 rounded border ${isNegative ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'}`}>
-                                    <span className={`text-sm flex-1 dark:text-gray-300 truncate ${colorClass}`} title={link.name}>{link.name} <span className="text-xs text-gray-500">({formatCurrency(link.maxAllocatable)})</span></span>
-                                    <span className={`text-sm ${isNegative ? 'text-green-600 font-bold' : 'text-gray-500'}`}>{isNegative ? 'Offset: ' : 'Pay: '}₹</span>
-                                    <input type="number" value={link.allocated} onChange={(e) => updateLinkedAllocation(link.id, e.target.value)} className={`w-24 px-1 py-1 text-sm border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600 ${isNegative ? 'text-green-600 border-green-300' : 'text-red-600 border-red-300'}`} step="0.01" />
+                                <div key={link.id} className={`flex items-center gap-2 p-2 rounded border ${isOwedToMe ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'}`}>
+                                    <span className={`text-sm flex-1 truncate font-medium ${nameColor}`} title={link.name}>
+                                        {link.name} <span className="text-xs opacity-75 text-gray-500 dark:text-gray-400">({formatCurrency(link.maxAllocatable)})</span>
+                                    </span>
+                                    <span className={`text-sm text-gray-500`}>{isAllocNegative ? 'Offset: ' : 'Pay: '}₹</span>
+                                    <input type="number" value={link.allocated} onChange={(e) => updateLinkedAllocation(link.id, e.target.value)} className={`w-24 px-1 py-1 text-sm border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600 ${boxText} ${boxBorder}`} step="0.01" />
                                     <button type="button" onClick={() => removeLinkedTxn(link.id)} className="text-gray-400 hover:text-red-500 p-1 rounded"><Trash2 size={14} /></button>
                                 </div>
                             );

@@ -105,12 +105,10 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
                         const childDate = formatDate(child.timestamp);
                         
                         if (child.isReturn) {
-                            const isReceived = child.payer !== 'me';
-                            const childPayerName = getName(child.payer);
                             return (
-                                <div key={child.id} className={`flex items-center text-xs ${isReceived ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}`}>
-                                    {isReceived ? <ArrowDownLeft size={12} className="mr-1" /> : <ArrowUpRight size={12} className="mr-1" />}
-                                    <span>{isReceived ? `Return from ${childPayerName}: ${childAmount}` : `You repaid: ${childAmount}`} on {childDate}</span>
+                                <div key={child.id} className="flex items-center text-xs text-indigo-600 dark:text-indigo-400">
+                                    <RefreshCw size={12} className="mr-1" />
+                                    <span>Settled in this transaction: {childAmount} on {childDate}</span>
                                 </div>
                             );
                         } else {

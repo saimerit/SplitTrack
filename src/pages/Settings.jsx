@@ -1,28 +1,87 @@
-// src/pages/Settings.jsx
-import { useState } from 'react';
-import useAppStore from '../store/useAppStore';
-import { doc, updateDoc, setDoc, writeBatch, collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { useAuth } from '../hooks/useAuth';
+import React, { useState } from 'react';
+import useAppStore, { PALETTE_PRESETS } from '../store/useAppStore';
 import { useTheme } from '../hooks/useTheme';
-import { LogOut, Moon, Sun, ShieldCheck, AlertTriangle, CheckCircle } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
+import { 
+    Moon, Sun, Palette, Check, Plus, Trash2, 
+    LogOut, ShieldCheck, AlertTriangle, CheckCircle, Database, Download
+} from 'lucide-react';
+import { doc, updateDoc, setDoc, collection, writeBatch, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../config/firebase';
+import { exportToCSV, exportFullBackup, importFromBackup, importFromCSV, nukeCollection, downloadCSVTemplate } from '../services/exportImportService';
+import { runLedgerIntegrityChecks } from '../utils/integrityChecks';
+import { restoreTransaction, permanentDeleteTransaction } from '../services/transactionService';
+import { formatCurrency } from '../utils/formatters';
+
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
-import { exportToCSV, exportFullBackup, importFromBackup, importFromCSV, nukeCollection, downloadCSVTemplate } from '../services/exportImportService';
 import ConfirmModal from '../components/modals/ConfirmModal';
-import { restoreTransaction, permanentDeleteTransaction } from '../services/transactionService';
-import { formatCurrency } from '../utils/formatters';
-import { runLedgerIntegrityChecks } from '../utils/integrityChecks';
+
+// --- MINI PREVIEW COMPONENT ---
+const PalettePreview = ({ colors, name, isActive, onClick, onDelete }) => {
+    return (
+        <div 
+            onClick={onClick}
+            className={`relative group cursor-pointer rounded-xl border-2 transition-all overflow-hidden ${isActive ? 'border-sky-500 scale-105 shadow-lg' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}
+        >
+            {/* Mini App UI Mockup */}
+            <div className="h-28 w-full flex flex-col text-[10px]" style={{ backgroundColor: colors.bgMain, color: colors.textMain }}>
+                {/* Header */}
+                <div className="p-2 flex justify-between items-center border-b" style={{ borderColor: colors.border || 'rgba(0,0,0,0.1)' }}>
+                    <span className="font-bold opacity-75">9:41</span>
+                    <div className="flex gap-1"><div className="w-2 h-2 rounded-full bg-current"></div></div>
+                </div>
+                {/* Content */}
+                <div className="p-2 flex-1 flex flex-col gap-2">
+                    <div className="p-2 rounded-lg shadow-sm flex justify-between items-center" style={{ backgroundColor: colors.bgSurface }}>
+                        <span>Expense</span>
+                        <span className="font-bold" style={{ color: colors.primary }}>-$50</span>
+                    </div>
+                    <div className="flex gap-2 mt-auto">
+                        <div className="flex-1 py-1 px-2 rounded text-center text-white font-bold opacity-90" style={{ backgroundColor: colors.primary }}>
+                            Add
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Label */}
+            <div className="p-2 bg-white dark:bg-gray-800 text-xs font-medium text-center border-t border-gray-100 dark:border-gray-700 truncate">
+                {name}
+            </div>
+
+            {/* Active Indicator */}
+            {isActive && (
+                <div className="absolute top-2 right-2 bg-sky-500 text-white rounded-full p-1 shadow-sm">
+                    <Check size={12} />
+                </div>
+            )}
+            
+            {/* Delete Button (for custom) */}
+            {onDelete && (
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                    className="absolute top-2 left-2 bg-red-100 text-red-600 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200"
+                >
+                    <Trash2 size={12} />
+                </button>
+            )}
+        </div>
+    );
+};
 
 const Settings = () => {
   const { 
     userSettings, categories, places, tags, modesOfPayment, 
-    setUserSettings, showToast, participantsLookup, transactions, participants
+    setUserSettings, showToast, transactions, participants, participantsLookup,
+    activePaletteId, setActivePalette, customPalettes, addCustomPalette, deleteCustomPalette
   } = useAppStore();
-  const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme(); 
   
+  const { user, logout } = useAuth();
+  const { theme, toggleTheme, setTheme } = useTheme(); 
+  
+  // --- STATE MANAGEMENT ---
   const [loading, setLoading] = useState(false);
   const [newMember, setNewMember] = useState('');
   const [defaults, setDefaults] = useState({
@@ -32,46 +91,66 @@ const Settings = () => {
     defaultMode: userSettings.defaultMode || ''
   });
   
+  // Theme Designer State
+  const [showCreator, setShowCreator] = useState(false);
+  const [newPaletteName, setNewPaletteName] = useState('');
+  const [newColors, setNewColors] = useState({
+      bgMain: '#ffffff',
+      bgSurface: '#f3f4f6',
+      primary: '#3b82f6',
+      textMain: '#000000'
+  });
+
+  // Data Tools State
+  const [healthReport, setHealthReport] = useState(null);
   const [csvFile, setCsvFile] = useState(null);
   const [trashItems, setTrashItems] = useState([]);
   const [showTrash, setShowTrash] = useState(false);
-  
-  const [healthReport, setHealthReport] = useState(null);
 
-  // Modal State
-  const [modalConfig, setModalConfig] = useState({
-    isOpen: false,
-    title: '',
-    message: '',
-    confirmInput: '',
-    confirmText: 'Confirm',
-    onConfirm: () => {}
+  // Modal Config
+  const [modalConfig, setModalConfig] = useState({ 
+    isOpen: false, 
+    title: '', 
+    message: '', 
+    confirmInput: '', 
+    confirmText: 'Confirm', 
+    onConfirm: () => {} 
   });
 
   const closeModal = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
+  const allPalettes = [...PALETTE_PRESETS, ...customPalettes];
 
-  const handleRunIntegrityCheck = () => {
-    setLoading(true);
-    setTimeout(() => {
-        const result = runLedgerIntegrityChecks(transactions, participants);
-        setHealthReport(result);
-        setLoading(false);
-        if (result.issues === 0) showToast("System is healthy!");
-        else showToast(`Found ${result.issues} issues.`, true);
-    }, 500);
+  // --- HANDLERS ---
+
+  const handlePaletteSelect = (palette) => {
+      setActivePalette(palette.id);
+      
+      // AUTO-SWITCH LOGIC:
+      // If the palette prefers a mode (e.g. Blackout prefers Dark), force it.
+      if (palette.type && palette.type !== theme) {
+          setTheme(palette.type);
+          showToast(`Switched to ${palette.type} mode for best experience.`);
+      }
   };
 
-  const handleSignOutRequest = () => {
-    setModalConfig({
-      isOpen: true,
-      title: "Sign Out?",
-      message: "Are you sure you want to sign out of SplitTrack?",
-      confirmText: "Sign Out",
-      onConfirm: () => {
-        logout();
-        closeModal();
-      }
-    });
+  const handleCreatePalette = (e) => {
+      e.preventDefault();
+      if (!newPaletteName) return;
+      const id = `custom_${Date.now()}`;
+      const newPalette = {
+          id,
+          name: newPaletteName,
+          type: 'custom',
+          colors: {
+              light: newColors, 
+              dark: newColors // Simplified: custom palettes apply same colors to both modes for now
+          }
+      };
+      addCustomPalette(newPalette);
+      setActivePalette(id);
+      setShowCreator(false);
+      setNewPaletteName('');
+      showToast("Custom palette created!");
   };
 
   const handleSaveDefaults = async (e) => {
@@ -117,6 +196,58 @@ const Settings = () => {
     });
   };
 
+  const handleRunIntegrityCheck = () => {
+    setLoading(true);
+    setTimeout(() => {
+        const result = runLedgerIntegrityChecks(transactions, participants);
+        setHealthReport(result);
+        setLoading(false);
+        if (result.issues === 0) showToast("System is healthy!");
+        else showToast(`Found ${result.issues} issues.`, true);
+    }, 500);
+  };
+
+  const fetchTrash = async () => {
+    const q = query(collection(db, 'ledgers/main-ledger/transactions'), where('isDeleted', '==', true));
+    const snap = await getDocs(q);
+    setTrashItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    setShowTrash(true);
+  };
+
+  const handleRestore = async (id) => {
+      await restoreTransaction(id);
+      setTrashItems(prev => prev.filter(t => t.id !== id));
+      showToast("Restored transaction.");
+  };
+
+  const handleHardDelete = async (id) => {
+      setModalConfig({
+        isOpen: true,
+        title: "Permanently Delete?",
+        message: "Are you sure you want to permanently delete this item? This cannot be undone.",
+        confirmText: "Delete Forever",
+        onConfirm: async () => {
+            await permanentDeleteTransaction(id);
+            setTrashItems(prev => prev.filter(t => t.id !== id));
+            showToast("Permanently deleted.");
+            closeModal();
+        }
+      });
+  };
+
+  const handleSignOutRequest = () => {
+    setModalConfig({
+      isOpen: true,
+      title: "Sign Out?",
+      message: "Are you sure you want to sign out of SplitTrack?",
+      confirmText: "Sign Out",
+      onConfirm: () => {
+        logout();
+        closeModal();
+      }
+    });
+  };
+
   const handleExportJSON = async () => {
     setLoading(true);
     try {
@@ -157,6 +288,7 @@ const Settings = () => {
       const { txnsToAdd, newMeta } = await importFromCSV(csvFile, participants);
       
       const batch = writeBatch(db);
+      // Helper to add unique metadata
       const addIfNew = (set, existingArr, colName) => {
         set.forEach(name => {
            if (!existingArr.find(i => i.name === name)) {
@@ -171,6 +303,7 @@ const Settings = () => {
       addIfNew(newMeta.modes, modesOfPayment, 'modesOfPayment');
       await batch.commit(); 
 
+      // Batch add transactions
       const BATCH_SIZE = 400;
       for (let i = 0; i < txnsToAdd.length; i += BATCH_SIZE) {
         const txnBatch = writeBatch(db);
@@ -188,9 +321,7 @@ const Settings = () => {
   };
 
   const handleNuke = async (collectionName) => {
-    // UPDATED: Dynamically set the confirmation keyword (e.g., "DELETE TRANSACTIONS")
     const confirmKeyword = `DELETE ${collectionName.toUpperCase()}`;
-    
     setModalConfig({
       isOpen: true,
       title: `Delete All ${collectionName}?`,
@@ -209,151 +340,79 @@ const Settings = () => {
     });
   };
 
-  const fetchTrash = async () => {
-    const q = query(collection(db, 'ledgers/main-ledger/transactions'), where('isDeleted', '==', true));
-    const snap = await getDocs(q);
-    setTrashItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    setShowTrash(true);
-  };
-
-  const handleRestore = async (id) => {
-      await restoreTransaction(id);
-      setTrashItems(prev => prev.filter(t => t.id !== id));
-      showToast("Restored transaction.");
-  };
-
-  const handleHardDelete = async (id) => {
-      setModalConfig({
-        isOpen: true,
-        title: "Permanently Delete?",
-        message: "Are you sure you want to permanently delete this item? This cannot be undone.",
-        confirmText: "Delete Forever",
-        onConfirm: async () => {
-            await permanentDeleteTransaction(id);
-            setTrashItems(prev => prev.filter(t => t.id !== id));
-            showToast("Permanently deleted.");
-            closeModal();
-        }
-      });
-  };
-
   const mapOpts = (items) => [{ value: '', label: '-- None --' }, ...items.map(i => ({ value: i.name, label: i.name }))];
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto animate-fade-in">
+    <div className="space-y-8 max-w-5xl mx-auto pb-20 animate-fade-in">
       
-      {/* App Preferences Section */}
+      {/* Header */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
-        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">App Preferences</h3>
-        <div className="flex flex-col sm:flex-row gap-4">
-            <Button 
-              onClick={toggleTheme} 
-              variant="secondary" 
-              className="flex items-center justify-between gap-4 flex-1 py-3 group"
-            >
-                <div className="flex items-center gap-2">
-                    {theme === 'dark' ? <Moon size={18}/> : <Sun size={18}/>}
-                    <span>{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
-                </div>
-                
-                <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out ${theme === 'dark' ? 'bg-sky-600' : 'bg-gray-300'}`}>
-                    <span 
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${theme === 'dark' ? 'translate-x-6' : 'translate-x-1'}`} 
-                    />
-                </div>
-            </Button>
-            
-            <Button 
-              onClick={handleSignOutRequest} 
-              variant="danger" 
-              className="flex items-center justify-center gap-2 flex-1 py-3"
-            >
-                <LogOut size={18}/> Sign Out
-            </Button>
-        </div>
+        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-200">Settings</h1>
       </div>
 
-      {/* System Health Section */}
+      {/* --- THEME & VIBE SECTION --- */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
-          <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
-                  <ShieldCheck size={20} className="text-emerald-500" /> System Health
-              </h3>
-              <Button onClick={handleRunIntegrityCheck} disabled={loading} variant="secondary" className="text-sm">
-                  {loading ? "Checking..." : "Run Diagnostics"}
-              </Button>
+          <div className="flex items-center gap-3 mb-6">
+              <Palette className="text-sky-600" size={24} />
+              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200">Appearance & Vibe</h2>
           </div>
-          
-          {!healthReport ? (
-              <p className="text-sm text-gray-500">Run diagnostics to check for orphan refunds, missing participants, or calculation errors.</p>
-          ) : (
-              <div className="space-y-3">
-                  <div className={`p-3 rounded-lg border flex items-center gap-3 ${healthReport.issues === 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-yellow-50 border-yellow-200 text-yellow-700'}`}>
-                      {healthReport.issues === 0 ? <CheckCircle size={20} /> : <AlertTriangle size={20} />}
-                      <span className="font-medium">
-                          {healthReport.issues === 0 ? "System healthy. No issues found." : `Found ${healthReport.issues} potential issue(s).`}
-                      </span>
-                  </div>
-                  
-                  {healthReport.report.length > 0 && (
-                      <div className="mt-2 max-h-40 overflow-y-auto border rounded p-2 bg-gray-50 dark:bg-gray-900 dark:border-gray-700">
-                          {healthReport.report.map((log, idx) => (
-                              <div key={idx} className="text-xs font-mono py-1 border-b last:border-0 border-gray-200 dark:border-gray-700 dark:text-gray-300">
-                                  <span className={`font-bold ${log.type === 'error' ? 'text-red-500' : 'text-yellow-600'}`}>[{log.type.toUpperCase()}]</span> {log.message}
+
+          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg mb-8">
+              <span className="font-medium text-gray-700 dark:text-gray-300">Color Mode</span>
+              <button 
+                  onClick={toggleTheme}
+                  className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-600 rounded-lg shadow-sm border border-gray-200 dark:border-gray-500 transition-all hover:scale-105"
+              >
+                  {theme === 'dark' ? <Moon size={18} className="text-indigo-400"/> : <Sun size={18} className="text-amber-500"/>}
+                  <span className="text-sm font-bold text-gray-700 dark:text-gray-200 uppercase">{theme}</span>
+              </button>
+          </div>
+
+          <div className="mb-6">
+              <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Color Palettes</h3>
+                  <button onClick={() => setShowCreator(!showCreator)} className="text-xs text-sky-600 font-bold hover:underline flex items-center gap-1">
+                      {showCreator ? 'Cancel' : '+ Create New'}
+                  </button>
+              </div>
+
+              {showCreator && (
+                  <form onSubmit={handleCreatePalette} className="mb-6 p-4 border border-dashed border-sky-300 bg-sky-50 dark:bg-sky-900/10 rounded-xl animate-scale-in">
+                      <h4 className="font-bold text-sky-800 dark:text-sky-200 mb-3">Designer Studio</h4>
+                      <Input label="Palette Name" value={newPaletteName} onChange={e => setNewPaletteName(e.target.value)} placeholder="e.g. Sunset Vibes" required />
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                          {['bgMain', 'bgSurface', 'primary', 'textMain'].map(key => (
+                              <div key={key}>
+                                  <label className="text-xs font-bold text-gray-500 block mb-1 capitalize">{key.replace(/([A-Z])/g, ' $1')}</label>
+                                  <div className="flex gap-2">
+                                      <input type="color" value={newColors[key]} onChange={e => setNewColors({...newColors, [key]: e.target.value})} className="h-10 w-10 p-0 border-0 rounded cursor-pointer" />
+                                  </div>
                               </div>
                           ))}
                       </div>
-                  )}
-              </div>
-          )}
-      </div>
-
-      {/* Feature 8: Trash Zone */}
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border border-gray-200 dark:border-gray-700">
-          <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Recycle Bin</h3>
-          {!showTrash ? (
-              <Button onClick={fetchTrash} variant="secondary">View Deleted Items</Button>
-          ) : (
-              <div className="space-y-2">
-                  {trashItems.length === 0 ? <p className="text-gray-500">Trash is empty.</p> : 
-                    trashItems.map(item => (
-                        <div key={item.id} className="flex justify-between items-center p-3 bg-red-50 dark:bg-red-900/20 rounded border border-red-100 dark:border-red-900">
-                            <div>
-                                <p className="font-medium dark:text-gray-200">{item.expenseName}</p>
-                                <p className="text-xs text-gray-500">{formatCurrency(item.amount)}</p>
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => handleRestore(item.id)} className="text-green-600 hover:underline text-sm">Restore</button>
-                                <button onClick={() => handleHardDelete(item.id)} className="text-red-600 hover:underline text-sm">Delete Forever</button>
-                            </div>
-                        </div>
-                    ))
-                  }
-                  <Button onClick={() => setShowTrash(false)} variant="ghost" className="mt-4">Hide Trash</Button>
-              </div>
-          )}
-      </div>
-
-      {/* Manage Members Section */}
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
-        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Manage Members</h3>
-        <div className="space-y-2 mb-6">
-          {(userSettings.allowed_emails || []).map(email => (
-            <div key={email} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded">
-              <span className="text-gray-700 dark:text-gray-300">{email} {email === user?.email && '(You)'}</span>
-              {email !== user?.email && (
-                <button onClick={() => handleRemoveMember(email)} className="text-red-500 hover:text-red-700 text-sm">Remove</button>
+                      <Button type="submit" size="sm">Save Palette</Button>
+                  </form>
               )}
-            </div>
-          ))}
-        </div>
-        <form onSubmit={handleAddMember} className="flex gap-2">
-          <Input value={newMember} onChange={e => setNewMember(e.target.value)} placeholder="user@email.com" className="flex-1" />
-          <Button type="submit">Add</Button>
-        </form>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  {allPalettes.map(palette => {
+                      const displayColors = palette.colors[theme] || palette.colors.light;
+                      return (
+                          <PalettePreview 
+                              key={palette.id}
+                              name={palette.name}
+                              colors={displayColors}
+                              isActive={activePaletteId === palette.id}
+                              onClick={() => handlePaletteSelect(palette)}
+                              onDelete={palette.type === 'custom' ? () => deleteCustomPalette(palette.id) : null}
+                          />
+                      );
+                  })}
+              </div>
+          </div>
       </div>
 
-      {/* Default Values Section */}
+      {/* --- PREFERENCES --- */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
         <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Default Values</h3>
         <form onSubmit={handleSaveDefaults} className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -367,13 +426,64 @@ const Settings = () => {
         </form>
       </div>
 
-      {/* CSV and Backup Sections */}
+      {/* --- MEMBERS & HEALTH GRID --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
+            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Manage Members</h3>
+            <div className="space-y-2 mb-6 max-h-40 overflow-y-auto">
+              {(userSettings.allowed_emails || []).map(email => (
+                <div key={email} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded">
+                  <span className="text-gray-700 dark:text-gray-300 truncate text-sm">{email} {email === user?.email && '(You)'}</span>
+                  {email !== user?.email && (
+                    <button onClick={() => handleRemoveMember(email)} className="text-red-500 hover:text-red-700 text-xs font-bold">REMOVE</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <form onSubmit={handleAddMember} className="flex gap-2">
+              <Input value={newMember} onChange={e => setNewMember(e.target.value)} placeholder="user@email.com" className="flex-1" />
+              <Button type="submit">Add</Button>
+            </form>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
+              <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                      <ShieldCheck size={20} className="text-emerald-500" /> System Health
+                  </h3>
+                  <Button onClick={handleRunIntegrityCheck} disabled={loading} variant="secondary" className="text-sm">
+                      {loading ? "Checking..." : "Run Diagnostics"}
+                  </Button>
+              </div>
+              {healthReport ? (
+                  <div className="space-y-3">
+                    <div className={`p-3 rounded-lg border flex items-center gap-3 ${healthReport.issues === 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-yellow-50 border-yellow-200 text-yellow-700'}`}>
+                        {healthReport.issues === 0 ? <CheckCircle size={20} /> : <AlertTriangle size={20} />}
+                        <span className="font-medium text-sm">
+                            {healthReport.issues === 0 ? "System healthy." : `Found ${healthReport.issues} potential issue(s).`}
+                        </span>
+                    </div>
+                    {healthReport.report.length > 0 && (
+                        <div className="mt-2 max-h-32 overflow-y-auto border rounded p-2 bg-gray-50 dark:bg-gray-900 dark:border-gray-700">
+                            {healthReport.report.map((log, idx) => (
+                                <div key={idx} className="text-[10px] font-mono py-1 border-b last:border-0 border-gray-200 dark:border-gray-700 dark:text-gray-300">
+                                    <span className={`font-bold ${log.type === 'error' ? 'text-red-500' : 'text-yellow-600'}`}>[{log.type.toUpperCase()}]</span> {log.message}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                  </div>
+              ) : <p className="text-sm text-gray-500 italic">Run diagnostics to check data integrity.</p>}
+          </div>
+      </div>
+
+      {/* --- CSV & BACKUP GRID --- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
             <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">CSV Data</h3>
             <div className="space-y-4">
-              <Button onClick={() => exportToCSV(transactions, participantsLookup)} variant="secondary" className="w-full">
-                Download Transactions CSV
+              <Button onClick={() => exportToCSV(transactions, participantsLookup)} variant="secondary" className="w-full flex items-center justify-center gap-2">
+                <Download size={16} /> Download Transactions CSV
               </Button>
               <hr className="dark:border-gray-700"/>
               <div>
@@ -392,8 +502,8 @@ const Settings = () => {
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
             <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Full Backup (JSON)</h3>
             <div className="space-y-4">
-              <Button onClick={handleExportJSON} disabled={loading} className="w-full bg-purple-600 hover:bg-purple-700">
-                {loading ? 'Exporting...' : 'Export Full Backup'}
+              <Button onClick={handleExportJSON} disabled={loading} className="w-full bg-purple-600 hover:bg-purple-700 flex items-center justify-center gap-2">
+                <Database size={16} /> {loading ? 'Exporting...' : 'Export Full Backup'}
               </Button>
               <hr className="dark:border-gray-700"/>
               <div>
@@ -404,16 +514,52 @@ const Settings = () => {
         </div>
       </div>
 
+      {/* --- RECYCLE BIN --- */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">Recycle Bin</h3>
+              {!showTrash && <Button onClick={fetchTrash} variant="secondary" size="sm">View Deleted Items</Button>}
+          </div>
+          
+          {showTrash && (
+              <div className="space-y-2">
+                  {trashItems.length === 0 ? <p className="text-gray-500 italic p-4 text-center">Trash is empty.</p> : 
+                    trashItems.map(item => (
+                        <div key={item.id} className="flex justify-between items-center p-3 bg-red-50 dark:bg-red-900/20 rounded border border-red-100 dark:border-red-900">
+                            <div>
+                                <p className="font-medium dark:text-gray-200 text-sm">{item.expenseName}</p>
+                                <p className="text-xs text-gray-500">{formatCurrency(item.amount)} • {new Date(item.timestamp?.seconds * 1000).toLocaleDateString()}</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button onClick={() => handleRestore(item.id)} className="text-green-600 hover:underline text-xs font-bold">RESTORE</button>
+                                <button onClick={() => handleHardDelete(item.id)} className="text-red-600 hover:underline text-xs font-bold">DELETE FOREVER</button>
+                            </div>
+                        </div>
+                    ))
+                  }
+                  <Button onClick={() => setShowTrash(false)} variant="ghost" className="mt-4 w-full">Hide Trash</Button>
+              </div>
+          )}
+      </div>
+
+      {/* --- DANGER ZONE --- */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border border-red-200 dark:border-red-900">
-        <h3 className="text-xl font-bold text-red-600 mb-6">Danger Zone</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-           <Button onClick={() => handleNuke('transactions')} variant="danger">Delete All Transactions</Button>
-           <Button onClick={() => handleNuke('participants')} variant="danger">Delete All Participants</Button>
-           <Button onClick={() => handleNuke('categories')} variant="danger">Delete All Categories</Button>
-           <Button onClick={() => handleNuke('places')} variant="danger">Delete All Places</Button>
-           <Button onClick={() => handleNuke('tags')} variant="danger">Delete All Tags</Button>
-           <Button onClick={() => handleNuke('modesOfPayment')} variant="danger">Delete All Modes</Button>
+        <h3 className="text-xl font-bold text-red-600 mb-6 flex items-center gap-2"><AlertTriangle size={20}/> Danger Zone</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+           <Button onClick={() => handleNuke('transactions')} variant="danger" className="text-xs">Nuke Transactions</Button>
+           <Button onClick={() => handleNuke('participants')} variant="danger" className="text-xs">Nuke Participants</Button>
+           <Button onClick={() => handleNuke('categories')} variant="danger" className="text-xs">Nuke Categories</Button>
+           <Button onClick={() => handleNuke('places')} variant="danger" className="text-xs">Nuke Places</Button>
+           <Button onClick={() => handleNuke('tags')} variant="danger" className="text-xs">Nuke Tags</Button>
+           <Button onClick={() => handleNuke('modesOfPayment')} variant="danger" className="text-xs">Nuke Modes</Button>
         </div>
+      </div>
+
+      {/* --- FOOTER ACTIONS --- */}
+      <div className="flex justify-end mt-8 border-t pt-6 dark:border-gray-700">
+          <Button onClick={handleSignOutRequest} variant="danger" className="flex items-center gap-2 px-6">
+              <LogOut size={18}/> Sign Out
+          </Button>
       </div>
 
       <ConfirmModal 

@@ -9,15 +9,45 @@
    instead of system settings (replaces darkMode: 'class') */
 @variant dark (&:where(.dark, .dark *));
 
-/* Custom Scrollbar Hide (unchanged) */
+/* --- THEME VARIABLES --- */
+:root {
+  /* Default Light Mode Base */
+  --bg-main: #f9fafb;      /* gray-50 */
+  --bg-surface: #ffffff;   /* white */
+  --text-main: #111827;    /* gray-900 */
+  --text-secondary: #6b7280; /* gray-500 */
+  --primary: #0284c7;      /* sky-600 */
+  --border: #e5e7eb;       /* gray-200 */
+}
+
+.dark {
+  /* Default Dark Mode Base */
+  --bg-main: #111827;      /* gray-900 */
+  --bg-surface: #1f2937;   /* gray-800 */
+  --text-main: #f9fafb;    /* gray-50 */
+  --text-secondary: #9ca3af; /* gray-400 */
+  --primary: #38bdf8;      /* sky-400 */
+  --border: #374151;       /* gray-700 */
+}
+
+/* --- FIX OVER-SCROLL BACKGROUND --- */
+html {
+  background-color: var(--bg-main);
+  transition: background-color 0.3s ease;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  min-height: 100vh;
+  font-family: var(--font-sans);
+}
+
+/* Custom Scrollbar Hide */
 .no-scrollbar::-webkit-scrollbar {
     display: none;
 }
 .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
-}
-
-body {
-    font-family: var(--font-sans);
 }

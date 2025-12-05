@@ -9,17 +9,58 @@ export const runLedgerIntegrityChecks = (transactions, participants) => {
 
   // 1. Auto-verify parent–child relationships
   transactions.filter(t => t.isLinkedRefund).forEach(refund => {
-    const parent = transactions.find(p => p.id === refund.parentTransactionId);
-    if (!parent) {
-      log(`Orphan refund found: ID ${refund.id} links to missing parent ${refund.parentTransactionId}`, 'error');
+    // Check primary parent
+    if (refund.parentTransactionId) {
+        const parent = transactions.find(p => p.id === refund.parentTransactionId);
+        if (!parent) {
+          log(`Orphan refund found: ID ${refund.id} links to missing parent ${refund.parentTransactionId}`, 'error');
+        }
+    }
+    // Check array parents (New System)
+    if (refund.parentTransactionIds && Array.isArray(refund.parentTransactionIds)) {
+        refund.parentTransactionIds.forEach(pid => {
+            const parent = transactions.find(p => p.id === pid);
+            if (!parent) {
+                log(`Orphan refund link found: Refund ${refund.id} links to missing parent ${pid}`, 'error');
+            }
+        });
     }
   });
 
   // 2. Auto-check netAmount consistency (Parent expenses)
+  // FIXED: Updated to support multi-parent refunds and partial allocations
   transactions.filter(t => !t.isLinkedRefund && !t.isReturn && t.type === 'expense').forEach(parent => {
-    const children = transactions.filter(r => r.parentTransactionId === parent.id);
-    const totalRefunds = children.reduce((sum, r) => sum + r.amount, 0); // Refunds are negative
-    const expectedNet = parent.amount + totalRefunds;
+    
+    // Find all refunds linked to this parent (Legacy or New)
+    const children = transactions.filter(r => {
+        // Must be a negative amount (refund) and not a settlement
+        if (r.isReturn || r.type === 'income' || r.amount >= 0) return false;
+
+        // Check Legacy Link
+        if (r.parentTransactionId === parent.id) return true;
+
+        // Check New Array Link
+        if (r.parentTransactionIds && Array.isArray(r.parentTransactionIds) && r.parentTransactionIds.includes(parent.id)) return true;
+
+        return false;
+    });
+
+    const totalRefunds = children.reduce((sum, r) => {
+        let allocated = 0;
+        
+        // Logic matching transactionService.js updateParentStats
+        // Use specific allocation if available, otherwise fallback to full amount
+        if (r.linkedTransactions && Array.isArray(r.linkedTransactions) && r.linkedTransactions.length > 0) {
+            const link = r.linkedTransactions.find(l => l.id === parent.id);
+            allocated = link ? link.amount : r.amount;
+        } else {
+            allocated = r.amount;
+        }
+        
+        return sum + allocated;
+    }, 0);
+
+    const expectedNet = parent.amount + totalRefunds; // Refunds are negative, so this subtracts
     
     // Tolerance of 1 paise
     if (parent.netAmount !== undefined && Math.abs(parent.netAmount - expectedNet) > 1) {

@@ -17,9 +17,21 @@ export const PALETTE_PRESETS = [
     name: 'Full Blackout (AMOLED)',
     type: 'dark',
     colors: {
-      // FORCE Dark Colors in both slots so it never looks white
-      light: { bgMain: '#000000', bgSurface: '#121212', primary: '#ffffff', textMain: '#e5e5e5', border: '#27272a' },
-      dark: { bgMain: '#000000', bgSurface: '#121212', primary: '#ffffff', textMain: '#e5e5e5', border: '#27272a' }
+      // Both modes use pure black
+      light: { 
+        bgMain: '#000000', 
+        bgSurface: '#0a0a0a', 
+        primary: '#ffffff', 
+        textMain: '#ffffff', 
+        border: '#1a1a1a' 
+      },
+      dark: { 
+        bgMain: '#000000', 
+        bgSurface: '#0a0a0a', 
+        primary: '#ffffff', 
+        textMain: '#ffffff', 
+        border: '#1a1a1a' 
+      }
     }
   },
   {

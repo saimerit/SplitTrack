@@ -2,45 +2,64 @@ import { useEffect } from 'react';
 import useAppStore, { PALETTE_PRESETS } from '../store/useAppStore';
 
 export const useTheme = () => {
-  // Read directly from Global Store to ensure sync
   const { themeMode, setThemeMode, activePaletteId, customPalettes } = useAppStore();
 
   useEffect(() => {
     const root = window.document.documentElement;
     
-    // 1. Force CSS Class (Global Sync)
+    // 1. Force Apply CSS Class FIRST
     if (themeMode === 'dark') {
       root.classList.add('dark');
+      // Also set attribute for extra specificity
+      root.setAttribute('data-theme', 'dark');
     } else {
       root.classList.remove('dark');
+      root.setAttribute('data-theme', 'light');
     }
 
-    // 2. Apply Palette Colors
+    // 2. Apply Palette Colors with higher priority
     const allPalettes = [...PALETTE_PRESETS, ...(customPalettes || [])];
     const activePalette = allPalettes.find(p => p.id === activePaletteId) || PALETTE_PRESETS[0];
     
-    // Get colors for current global mode
-    // Fallback: If palette doesn't have a specific mode, use light
+    // Get colors for current mode
     const modeColors = activePalette.colors[themeMode] || activePalette.colors.light;
 
-    // Inject CSS Variables
+    // 3. Inject CSS Variables with !important flag via style attribute
     if (modeColors) {
-        root.style.setProperty('--bg-main', modeColors.bgMain);
-        root.style.setProperty('--bg-surface', modeColors.bgSurface);
-        root.style.setProperty('--primary', modeColors.primary);
-        root.style.setProperty('--text-main', modeColors.textMain);
-        if(modeColors.border) root.style.setProperty('--border', modeColors.border);
-        else root.style.removeProperty('--border');
+        root.style.setProperty('--bg-main', modeColors.bgMain, 'important');
+        root.style.setProperty('--bg-surface', modeColors.bgSurface, 'important');
+        root.style.setProperty('--primary', modeColors.primary, 'important');
+        root.style.setProperty('--text-main', modeColors.textMain, 'important');
+        
+        if(modeColors.border) {
+            root.style.setProperty('--border', modeColors.border, 'important');
+        } else {
+            root.style.removeProperty('--border');
+        }
+        
+        // Also force body background immediately
+        document.body.style.backgroundColor = modeColors.bgMain;
+        document.body.style.color = modeColors.textMain;
     }
+
+    // 4. Log for debugging
+    console.log('Theme applied:', {
+        mode: themeMode,
+        palette: activePalette.name,
+        colors: modeColors
+    });
 
   }, [themeMode, activePaletteId, customPalettes]);
 
   const toggleTheme = () => {
-    setThemeMode(themeMode === 'dark' ? 'light' : 'dark');
+    const newMode = themeMode === 'dark' ? 'light' : 'dark';
+    console.log('Toggling theme from', themeMode, 'to', newMode);
+    setThemeMode(newMode);
   };
 
   const setTheme = (newMode) => {
-      setThemeMode(newMode);
+    console.log('Setting theme to:', newMode);
+    setThemeMode(newMode);
   };
 
   return { theme: themeMode, toggleTheme, setTheme };

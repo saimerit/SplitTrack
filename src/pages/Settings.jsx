@@ -123,14 +123,26 @@ const Settings = () => {
   // --- HANDLERS ---
 
   const handlePaletteSelect = (palette) => {
+      console.log('Selecting palette:', palette.name, 'Current mode:', theme);
+      
       setActivePalette(palette.id);
       
-      // AUTO-SWITCH LOGIC:
-      // If the palette prefers a mode (e.g. Blackout prefers Dark), force it.
-      if (palette.type && palette.type !== theme) {
-          setTheme(palette.type);
-          showToast(`Switched to ${palette.type} mode for best experience.`);
-      }
+      // Force immediate re-render
+      setTimeout(() => {
+        // AUTO-SWITCH LOGIC: Force dark mode for Blackout
+        if (palette.id === 'blackout') {
+          if (theme !== 'dark') {
+            setTheme('dark');
+            showToast('Switched to dark mode for AMOLED black experience.');
+          }
+        } else if (palette.type && palette.type !== 'custom') {
+          // For other themed presets, suggest the preferred mode
+          if (palette.type !== theme && palette.id !== 'default') {
+            setTheme(palette.type);
+            showToast(`Switched to ${palette.type} mode for best experience.`);
+          }
+        }
+      }, 50);
   };
 
   const handleCreatePalette = (e) => {

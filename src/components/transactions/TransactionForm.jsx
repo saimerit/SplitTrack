@@ -17,6 +17,7 @@ import ParticipantSelector from './ParticipantSelector';
 import ConfirmModal from '../modals/ConfirmModal';
 import PromptModal from '../modals/PromptModal';
 import SuccessAnimation from '../common/SuccessAnimation';
+
 // --- HELPERS ---
 
 const getTxnTime = (txn) => {
@@ -354,6 +355,13 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
           linksToSet = initialData.linkedTransactions.map(link => {
               const original = groupTransactions.find(t => t.id === link.id) || rawTransactions.find(t => t.id === link.id);
               const full = original ? Math.abs(original.amount) : 0;
+              
+              // FIX: Handle negative amounts for Product Refunds (UI expects positive)
+              let allocVal = link.amount;
+              if (initialData.amount < 0 && !initialData.isReturn) {
+                  allocVal = Math.abs(allocVal);
+              }
+
               return {
                   id: link.id,
                   name: original ? original.expenseName : 'Unknown',
@@ -361,7 +369,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                   timestamp: getTxnTime(original),
                   fullAmount: full,
                   maxAllocatable: full, 
-                  allocated: (link.amount / 100).toFixed(2),
+                  allocated: (allocVal / 100).toFixed(2),
                   // Attempt to reconstruct relation type if editing
                   relationType: (original && original.payer !== 'me' && original.splits?.['me']) ? 'owed_by_me' : 'owed_to_me' 
               };
@@ -381,9 +389,15 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
   const eligibleParents = useMemo(() => {
     if (!isSettlement) {
+        // --- CHANGED: Calculate remaining refundable amount for Product Refunds ---
         return groupTransactions
             .filter(t => t.amount > 0 && !t.isReturn)
             .filter(t => !linkedTxns.some(l => l.id === t.id))
+            .map(t => {
+                const remaining = t.netAmount !== undefined ? t.netAmount : t.amount;
+                return { ...t, remainingRefundable: remaining };
+            })
+            .filter(t => t.remainingRefundable > 0) // Hide fully refunded
             .sort((a, b) => getTxnTime(b) - getTxnTime(a));
     }
     
@@ -419,12 +433,21 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     return [
         { value: '', label: '-- Select Expense to Link --' },
         ...eligibleParents.map(t => {
+            // --- CHANGED: Handle Product Refund Labels (Neutral) vs Settlement Labels (Debts) ---
+            if (!isSettlement) {
+                return {
+                    value: t.id,
+                    label: `${t.expenseName} (Refundable: ₹${(t.remainingRefundable / 100).toFixed(2)}) - ${getTxnDateStr(t)}`,
+                    className: 'text-gray-800 dark:text-gray-200',
+                    data: t
+                };
+            }
+
             const isOwedToMe = t.relationType === 'owed_to_me';
             const sign = isOwedToMe ? '+' : '-';
-            // Explicit Red/Green as requested
             const colorClass = isOwedToMe
-                ? 'text-green-600 dark:text-green-400 font-medium' // He owes me
-                : 'text-red-600 dark:text-red-400 font-medium';    // I owe him
+                ? 'text-green-600 dark:text-green-400 font-medium' 
+                : 'text-red-600 dark:text-red-400 font-medium';    
 
             const prefix = isOwedToMe
                 ? `[${getName(t.counterParty)} owes You] `
@@ -438,7 +461,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
             };
         }),
     ];
-  }, [eligibleParents, getName, getTxnDateStr]);
+  }, [eligibleParents, getName, getTxnDateStr, isSettlement]);
 
   const showIncludePayerCheckbox = payer !== 'me' && !selectedParticipants.includes(payer);
   
@@ -487,7 +510,12 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   };
 
   const handleAmountChange = (e) => {
-      setAmount(e.target.value);
+      const val = e.target.value;
+      setAmount(val);
+      // Auto-sync link allocation for single product refunds to support partial refunds (charges deducted)
+      if (isProductRefund && linkedTxns.length === 1) {
+          setLinkedTxns(prev => prev.map(t => ({ ...t, allocated: val })));
+      }
   };
 
   const addLinkedTxn = (e) => {
@@ -498,56 +526,111 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       const parent = selectedOption?.data;
 
       if (parent) {
-           if (isSettlement && payer === 'me' && selectedParticipants.length === 0) {
-                const inferred = parent.counterParty;
-                if (inferred && inferred !== 'me') setSelectedParticipants([inferred]);
-                if (!repaymentFilter) setRepaymentFilter(inferred);
-           }
-
-           const outstandingRupees = parent.outstanding / 100;
-           const isMyDebt = parent.relationType === 'owed_by_me'; 
+           // --- CHANGED: Explicit Logic Handling for Product Refund vs Settlement ---
            
            let allocValue = 0;
-           if (payer === 'me') {
-               // If I am paying, settling "My Debt" is standard (+)
-               // Settling "Their Debt" reduces my payment (-)
-               allocValue = isMyDebt ? outstandingRupees : -outstandingRupees;
+           let newLink = null;
+
+           if (!isSettlement) {
+               // --- PRODUCT REFUND LOGIC ---
+               // 1. Value defaults to remaining refundable (net)
+               allocValue = (parent.remainingRefundable || parent.amount) / 100;
+               setAmount(allocValue.toFixed(2));
+
+               // 2. Auto-fill Payer (Refund goes to original Payer)
+               if (parent.payer) setPayer(parent.payer);
+
+               // 3. Auto-populate Participants & Splits from Parent
+               const parentSplits = parent.splits || {};
+               const involvedIDs = Object.keys(parentSplits);
+               const newSelected = involvedIDs.filter(id => id !== 'me');
+               setSelectedParticipants(newSelected); // Everyone except Me (Me handled by includeMe)
+
+               // 4. Convert Splits to Percentage (To support partial refund scaling)
+               if (parent.splitMethod === 'equal') {
+                   setSplitMethod('equal');
+                   setSplits({});
+               } else {
+                   const totalParent = Math.abs(parent.amount);
+                   const newSplits = {};
+                   involvedIDs.forEach(id => {
+                       const share = parentSplits[id];
+                       const percent = (share / totalParent) * 100;
+                       newSplits[id] = percent; 
+                   });
+                   setSplitMethod('percentage');
+                   setSplits(newSplits);
+               }
+
+               // 5. Handle "Include Me" and "Include Payer"
+               setIncludeMe(involvedIDs.includes('me'));
+               if (parent.payer !== 'me') {
+                   setIncludePayer(involvedIDs.includes(parent.payer));
+               }
+
+               newLink = {
+                   id: parent.id, 
+                   name: parent.expenseName, 
+                   dateStr: getTxnDateStr(parent), 
+                   timestamp: getTxnTime(parent),
+                   fullAmount: Math.abs(parent.amount), 
+                   maxAllocatable: parent.remainingRefundable || parent.amount, 
+                   allocated: allocValue.toFixed(2), 
+                   relationType: 'product_refund' 
+               };
+               
+               // For product refund, we usually just link one item
+               setLinkedTxns([newLink]);
+               updateSmartName([newLink], refundSubType);
+
            } else {
-               // If They are paying, settling "My Debt" reduces their payment (-)
-               // Settling "Their Debt" is standard (+)
-               allocValue = isMyDebt ? -outstandingRupees : outstandingRupees;
+               // --- SETTLEMENT LOGIC (Existing) ---
+               if (payer === 'me' && selectedParticipants.length === 0) {
+                    const inferred = parent.counterParty;
+                    if (inferred && inferred !== 'me') setSelectedParticipants([inferred]);
+                    if (!repaymentFilter) setRepaymentFilter(inferred);
+               }
+
+               const outstandingRupees = parent.outstanding / 100;
+               const isMyDebt = parent.relationType === 'owed_by_me'; 
+               
+               if (payer === 'me') {
+                   allocValue = isMyDebt ? outstandingRupees : -outstandingRupees;
+               } else {
+                   allocValue = isMyDebt ? -outstandingRupees : outstandingRupees;
+               }
+
+               const currentTotal = parseFloat(amount) || 0;
+               let newTotal = currentTotal + allocValue;
+               
+               let shouldFlip = false;
+               if (newTotal < 0) {
+                   shouldFlip = true;
+                   newTotal = Math.abs(newTotal);
+               }
+
+               newLink = {
+                   id: parent.id, 
+                   name: parent.expenseName, 
+                   dateStr: getTxnDateStr(parent), 
+                   timestamp: getTxnTime(parent),
+                   fullAmount: Math.abs(parent.amount), 
+                   maxAllocatable: parent.outstanding, 
+                   allocated: allocValue.toFixed(2), 
+                   relationType: parent.relationType 
+               };
+
+               let updatedLinks = [...linkedTxns, newLink];
+
+               if (shouldFlip) {
+                   handleFlipDirection(newTotal, updatedLinks);
+               } else {
+                   setLinkedTxns(updatedLinks);
+                   setAmount(newTotal.toFixed(2));
+               }
+               
+               updateSmartName(updatedLinks, refundSubType);
            }
-
-           const currentTotal = parseFloat(amount) || 0;
-           let newTotal = currentTotal + allocValue;
-           
-           let shouldFlip = false;
-           if (newTotal < 0) {
-               shouldFlip = true;
-               newTotal = Math.abs(newTotal);
-           }
-
-           const newLink = {
-               id: parent.id, 
-               name: parent.expenseName, 
-               dateStr: getTxnDateStr(parent), 
-               timestamp: getTxnTime(parent),
-               fullAmount: Math.abs(parent.amount), 
-               maxAllocatable: parent.outstanding, 
-               allocated: allocValue.toFixed(2), 
-               relationType: parent.relationType 
-           };
-
-           let updatedLinks = [...linkedTxns, newLink];
-
-           if (shouldFlip) {
-               handleFlipDirection(newTotal, updatedLinks);
-           } else {
-               setLinkedTxns(updatedLinks);
-               setAmount(newTotal.toFixed(2));
-           }
-           
-           updateSmartName(updatedLinks, refundSubType);
       }
       setTempSelectId(''); // Clear the select immediately
   };
@@ -555,14 +638,14 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   const removeLinkedTxn = (id) => { 
       const updatedLinks = linkedTxns.filter(t => t.id !== id); 
       setLinkedTxns(updatedLinks); 
-      autoUpdateTotal(updatedLinks); 
+      if (isSettlement) autoUpdateTotal(updatedLinks); 
       updateSmartName(updatedLinks, refundSubType); 
   };
   
   const updateLinkedAllocation = (id, val) => { 
       const updatedLinks = linkedTxns.map(t => t.id === id ? { ...t, allocated: val } : t); 
       setLinkedTxns(updatedLinks); 
-      autoUpdateTotal(updatedLinks); 
+      if (isSettlement) autoUpdateTotal(updatedLinks); 
   };
   
   const handleSubTypeChange = (newType) => { setRefundSubType(newType); setLinkedTxns([]); setAmount(''); setName(''); };
@@ -676,15 +759,16 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
             setShowSuccess(true);
             setTimeout(() => {
                 setShowSuccess(false);
-                navigate(-1);
-            }, 1800);
+                navigate('/history');
+            }, 1200);
          } else {
             await addTransaction(txnData);
             setShowSuccess(true);
             setTimeout(() => {
                 setShowSuccess(false);
                 resetForm();
-            }, 1800);
+                navigate('/history');
+            }, 1200);
          }
        } catch(e) { console.error(e); showToast("Error saving: " + e.message, true); }
   };
@@ -700,6 +784,10 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
             if (allocatedPaise > link.fullAmount) { showToast(`Refund for "${link.name}" cannot exceed original amount (${formatCurrency(link.fullAmount)}).`, true); return; }
         }
     }
+    // Only check allocation exact match for settlements or if strict matching is desired for refunds
+    // For product refunds, we just want to ensure we don't refund MORE than the original. 
+    // Partial refunds are allowed, but the allocation should probably sum to the refund amount if multiple items are selected?
+    // Current logic: If 1 item linked, they must match.
     if ((isProductRefund || isSettlement) && linkedTxns.length > 0 && !isAllocationValid) { showToast(`Allocated total does not match transaction amount. Difference: ${formatCurrency(allocationDiff * 100)}`, true); return; }
 
     if (!isEditMode) {
@@ -808,7 +896,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       <div className="col-span-1 md:col-span-1 lg:col-span-2">
          {!isIncome && (
             <SearchableSelect 
-                label={isSettlement ? "Who is paying?" : "Who paid?"} 
+                label={isSettlement ? "Who is paying?" : (isProductRefund ? "Who received the refund?" : "Who paid?")} 
                 value={payer} 
                 onChange={e => handlePayerChange(e.target.value)} 
                 options={payerOptions} 
@@ -862,21 +950,32 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                     <div className="mt-3 space-y-2">
                         {linkedTxns.map((link) => {
                             // Determine Color Class based on relationType stored
-                            const isOwedToMe = link.relationType === 'owed_to_me';
-                            // Name color logic
-                            const nameColor = isOwedToMe ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
-                            
-                            // Allocation box color logic (visual only)
-                            const isAllocNegative = parseFloat(link.allocated) < 0;
-                            const boxBorder = isAllocNegative ? 'border-green-300' : 'border-red-300';
-                            const boxText = isAllocNegative ? 'text-green-600' : 'text-red-600';
+                            let nameColor = 'text-gray-800 dark:text-gray-200';
+                            let boxBorder = 'border-gray-300';
+                            let boxText = 'text-gray-800';
+                            let bgColor = 'bg-white dark:bg-gray-800';
+
+                            if (link.relationType !== 'product_refund') {
+                                const isOwedToMe = link.relationType === 'owed_to_me';
+                                nameColor = isOwedToMe ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
+                                const isAllocNegative = parseFloat(link.allocated) < 0;
+                                boxBorder = isAllocNegative ? 'border-green-300' : 'border-red-300';
+                                boxText = isAllocNegative ? 'text-green-600' : 'text-red-600';
+                                bgColor = isOwedToMe ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800';
+                            } else {
+                                // Product Refund Styling
+                                nameColor = 'text-blue-700 dark:text-blue-300';
+                                bgColor = 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800';
+                                boxBorder = 'border-blue-300';
+                                boxText = 'text-blue-700';
+                            }
 
                             return (
-                                <div key={link.id} className={`flex items-center gap-2 p-2 rounded border ${isOwedToMe ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'}`}>
+                                <div key={link.id} className={`flex items-center gap-2 p-2 rounded border ${bgColor}`}>
                                     <span className={`text-sm flex-1 truncate font-medium ${nameColor}`} title={link.name}>
                                         {link.name} <span className="text-xs opacity-75 text-gray-500 dark:text-gray-400">({formatCurrency(link.maxAllocatable)})</span>
                                     </span>
-                                    <span className={`text-sm text-gray-500`}>{isAllocNegative ? 'Offset: ' : 'Pay: '}₹</span>
+                                    <span className={`text-sm text-gray-500`}>{parseFloat(link.allocated) < 0 ? 'Offset: ' : 'Ref: '}₹</span>
                                     <input type="number" value={link.allocated} onChange={(e) => updateLinkedAllocation(link.id, e.target.value)} className={`w-24 px-1 py-1 text-sm border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600 ${boxText} ${boxBorder}`} step="0.01" />
                                     <button type="button" onClick={() => removeLinkedTxn(link.id)} className="text-gray-400 hover:text-red-500 p-1 rounded"><Trash2 size={14} /></button>
                                 </div>

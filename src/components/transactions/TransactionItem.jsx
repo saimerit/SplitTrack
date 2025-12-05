@@ -39,10 +39,10 @@ const getCategoryIcon = (category) => {
   // 4. Standard Categories
   if (cat.includes('food') || cat.includes('dinner') || cat.includes('lunch') || cat.includes('breakfast') || cat.includes('snack')) return <Utensils size={20} className="text-orange-500" />;
   if (cat.includes('grocer') || cat.includes('mart') || cat.includes('store')) return <ShoppingCart size={20} className="text-green-500" />;
-  if (cat.includes('travel') || cat.includes('transport') || cat.includes('fuel') || cat.includes('uber') || cat.includes('ola') || cat.includes('cab') || cat.includes('bus') || cat.includes('train')) return <Car size={20} className="text-blue-500" />;
+  if (cat.includes('transport') || cat.includes('fuel') || cat.includes('uber') || cat.includes('ola') || cat.includes('cab') || cat.includes('bus') || cat.includes('train')) return <Car size={20} className="text-blue-500" />;
   if (cat.includes('bill') || cat.includes('rent') || cat.includes('utilities') || cat.includes('recharge') || cat.includes('wifi')) return <Zap size={20} className="text-yellow-500" />;
   if (cat.includes('shopping') || cat.includes('clothes') || cat.includes('accessories') || cat.includes('electronics') || cat.includes('phone')) return <Smartphone size={20} className="text-purple-500" />;
-  if (cat.includes('trip') || cat.includes('flight') || cat.includes('hotel') || cat.includes('vacation')) return <Plane size={20} className="text-sky-500" />;
+  if (cat.includes('travel') || cat.includes('trip') || cat.includes('flight') || cat.includes('hotel') || cat.includes('vacation')) return <Plane size={20} className="text-sky-500" />;
   
   return <div className="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700" />; // Default placeholder
 };

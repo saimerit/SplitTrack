@@ -1,29 +1,82 @@
-// src/pages/History.jsx
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, Search } from 'lucide-react';
+import { Download, Search, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
-import { deleteTransaction } from '../services/transactionService';
+import { deleteTransaction, fetchPaginatedTransactions } from '../services/transactionService';
 import { exportToCSV } from '../services/exportImportService';
 import Button from '../components/common/Button';
 import Select from '../components/common/Select';
 import Input from '../components/common/Input';
 import TransactionItem from '../components/transactions/TransactionItem';
 import SearchPalette from '../components/common/SearchPalette';
-import ConfirmModal from '../components/modals/ConfirmModal'; // Added Import
+import ConfirmModal from '../components/modals/ConfirmModal';
 
 const History = () => {
   const navigate = useNavigate();
-  const { transactions, participantsLookup, tags, showToast } = useAppStore();
+  // Only pull aux data from store now
+  const { participantsLookup, tags, showToast } = useAppStore();
   
+  // --- Local State for Pagination & Data ---
+  const [localTransactions, setLocalTransactions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  
+  // Pagination State
+  const [pageSize, setPageSize] = useState(20);
+  const [pageStack, setPageStack] = useState([]); // Stack of 'lastDoc' cursors
+  const [currentLastDoc, setCurrentLastDoc] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  
+  // Filters
   const [filterTag, setFilterTag] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   
-  // Modal State
-  const [deleteData, setDeleteData] = useState(null); // { id, parentId }
+  // UI State
+  const [showSearch, setShowSearch] = useState(false);
+  const [deleteData, setDeleteData] = useState(null);
 
+  // --- Fetch Logic ---
+  const loadTransactions = async (reset = false) => {
+    setLoading(true);
+    try {
+      // Determine cursor: If reset, null. Else use currentLastDoc (which is the end of the current page)
+      // Logic fix: currentLastDoc is the cursor FOR THE NEXT PAGE.
+      // If resetting, cursor is null.
+      // If Next Page, cursor is currentLastDoc.
+      const cursor = reset ? null : currentLastDoc;
+      
+      const result = await fetchPaginatedTransactions(
+        Number(pageSize), 
+        cursor, 
+        { tag: filterTag, date: filterDate, month: filterMonth }
+      );
+
+      if (reset) {
+        setLocalTransactions(result.data);
+        setPageStack([]); 
+      } else {
+        setLocalTransactions(result.data);
+      }
+
+      setCurrentLastDoc(result.lastDoc);
+      setHasMore(result.hasMore);
+    } catch (error) {
+      console.error(error);
+      showToast("Error loading history", true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- Effects ---
+  
+  // 1. Initial Load & Refetch on Filter Change
+  useEffect(() => {
+    loadTransactions(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageSize, filterTag, filterDate, filterMonth]);
+
+  // 2. Keyboard shortcut for Search
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -35,41 +88,56 @@ const History = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter(t => {
-      if (filterTag && t.tag !== filterTag) return false;
+  // --- Handlers ---
 
-      let dObj;
-      try {
-        if (!t.timestamp) return false;
-        dObj = t.timestamp.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
-      } catch {
-        return false;
-      }
-      if (isNaN(dObj.getTime())) return false;
+  const handleNextPage = () => {
+    if (!currentLastDoc) return;
+    // Save current cursor to stack so we can go back to it
+    setPageStack(prev => [...prev, currentLastDoc]);
+    loadTransactions(false);
+  };
 
-      if (filterDate) {
-        const dStr = dObj.toISOString().split('T')[0];
-        if (dStr !== filterDate) return false;
-      } 
-      else if (filterMonth) {
-        const m = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}`;
-        if (m !== filterMonth) return false;
-      }
-      return true;
-    });
-  }, [transactions, filterTag, filterDate, filterMonth]);
+  const handlePrevPage = async () => {
+    if (pageStack.length === 0) return;
+    
+    // We need to fetch the page BEFORE the current one.
+    // The stack holds cursors for [Page2Start, Page3Start...].
+    // To go back, we pop the current PageStart, and use the one before it.
+    
+    const newStack = [...pageStack];
+    newStack.pop(); // Remove the cursor that got us to the *current* page
+    
+    // The cursor for the *previous* page is now the last one in the stack. 
+    // If empty, it means Page 1 (null cursor).
+    const prevCursor = newStack.length > 0 ? newStack[newStack.length - 1] : null; 
+    
+    setPageStack(newStack);
+    
+    // Manual Fetch with explicit cursor
+    setLoading(true);
+    try {
+      const result = await fetchPaginatedTransactions(
+        Number(pageSize), 
+        prevCursor,
+        { tag: filterTag, date: filterDate, month: filterMonth }
+      );
+      setLocalTransactions(result.data);
+      setCurrentLastDoc(result.lastDoc);
+      setHasMore(result.hasMore);
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const requestDelete = (id, parentId) => {
-    const hasChildren = transactions.some(t => 
-      t.parentTransactionId === id || 
-      (t.parentTransactionIds && t.parentTransactionIds.includes(id))
+    // Check local transactions for children
+    const hasChildren = localTransactions.some(t => 
+      t.parentTransactionId === id || (t.parentTransactionIds && t.parentTransactionIds.includes(id))
     );
-
     if (hasChildren) {
-      // Use Toast or AlertModal for this warning if preferred, but for now alert is replaced
-      // Since ConfirmModal is present, we can reuse it or just showToast error
-      showToast("Cannot delete: Has linked refunds/repayments.", true);
+      showToast("Cannot delete: Has linked refunds/repayments visible on this page.", true);
       return;
     }
     setDeleteData({ id, parentId });
@@ -79,6 +147,8 @@ const History = () => {
     if (!deleteData) return;
     try {
       await deleteTransaction(deleteData.id, deleteData.parentId);
+      // Remove locally to update UI instantly
+      setLocalTransactions(prev => prev.filter(t => t.id !== deleteData.id));
       showToast("Transaction deleted.");
     } catch (error) {
       console.error(error);
@@ -87,12 +157,10 @@ const History = () => {
     setDeleteData(null);
   };
 
-  const handleEdit = (txn) => {
-    navigate('/add', { state: { ...txn, isEditMode: true } });
-  };
+  const handleEdit = (txn) => navigate('/add', { state: { ...txn, isEditMode: true } });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">History</h2>
         
@@ -101,42 +169,62 @@ const History = () => {
                 onClick={() => setShowSearch(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:border-sky-500 transition-colors"
             >
-                <Search size={16} /> 
-                <span>Search</span>
+                <Search size={16} /> <span>Search</span>
                 <span className="hidden sm:inline-block bg-gray-100 dark:bg-gray-700 px-1.5 rounded text-xs border border-gray-200 dark:border-gray-600">⌘K</span>
             </button>
-
-            <Button onClick={() => exportToCSV(transactions, participantsLookup)} className="flex items-center gap-2 bg-green-600 hover:bg-green-700">
-                <Download size={16} /> Export CSV
+            <Button onClick={() => exportToCSV(localTransactions, participantsLookup)} className="flex items-center gap-2 bg-green-600 hover:bg-green-700">
+                <Download size={16} /> Export View
             </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700">
-        <Select label="Filter by Tag" value={filterTag} onChange={e => setFilterTag(e.target.value)} options={[{ value: '', label: 'All Tags' }, ...tags.map(t => ({ value: t.name, label: t.name }))]} />
-        <Input label="Filter by Date" type="date" value={filterDate} onChange={e => { setFilterDate(e.target.value); setFilterMonth(''); }} />
-        <Input label="Filter by Month" type="month" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setFilterDate(''); }} />
-        <div className="flex items-end">
-          <Button 
-            variant="secondary" 
-            onClick={() => { setFilterTag(''); setFilterDate(''); setFilterMonth(''); }} 
-            className="w-auto px-6 py-2 text-sm" 
-          >
-            Clear
-          </Button>
+      {/* --- Filter Bar with Pagination Control --- */}
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Select label="Filter by Tag" value={filterTag} onChange={e => setFilterTag(e.target.value)} options={[{ value: '', label: 'All Tags' }, ...tags.map(t => ({ value: t.name, label: t.name }))]} />
+            <Input label="Filter by Date" type="date" value={filterDate} onChange={e => { setFilterDate(e.target.value); setFilterMonth(''); }} />
+            <Input label="Filter by Month" type="month" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setFilterDate(''); }} />
+            
+            {/* Rows Per Page Dropdown */}
+            <Select 
+                label="Rows per page" 
+                value={pageSize} 
+                onChange={(e) => setPageSize(Number(e.target.value))} 
+                options={[
+                    { value: 10, label: '10 Rows' },
+                    { value: 20, label: '20 Rows' },
+                    { value: 50, label: '50 Rows' },
+                    { value: 100, label: '100 Rows' }
+                ]} 
+            />
+        </div>
+        <div className="flex justify-end">
+             <Button 
+                variant="secondary" 
+                onClick={() => { setFilterTag(''); setFilterDate(''); setFilterMonth(''); }} 
+                className="text-xs px-4" 
+             >
+                Clear Filters
+             </Button>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 overflow-hidden">
-        {filteredTransactions.length === 0 ? (
+      {/* --- Transaction List --- */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 overflow-hidden min-h-[300px] relative">
+        {loading && (
+            <div className="absolute inset-0 bg-white/50 dark:bg-gray-800/50 flex items-center justify-center z-10 backdrop-blur-sm">
+                <Loader2 className="animate-spin text-sky-600" size={32} />
+            </div>
+        )}
+
+        {localTransactions.length === 0 && !loading ? (
           <div className="p-8 text-center text-gray-500">No transactions found.</div>
         ) : (
-          filteredTransactions.map(txn => {
-            const linkedRefunds = transactions.filter(t => {
-                if (t.parentTransactionId === txn.id) return true;
-                if (t.parentTransactionIds && t.parentTransactionIds.includes(txn.id)) return true;
-                return false;
-            });
+          localTransactions.map(txn => {
+            // Note: Linked refunds might be on other pages, so we only show what's loaded.
+            const linkedRefunds = localTransactions.filter(t => 
+                t.parentTransactionId === txn.id || (t.parentTransactionIds && t.parentTransactionIds.includes(txn.id))
+            );
 
             return (
                 <TransactionItem 
@@ -145,11 +233,37 @@ const History = () => {
                   linkedRefunds={linkedRefunds}
                   participantsLookup={participantsLookup}
                   onEdit={() => handleEdit(txn)}
-                  onDelete={requestDelete} // Passed the new handler
+                  onDelete={requestDelete} 
                 />
             );
           })
         )}
+      </div>
+
+      {/* --- Pagination Controls --- */}
+      <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700">
+          <Button 
+            variant="secondary" 
+            onClick={handlePrevPage} 
+            disabled={pageStack.length === 0 || loading}
+            className="flex items-center gap-2"
+          >
+            <ChevronLeft size={16} /> Previous
+          </Button>
+          
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+             {/* Show "Page 1" if stack empty, else stack length + 1 */}
+             Page {pageStack.length + 1}
+          </span>
+
+          <Button 
+            variant="secondary" 
+            onClick={handleNextPage} 
+            disabled={!hasMore || loading}
+            className="flex items-center gap-2"
+          >
+            Next <ChevronRight size={16} />
+          </Button>
       </div>
 
       {showSearch && <SearchPalette onClose={() => setShowSearch(false)} />}
@@ -157,7 +271,7 @@ const History = () => {
       <ConfirmModal 
         isOpen={!!deleteData}
         title="Delete Transaction?"
-        message="Are you sure you want to delete this transaction? This action cannot be undone."
+        message="Are you sure you want to delete this transaction?"
         onConfirm={confirmDelete}
         onCancel={() => setDeleteData(null)}
         confirmText="Delete"

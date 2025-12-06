@@ -1,6 +1,7 @@
 import { 
   addDoc, updateDoc, deleteDoc as firestoreDeleteDoc, doc, 
-  collection, getDocs, query, where, getDoc, runTransaction, Timestamp, writeBatch 
+  collection, getDocs, query, where, getDoc, runTransaction, Timestamp, writeBatch,
+  limit, startAfter, orderBy // Added imports for pagination
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -8,7 +9,6 @@ const LEDGER_ID = 'main-ledger';
 const COLLECTION_PATH = `ledgers/${LEDGER_ID}/transactions`;
 
 // Helper: Recalculate parent stats
-// Updated to handle cases where parent/child might temporarily have different groups (integrity safe)
 const updateParentStats = async (parentId) => {
   if (!parentId) return;
   
@@ -30,7 +30,7 @@ const updateParentStats = async (parentId) => {
     let lastRefundDate = null;
     
     children.forEach((data) => {
-      // Skip Repayments for Net Cost calculation (they are settlements, not cost reduction)
+      // Skip Repayments for Net Cost calculation
       if (data.isReturn) return;
 
       let allocatedAmount = 0;
@@ -113,8 +113,6 @@ export const deleteTransaction = async (id, parentId) => {
       const txnDoc = await transaction.get(txnRef);
       if (!txnDoc.exists()) throw new Error("Document does not exist!");
 
-      // Fix 3: Atomic check for dependencies
-      // We query for ACTIVE children (not deleted ones)
       const colRef = collection(db, COLLECTION_PATH);
       const qChild = query(
           colRef, 
@@ -133,7 +131,6 @@ export const deleteTransaction = async (id, parentId) => {
         throw new Error("Cannot delete: Active linked refunds/repayments exist.");
       }
 
-      // Feature 8: Soft Delete
       transaction.update(txnRef, { 
           isDeleted: true,
           deletedAt: Timestamp.now()
@@ -149,36 +146,84 @@ export const deleteTransaction = async (id, parentId) => {
   }
 };
 
-// Feature 8: Restore Functionality
 export const restoreTransaction = async (id) => {
     const txnRef = doc(db, COLLECTION_PATH, id);
     await updateDoc(txnRef, { isDeleted: false, deletedAt: null });
-    // Recalculating parent stats might be needed here if amounts are involved
 };
 
-// Feature 8: Hard Delete (Permanent)
 export const permanentDeleteTransaction = async (id) => {
     await firestoreDeleteDoc(doc(db, COLLECTION_PATH, id));
 };
 
-// Feature 9: Group Move
 export const moveTransactionToGroup = async (id, newGroupId) => {
     const txnRef = doc(db, COLLECTION_PATH, id);
     const colRef = collection(db, COLLECTION_PATH);
-    
-    // Find all children linked to this transaction
     const qChildren = query(colRef, where("parentTransactionId", "==", id));
     const snap = await getDocs(qChildren);
-    
     const batch = writeBatch(db);
     
-    // Move parent
     batch.update(txnRef, { groupId: newGroupId });
-    
-    // Move all children
     snap.forEach(childDoc => {
         batch.update(childDoc.ref, { groupId: newGroupId });
     });
     
     await batch.commit();
+};
+
+// --- NEW PAGINATION FEATURE ---
+export const fetchPaginatedTransactions = async (pageSize, lastDoc = null, filters = {}) => {
+  try {
+    const colRef = collection(db, COLLECTION_PATH);
+    
+    // 1. Base Query: Filter soft-deleted items AND sort by time
+    // NOTE: This specific line REQUIRES the Index mentioned above.
+    let q = query(colRef, where("isDeleted", "==", false), orderBy('timestamp', 'desc'));
+
+    // 2. Apply Filters
+    if (filters.tag) {
+      q = query(q, where('tag', '==', filters.tag));
+    }
+
+    if (filters.date) {
+      const start = new Date(filters.date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(filters.date);
+      end.setHours(23, 59, 59, 999);
+      
+      // FIX: Use .getTime() because you store dates as Numbers (milliseconds)
+      q = query(q, 
+        where('timestamp', '>=', start.getTime()), 
+        where('timestamp', '<=', end.getTime())
+      );
+    } else if (filters.month) {
+      const [year, month] = filters.month.split('-');
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 0, 23, 59, 59);
+      
+      // FIX: Use .getTime() here too
+      q = query(q, 
+        where('timestamp', '>=', start.getTime()), 
+        where('timestamp', '<=', end.getTime())
+      );
+    }
+
+    // 3. Apply Pagination
+    if (lastDoc) {
+      q = query(q, startAfter(lastDoc));
+    }
+    
+    q = query(q, limit(pageSize));
+
+    const snapshot = await getDocs(q);
+    
+    return {
+      data: snapshot.docs.map(d => ({ id: d.id, ...d.data() })),
+      lastDoc: snapshot.docs[snapshot.docs.length - 1],
+      hasMore: snapshot.docs.length === pageSize
+    };
+  } catch (error) {
+    console.error("Pagination Error:", error);
+    // If you see the index error, throwing it ensures the UI knows something went wrong
+    throw error;
+  }
 };

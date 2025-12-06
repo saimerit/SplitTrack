@@ -7,7 +7,8 @@ const AddTransaction = () => {
   const isEditMode = initialData?.isEditMode || false;
 
   // Use 'key' to force re-mount when switching between Add/Edit or different transactions
-  const formKey = initialData ? initialData.id : 'new-transaction';
+  // Added location.key to ensure form resets even when navigating to the same route
+  const formKey = (initialData ? initialData.id : 'new-transaction') + (location.key || '');
 
   return (
     <div className="max-w-7xl mx-auto px-4">

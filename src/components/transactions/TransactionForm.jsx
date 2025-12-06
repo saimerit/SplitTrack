@@ -110,7 +110,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
   const navigate = useNavigate();
   
   const {
-      formGroupId, setFormGroupId, type, setType, setRefundSubType, name, setName, amount,
+      formGroupId, setFormGroupId, type,  name, setName, amount, // Removed setType and setRefundSubType
       date, setDate, category, place, tag, mode, description, setDescription,
       payer, selectedParticipants, linkedTxns, tempSelectId,
       repaymentFilter, setRepaymentFilter, splitMethod, setSplitMethod, splits, setSplits, includeMe, setIncludeMe,
@@ -122,7 +122,8 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       handleQuickAddRequest, handlePromptConfirm, handleTemplateSaveRequest, handleSubmit, forceSubmit,
       applySuggestion, handleManualSwap, handleLinkSelect, removeLinkedTxn, updateLinkedAllocation, handleAmountChange,
       getTxnDateStr, getName, splitAllocatorParticipants, validation, eligibleParents,
-      totalAllocated, allocationDiff, setLinkedTxns, isAllocationValid
+      totalAllocated, allocationDiff, setLinkedTxns, isAllocationValid, 
+      resetForm, handleTypeChange, handleRefundSubTypeChange 
   } = useTransactionFormLogic(initialData, isEditMode);
 
   // --- MEMOIZED OPTIONS (UI) ---
@@ -193,7 +194,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         <div className="flex flex-col sm:flex-row gap-4">
           {['expense', 'income', 'refund'].map(t => (
             <label key={t} className="flex-1 cursor-pointer group">
-              <input type="radio" name="txnType" value={t} checked={type === t} onChange={() => setType(t)} className="peer sr-only" />
+              <input type="radio" name="txnType" value={t} checked={type === t} onChange={() => handleTypeChange(t)} className="peer sr-only" />
               <div className={`text-center py-3 rounded-lg border transition-all font-medium capitalize ${type === t ? 'bg-sky-50 border-sky-500 text-sky-700 dark:bg-sky-900 dark:border-sky-500 dark:text-sky-300' : 'border-gray-300 dark:border-gray-600 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
                 {t === 'expense' ? 'Expense (Out)' : t === 'income' ? 'Income (In)' : 'Refund / Repayment'}
               </div>
@@ -205,10 +206,10 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       {isRefundTab && (
           <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="flex gap-4">
-                  <button type="button" onClick={() => setRefundSubType('product')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm border ${!isSettlement ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
+                  <button type="button" onClick={() => handleRefundSubTypeChange('product')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm border ${!isSettlement ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
                       <RefreshCw size={16} /> Product Refund
                   </button>
-                  <button type="button" onClick={() => setRefundSubType('settlement')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm border ${isSettlement ? 'bg-purple-100 border-purple-500 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
+                  <button type="button" onClick={() => handleRefundSubTypeChange('settlement')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm border ${isSettlement ? 'bg-purple-100 border-purple-500 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
                       <HandCoins size={16} /> Peer Settlement
                   </button>
               </div>
@@ -339,6 +340,9 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
       )}
 
       <div className="col-span-full flex gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+         <Button type="button" variant="ghost" onClick={resetForm} className="px-3" title="Reset Form">
+            <RefreshCw size={20} />
+         </Button>
          {!isEditMode && <Button type="button" variant="secondary" onClick={handleTemplateSaveRequest} className="flex-1 py-3">Save as Template</Button>}
          <Button type="button" variant="secondary" onClick={() => navigate(-1)} className="flex-1 py-3">Cancel</Button>
          <Button type="submit" className="flex-1 sm:grow-2 py-3 text-lg">{isEditMode ? 'Update' : 'Log'}</Button>

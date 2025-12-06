@@ -228,6 +228,96 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
     // --- ACTIONS ---
 
+    // FEATURE: Reset Form
+    const resetForm = useCallback(() => {
+        const source = isEditMode ? initialData : {};
+        const defaults = userSettings || {};
+
+        setFormGroupId(source.groupId || activeGroupId || 'personal');
+        
+        let newType = 'expense';
+        if (source.isReturn) newType = 'refund';
+        else if (source.amount < 0) newType = 'refund';
+        else if (source.type) newType = source.type;
+        setType(newType);
+
+        setRefundSubType(source.isReturn ? 'settlement' : 'product');
+        setName(source.expenseName || '');
+        setAmount(source.amount ? (Math.abs(source.amount)/100).toFixed(2) : '');
+        
+        let newDate = new Date().toISOString().split('T')[0];
+        try {
+            if (source.timestamp) {
+                let d;
+                if (typeof source.timestamp.toDate === 'function') d = source.timestamp.toDate();
+                else if (source.timestamp.seconds) d = new Date(source.timestamp.seconds * 1000);
+                else d = new Date(source.timestamp);
+                if (!isNaN(d.getTime())) newDate = d.toISOString().split('T')[0];
+            }
+        } catch {
+            // Ignore
+        }
+        setDate(newDate);
+
+        setCategory(source.category || defaults.defaultCategory || '');
+        setPlace(source.place || defaults.defaultPlace || '');
+        setTag(source.tag || defaults.defaultTag || '');
+        setMode(source.modeOfPayment || defaults.defaultMode || '');
+        setDescription(source.description || '');
+        setPayer(source.payer || 'me');
+        setSelectedParticipants(source.participants || []);
+        
+        setLinkedTxns([]);
+        if (isEditMode) hasInitializedLinks.current = false;
+
+        setTempSelectId('');
+        setRepaymentFilter('');
+        setSplitMethod(source.splitMethod || 'equal');
+        setSplits(source.splits || {});
+        setIncludeMe(source.splits ? (source.splits['me'] !== undefined) : true);
+        setIncludePayer(false);
+        
+        setShowDupeModal(false);
+        setDupeTxn(null);
+        setSuggestion(null);
+        showToast("Form reset!", false);
+    }, [initialData, isEditMode, activeGroupId, userSettings, showToast]);
+
+    // FEATURE: Handle Type Change (Clears relevant fields)
+    const handleTypeChange = (newType) => {
+        setType(newType);
+        
+        // Clear fields irrelevant to new type
+        setName('');
+        setAmount('');
+        setDescription('');
+        setSplits({});
+        setLinkedTxns([]);
+        setSelectedParticipants([]);
+        
+        // Reset Meta fields to defaults
+        setCategory(userSettings.defaultCategory || '');
+        setPlace(userSettings.defaultPlace || '');
+        setTag(userSettings.defaultTag || '');
+        setMode(userSettings.defaultMode || '');
+        
+        if (newType === 'income') {
+            setPayer('me');
+        }
+    };
+
+    // FEATURE: Handle Refund SubType Change (Product vs Settlement)
+    const handleRefundSubTypeChange = (newSub) => {
+        setRefundSubType(newSub);
+        
+        // Clear data that might conflict
+        setName('');
+        setAmount('');
+        setLinkedTxns([]);
+        setSelectedParticipants([]);
+        setSplits({});
+    };
+
     const handlePayerChange = (newPayer) => {
         setPayer(newPayer);
         if (isSettlement && selectedParticipants[0] === newPayer) setSelectedParticipants([]);
@@ -568,6 +658,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         handlePayerChange, handleRecipientChange, handleParticipantAdd, handleParticipantRemove, handleQuickAddRequest,
         handlePromptConfirm, handleTemplateSaveRequest, handleSubmit, forceSubmit, applySuggestion, handleManualSwap,
         handleLinkSelect, removeLinkedTxn, updateLinkedAllocation, handleAmountChange, getTxnDateStr, getName,
+        resetForm, handleTypeChange, handleRefundSubTypeChange, // NEW EXPORTS
         totalAllocated: linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0),
         allocationDiff: (parseFloat(amount) || 0) - linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0),
         isAllocationValid: Math.abs((parseFloat(amount) || 0) - linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0)) < 0.05

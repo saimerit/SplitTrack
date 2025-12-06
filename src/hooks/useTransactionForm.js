@@ -1,0 +1,575 @@
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Fuse from 'fuse.js';
+import { Timestamp, addDoc, collection } from 'firebase/firestore'; 
+import { db } from '../config/firebase';
+import { addTransaction, updateTransaction } from '../services/transactionService';
+import { validateSplits } from '../utils/validators';
+import useAppStore from '../store/useAppStore';
+
+const getTxnTime = (txn) => {
+    if (!txn?.timestamp) return 0;
+    return txn.timestamp.toMillis ? txn.timestamp.toMillis() : new Date(txn.timestamp).getTime();
+};
+
+const getTxnDateStr = (txn) => {
+    if (!txn?.timestamp) return '';
+    const d = txn.timestamp.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+};
+
+// Helper for Smart Name generation
+const generateSmartNameHelper = (links, subTypeStr) => {
+    if (!links || links.length === 0) return "";
+    const prefix = (subTypeStr === 'settlement') ? "Settlement" : "Refund";
+    return `${prefix}: ` + links.map(t => t.name).join(', ');
+};
+
+export const useTransactionFormLogic = (initialData, isEditMode) => {
+    const navigate = useNavigate();
+    const { 
+        categories, places, tags, modesOfPayment, 
+        rawParticipants, rawTransactions, groups, 
+        userSettings, showToast, activeGroupId 
+    } = useAppStore();
+
+    const wasMeIncluded = initialData?.splits ? (initialData.splits['me'] !== undefined) : true;
+
+    // --- STATE ---
+    const [formGroupId, setFormGroupId] = useState(initialData?.groupId || activeGroupId || 'personal');
+    const [type, setType] = useState(() => {
+        if (initialData?.isReturn) return 'refund';
+        if (initialData && initialData.amount < 0) return 'refund';
+        return initialData?.type || 'expense';
+    });
+    
+    const [refundSubType, setRefundSubType] = useState(() => initialData?.isReturn ? 'settlement' : 'product');
+    const [name, setName] = useState(initialData?.expenseName || '');
+    const [amount, setAmount] = useState(initialData ? (Math.abs(initialData.amount)/100).toFixed(2) : '');
+    
+    const [date, setDate] = useState(() => {
+        try {
+            if (initialData?.timestamp) {
+                let d;
+                if (typeof initialData.timestamp.toDate === 'function') d = initialData.timestamp.toDate();
+                else if (initialData.timestamp.seconds) d = new Date(initialData.timestamp.seconds * 1000);
+                else d = new Date(initialData.timestamp);
+                if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+            }
+        } catch (e) { console.warn("Date parsing error:", e); }
+        return new Date().toISOString().split('T')[0];
+    });
+
+    const [category, setCategory] = useState(initialData?.category || userSettings.defaultCategory || '');
+    const [place, setPlace] = useState(initialData?.place || userSettings.defaultPlace || '');
+    const [tag, setTag] = useState(initialData?.tag || userSettings.defaultTag || '');
+    const [mode, setMode] = useState(initialData?.modeOfPayment || userSettings.defaultMode || '');
+    const [description, setDescription] = useState(initialData?.description || '');
+    const [payer, setPayer] = useState(initialData?.payer || 'me');
+    const [selectedParticipants, setSelectedParticipants] = useState(initialData?.participants || []);
+    
+    const [linkedTxns, setLinkedTxns] = useState([]); 
+    const [tempSelectId, setTempSelectId] = useState(''); 
+    const [repaymentFilter, setRepaymentFilter] = useState(''); 
+    const [splitMethod, setSplitMethod] = useState(initialData?.splitMethod || 'equal');
+    const [splits, setSplits] = useState(initialData?.splits || {}); 
+    const [includeMe, setIncludeMe] = useState(wasMeIncluded);
+    const [includePayer, setIncludePayer] = useState(false);
+    
+    // UI Triggers
+    const [showDupeModal, setShowDupeModal] = useState(false);
+    const [dupeTxn, setDupeTxn] = useState(null);
+    const [activePrompt, setActivePrompt] = useState(null); 
+    const [suggestion, setSuggestion] = useState(null);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const hasInitializedLinks = useRef(false);
+
+    // --- COMPUTED ---
+    const allParticipants = useMemo(() => [...rawParticipants], [rawParticipants]);
+    const groupTransactions = useMemo(() => {
+        return rawTransactions.filter(t => (t.groupId || 'personal') === formGroupId && !t.isDeleted);
+    }, [rawTransactions, formGroupId]);
+
+    const participantsLookup = useMemo(() => {
+        const map = new Map();
+        map.set('me', { name: 'You (me)', uniqueId: 'me' });
+        allParticipants.forEach(p => map.set(p.uniqueId, p));
+        return map;
+    }, [allParticipants]);
+
+    const isRefundTab = type === 'refund';
+    const isSettlement = isRefundTab && refundSubType === 'settlement'; 
+    const isProductRefund = isRefundTab && refundSubType === 'product'; 
+    const isIncome = type === 'income';
+
+    const getName = useCallback((uid) => {
+        if (uid === 'me') return 'You';
+        return participantsLookup.get(uid)?.name || uid;
+    }, [participantsLookup]);
+
+    // --- INTERNAL HELPERS ---
+    
+    const updateSmartName = (links, subTypeStr) => {
+        const smartName = generateSmartNameHelper(links, subTypeStr);
+        if (!smartName) return;
+        if (!name || name.startsWith("Refund:") || name.startsWith("Settlement:") || name.startsWith("Repayment:")) {
+            setName(smartName);
+        }
+    };
+
+    const getOutstandingDebt = useCallback((parentTxn, debtorId) => {
+        let debt = parentTxn.splits?.[debtorId] || 0;
+        const related = groupTransactions.filter(t => {
+            if (isEditMode && t.id === initialData?.id) return false;
+            if (t.parentTransactionId === parentTxn.id) return true;
+            if (t.parentTransactionIds && t.parentTransactionIds.includes(parentTxn.id)) return true;
+            return false;
+        });
+        related.forEach(rel => {
+            if (rel.isReturn) {
+                const link = rel.linkedTransactions?.find(l => l.id === parentTxn.id);
+                if (link) {
+                    if (rel.payer === debtorId) debt -= Math.abs(link.amount);
+                    else if (rel.payer !== debtorId && link.amount < 0) debt -= Math.abs(link.amount);
+                } else if (rel.payer === debtorId && (!rel.linkedTransactions || rel.linkedTransactions.length === 0)) {
+                    debt -= Math.abs(rel.amount);
+                }
+            } else if (rel.amount < 0) {
+                let refundShare = rel.splits?.[debtorId] || 0;
+                debt += refundShare;
+            }
+        });
+        return Math.max(0, debt);
+    }, [groupTransactions, isEditMode, initialData]);
+
+    const eligibleParents = useMemo(() => {
+        if (!isSettlement) {
+            return groupTransactions
+                .filter(t => t.amount > 0 && !t.isReturn)
+                .filter(t => !linkedTxns.some(l => l.id === t.id))
+                .map(t => ({ ...t, remainingRefundable: (t.netAmount !== undefined ? t.netAmount : t.amount) }))
+                .filter(t => t.remainingRefundable > 0)
+                .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+        }
+        
+        const debtsIOwe = groupTransactions.filter(t => !t.isReturn && t.payer !== 'me' && t.splits?.['me'] > 0)
+            .map(t => ({ ...t, relationType: 'owed_by_me', counterParty: t.payer, outstanding: getOutstandingDebt(t, 'me') }));
+        const debtsTheyOwe = groupTransactions.filter(t => !t.isReturn && t.payer === 'me' && Object.keys(t.splits || {}).some(uid => uid !== 'me' && t.splits[uid] > 0))
+            .flatMap(t => {
+                return Object.keys(t.splits).filter(uid => uid !== 'me' && t.splits[uid] > 0).map(uid => ({
+                    ...t, relationType: 'owed_to_me', counterParty: uid, outstanding: getOutstandingDebt(t, uid)
+                }));
+        });
+        
+        let all = [...debtsIOwe, ...debtsTheyOwe];
+        if (repaymentFilter) all = all.filter(t => t.counterParty === repaymentFilter);
+        else {
+            const targetPerson = payer === 'me' ? selectedParticipants[0] : payer;
+            if (targetPerson && targetPerson !== 'me') all = all.filter(t => t.counterParty === targetPerson);
+        }
+
+        const result = all.filter(t => t.outstanding > 10).filter(t => !linkedTxns.some(l => l.id === t.id)).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+        return [...new Map(result.map(item => [item.id, item])).values()];
+    }, [groupTransactions, linkedTxns, isSettlement, payer, selectedParticipants, repaymentFilter, getOutstandingDebt]);
+
+    // --- EFFECTS ---
+
+    useEffect(() => {
+        if (hasInitializedLinks.current || groupTransactions.length === 0) return;
+        if (initialData && initialData.linkedTransactions) {
+            const linksToSet = initialData.linkedTransactions.map(link => {
+                const original = groupTransactions.find(t => t.id === link.id) || rawTransactions.find(t => t.id === link.id);
+                const full = original ? Math.abs(original.amount) : 0;
+                let allocVal = link.amount;
+                if (initialData.amount < 0 && !initialData.isReturn) allocVal = Math.abs(allocVal);
+
+                return {
+                    id: link.id,
+                    name: original ? original.expenseName : 'Unknown',
+                    dateStr: getTxnDateStr(original),
+                    timestamp: getTxnTime(original),
+                    fullAmount: full,
+                    maxAllocatable: full, 
+                    allocated: (allocVal / 100).toFixed(2),
+                    relationType: (original && original.payer !== 'me' && original.splits?.['me']) ? 'owed_by_me' : 'owed_to_me' 
+                };
+            });
+            setTimeout(() => {
+                setLinkedTxns(linksToSet);
+                const currentSubType = initialData?.isReturn ? 'settlement' : 'product';
+                const smartName = generateSmartNameHelper(linksToSet, currentSubType);
+                if (!initialData?.expenseName) setName(smartName);
+                hasInitializedLinks.current = true;
+            }, 0);
+        }
+    }, [initialData, groupTransactions, rawTransactions]);
+
+    useEffect(() => {
+        if (isEditMode || !name || name.length < 3) {
+            if (suggestion !== null) Promise.resolve().then(() => setSuggestion(null));
+            return;
+        }
+        const timer = setTimeout(() => {
+            const fuse = new Fuse(groupTransactions.slice(0, 500), { keys: ['expenseName'], threshold: 0.3 });
+            const result = fuse.search(name);
+            if (result.length > 0) {
+                const bestMatch = result[0].item;
+                if ((!category && bestMatch.category) || (!place && bestMatch.place) || (!tag && bestMatch.tag)) {
+                    setSuggestion(bestMatch);
+                } else {
+                    Promise.resolve().then(() => setSuggestion(null));
+                }
+            } else {
+                Promise.resolve().then(() => setSuggestion(null));
+            }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [name, isEditMode, groupTransactions, category, place, tag, suggestion]);
+
+    // --- ACTIONS ---
+
+    const handlePayerChange = (newPayer) => {
+        setPayer(newPayer);
+        if (isSettlement && selectedParticipants[0] === newPayer) setSelectedParticipants([]);
+        if (newPayer === 'me') setIncludePayer(false);
+        else if (isEditMode && initialData?.payer === newPayer && initialData.splits && initialData.splits[newPayer]) setIncludePayer(true);
+    };
+
+    const handleRecipientChange = (newRecipient) => {
+        if (!newRecipient || (isSettlement && newRecipient === payer)) {
+            setSelectedParticipants([]);
+            return;
+        }
+        setSelectedParticipants([newRecipient]);
+    };
+
+    const handleFlipDirection = (newPositiveAmount, currentLinks) => {
+        const oldPayer = payer;
+        const oldRecipient = selectedParticipants[0];
+        if (!oldRecipient || oldRecipient === oldPayer) return; 
+        setPayer(oldRecipient);
+        setSelectedParticipants([oldPayer]);
+        const invertedLinks = currentLinks.map(l => ({ ...l, allocated: (parseFloat(l.allocated) * -1).toFixed(2) }));
+        setLinkedTxns(invertedLinks);
+        setAmount(newPositiveAmount.toFixed(2));
+    };
+
+    const handleLinkSelect = (parentId) => {
+        if (!parentId) return;
+        const parent = eligibleParents.find(p => p.id === parentId);
+        if (!parent) return;
+
+        let allocValue = 0;
+        let newLink = null;
+
+        if (!isSettlement) {
+             allocValue = (parent.remainingRefundable || parent.amount) / 100;
+             setAmount(allocValue.toFixed(2));
+             if (parent.payer) setPayer(parent.payer);
+             
+             const parentSplits = parent.splits || {};
+             const involvedIDs = Object.keys(parentSplits);
+             setSelectedParticipants(involvedIDs.filter(id => id !== 'me')); 
+             
+             if (parent.splitMethod === 'equal') {
+                 setSplitMethod('equal');
+                 setSplits({});
+             } else {
+                 const totalParent = Math.abs(parent.amount);
+                 const newSplits = {};
+                 involvedIDs.forEach(id => { newSplits[id] = (parentSplits[id] / totalParent) * 100; });
+                 setSplitMethod('percentage');
+                 setSplits(newSplits);
+             }
+             setIncludeMe(involvedIDs.includes('me'));
+             if (parent.payer !== 'me') setIncludePayer(involvedIDs.includes(parent.payer));
+
+             newLink = {
+                 id: parent.id, 
+                 name: parent.expenseName, 
+                 dateStr: getTxnDateStr(parent), 
+                 timestamp: getTxnTime(parent),
+                 fullAmount: Math.abs(parent.amount), 
+                 maxAllocatable: parent.remainingRefundable || parent.amount, 
+                 allocated: allocValue.toFixed(2), 
+                 relationType: 'product_refund' 
+             };
+             setLinkedTxns([newLink]);
+             updateSmartName([newLink], refundSubType);
+        } else {
+             if (payer === 'me' && selectedParticipants.length === 0) {
+                  const inferred = parent.counterParty;
+                  if (inferred && inferred !== 'me') setSelectedParticipants([inferred]);
+             }
+             const outstandingRupees = parent.outstanding / 100;
+             const isMyDebt = parent.relationType === 'owed_by_me'; 
+             allocValue = (payer === 'me') ? (isMyDebt ? outstandingRupees : -outstandingRupees) : (isMyDebt ? -outstandingRupees : outstandingRupees);
+             
+             const currentTotal = parseFloat(amount) || 0;
+             let newTotal = currentTotal + allocValue;
+             let shouldFlip = false;
+             if (newTotal < 0) { shouldFlip = true; newTotal = Math.abs(newTotal); }
+
+             newLink = {
+                 id: parent.id, 
+                 name: parent.expenseName, 
+                 dateStr: getTxnDateStr(parent), 
+                 timestamp: getTxnTime(parent),
+                 fullAmount: Math.abs(parent.amount), 
+                 maxAllocatable: parent.outstanding, 
+                 allocated: allocValue.toFixed(2), 
+                 relationType: parent.relationType 
+             };
+
+             // FIX: Append new link instead of replacing
+             const updatedLinks = [...linkedTxns, newLink];
+             if (shouldFlip) handleFlipDirection(newTotal, updatedLinks);
+             else { setLinkedTxns(updatedLinks); setAmount(newTotal.toFixed(2)); }
+             updateSmartName(updatedLinks, refundSubType);
+        }
+        setTempSelectId('');
+    };
+
+    const autoUpdateTotal = (currentLinks) => {
+        const total = currentLinks.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0);
+        if (total < 0) {
+            handleFlipDirection(Math.abs(total), currentLinks);
+        } else {
+            setAmount(total.toFixed(2));
+        }
+    };
+
+    const removeLinkedTxn = (id) => { 
+        const updatedLinks = linkedTxns.filter(t => t.id !== id); 
+        setLinkedTxns(updatedLinks); 
+        if (isSettlement) autoUpdateTotal(updatedLinks); 
+        updateSmartName(updatedLinks, refundSubType); 
+    };
+    
+    const updateLinkedAllocation = (id, val) => { 
+        const updatedLinks = linkedTxns.map(t => t.id === id ? { ...t, allocated: val } : t); 
+        setLinkedTxns(updatedLinks); 
+        if (isSettlement) autoUpdateTotal(updatedLinks); 
+    };
+
+    const handleAmountChange = (e) => {
+        const val = e.target.value;
+        setAmount(val);
+
+        // FIX: Sync allocation for ANY single link (Refund OR Settlement)
+        if (linkedTxns.length === 1) {
+            setLinkedTxns(prev => prev.map(t => ({ ...t, allocated: val })));
+        }
+    };
+
+    const handleQuickAddRequest = (value, col, label) => {
+        if (value === `add_new_${col}`) {
+            setActivePrompt({ type: 'quickAdd', targetCollection: col, targetLabel: label, title: `Add New ${label}`, label: `New ${label} Name` });
+        } else {
+            if(col === 'categories') setCategory(value);
+            if(col === 'places') setPlace(value);
+            if(col === 'tags') setTag(value);
+            if(col === 'modesOfPayment') setMode(value);
+        }
+    };
+
+    const handlePromptConfirm = async (inputValue) => {
+        if (!inputValue) return;
+        const { type: promptType, targetCollection, targetLabel } = activePrompt || {};
+        
+        if (promptType === 'quickAdd') {
+            try {
+                await addDoc(collection(db, `ledgers/main-ledger/${targetCollection}`), { name: inputValue });
+                showToast(`${targetLabel} added!`);
+                if(targetCollection === 'categories') setCategory(inputValue);
+                if(targetCollection === 'places') setPlace(inputValue);
+                if(targetCollection === 'tags') setTag(inputValue);
+                if(targetCollection === 'modesOfPayment') setMode(inputValue);
+            } catch (e) { console.error(e); showToast("Failed to add item.", true); }
+        } else if (promptType === 'template') {
+            // Template save logic
+            const amountInRupees = parseFloat(amount);
+            const multiplier = isProductRefund ? -1 : 1;
+            const finalAmount = !isNaN(amountInRupees) ? Math.round(amountInRupees * 100) * multiplier : null;
+            
+            const templateData = {
+                name: inputValue, expenseName: name, amount: finalAmount, 
+                type: isSettlement ? 'expense' : type, category, place, tag, modeOfPayment: mode, description,
+                payer: isIncome ? 'me' : payer, isReturn: isSettlement, 
+                participants: isIncome ? [] : (isSettlement ? [selectedParticipants[0]] : selectedParticipants),
+                splitMethod: (isSettlement || isIncome) ? 'none' : splitMethod, splits: (isSettlement || isIncome) ? {} : splits,
+                groupId: formGroupId 
+            };
+            try { 
+                await addDoc(collection(db, 'ledgers/main-ledger/templates'), templateData); 
+                showToast("Template saved successfully!"); 
+            } catch (error) { 
+                console.error(error); showToast("Failed to save template.", true); 
+            }
+        }
+        setActivePrompt(null);
+    };
+
+    const applySuggestion = () => {
+        if (!suggestion) return;
+        if (suggestion.category && !category) setCategory(suggestion.category);
+        if (suggestion.place && !place) setPlace(suggestion.place);
+        if (suggestion.tag && !tag) setTag(suggestion.tag);
+        setSuggestion(null);
+        showToast("Autofilled details!");
+    };
+
+    const handleTemplateSaveRequest = () => { 
+        setActivePrompt({ type: 'template', title: 'Save as Template', label: 'Template Name' }); 
+    };
+
+    const handleParticipantAdd = (uid) => setSelectedParticipants([...selectedParticipants, uid]);
+    const handleParticipantRemove = (uid) => setSelectedParticipants(selectedParticipants.filter(x => x !== uid));
+
+    const splitAllocatorParticipants = useMemo(() => [
+        ...(includeMe ? [{ uniqueId: 'me', name: 'You' }] : []),
+        ...(payer !== 'me' && !selectedParticipants.includes(payer) && includePayer ? [{ uniqueId: payer, name: getName(payer) }] : []),
+        ...allParticipants.filter(p => selectedParticipants.includes(p.uniqueId))
+    ], [includeMe, includePayer, payer, allParticipants, selectedParticipants, getName]);
+
+    const validation = useMemo(() => {
+        if (isIncome || isSettlement) return { isValid: true, message: '' };
+        const amountInRupees = parseFloat(amount);
+        if (isNaN(amountInRupees) || amountInRupees === 0) return splitMethod === 'dynamic' ? { isValid: false, message: 'Enter a total amount first.' } : { isValid: true, message: '' };
+        const amountInPaise = Math.round(amountInRupees * 100);
+        return validateSplits(amountInPaise, splits, splitMethod);
+    }, [amount, splits, splitMethod, isIncome, isSettlement]);
+
+    const saveTransactionLogic = async () => {
+        const amountInPaise = Math.round(parseFloat(amount) * 100);
+        const multiplier = isProductRefund ? -1 : 1;
+        const finalAmount = amountInPaise * multiplier;
+        
+        let safeParticipants = selectedParticipants;
+        if (isSettlement) {
+             // Settlement Logic: Ensure non-empty participants
+             if (!selectedParticipants || selectedParticipants.length === 0) {
+                 // Default to payer? No, settlement must have a recipient.
+                 // We rely on handleSubmit validation, but for safety, filter empty.
+             }
+        } else {
+             if (!selectedParticipants.length && payer === 'me') safeParticipants = []; // Just me
+        }
+        
+        if (!isSettlement && payer !== 'me' && !selectedParticipants.includes(payer) && includePayer) {
+            safeParticipants = [...safeParticipants, payer];
+        }
+
+        let finalSplits = { ...splits };
+        if (!isSettlement && !isIncome && splitMethod === 'equal') {
+             const involvedCount = splitAllocatorParticipants.length;
+             if (involvedCount > 0) {
+                const absAmount = Math.abs(amountInPaise);
+                const share = Math.floor(absAmount / involvedCount);
+                const remainder = absAmount % involvedCount;
+                finalSplits = {};
+                splitAllocatorParticipants.forEach((p, index) => {
+                    let val = share;
+                    if (index < remainder) val += 1;
+                    finalSplits[p.uniqueId] = val * multiplier;
+                });
+            }
+        } else {
+            Object.keys(finalSplits).forEach(key => {
+                if (splitMethod === 'percentage') {
+                    const percent = finalSplits[key];
+                    const share = Math.round((percent / 100) * Math.abs(amountInPaise));
+                    finalSplits[key] = share * multiplier;
+                } else {
+                    finalSplits[key] = finalSplits[key] * multiplier;
+                }
+            });
+        }
+
+        const linkedTransactionsData = linkedTxns.map(t => ({ id: t.id, amount: Math.round(parseFloat(t.allocated) * 100) * multiplier }));
+        const parentIds = linkedTransactionsData.map(t => t.id);
+
+        const txnData = {
+            expenseName: name, amount: finalAmount, type: isSettlement ? 'expense' : type, 
+            category: category.startsWith('add_new') ? '' : category, 
+            place: place.startsWith('add_new') ? '' : place, 
+            tag: tag.startsWith('add_new') ? '' : tag,
+            modeOfPayment: mode.startsWith('add_new') ? '' : mode, 
+            description, timestamp: Timestamp.fromDate(new Date(date)), 
+            payer: isIncome ? 'me' : payer, isReturn: isSettlement, 
+            participants: isIncome ? [] : (isSettlement ? [safeParticipants[0]] : safeParticipants),
+            splitMethod: (isSettlement || isIncome) ? 'none' : splitMethod,
+            splits: (isSettlement || isIncome) ? {} : finalSplits,
+            linkedTransactions: linkedTransactionsData, parentTransactionIds: parentIds,
+            parentTransactionId: parentIds.length > 0 ? parentIds[0] : null, isLinkedRefund: parentIds.length > 0,
+            groupId: formGroupId 
+        };
+
+        try {
+            if (isEditMode) {
+                await updateTransaction(initialData.id, txnData, initialData.parentTransactionId);
+                setShowSuccess(true);
+                setTimeout(() => { setShowSuccess(false); navigate('/history'); }, 1200);
+            } else {
+                await addTransaction(txnData);
+                setShowSuccess(true);
+                setTimeout(() => { setShowSuccess(false); navigate('/history'); }, 1200);
+            }
+        } catch(e) { console.error(e); showToast("Error saving: " + e.message, true); }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const amountInRupees = parseFloat(amount);
+        if (!name || isNaN(amountInRupees)) { showToast("Please enter valid name and amount", true); return; }
+        if (!isSettlement && !isIncome && !validation.isValid) { 
+            showToast(validation.message || "Please fix split errors.", true); 
+            return; 
+        }
+        if (!isEditMode) {
+            const checkAmount = Math.round(amountInRupees * 100);
+            const potentialDupe = groupTransactions.find(t => {
+                if (!t.timestamp) return false;
+                const tDate = t.timestamp.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
+                if (isNaN(tDate.getTime())) return false;
+                return Math.abs(t.amount) === checkAmount && t.expenseName === name && tDate.toISOString().split('T')[0] === date;
+            });
+            if (potentialDupe) { 
+                setDupeTxn(potentialDupe); 
+                setShowDupeModal(true); 
+                return; 
+            }
+        }
+        saveTransactionLogic();
+    };
+
+    const handleManualSwap = () => {
+        const oldPayer = payer;
+        const oldRecipient = selectedParticipants[0];
+        if(oldPayer && oldRecipient && oldRecipient !== oldPayer) {
+            setPayer(oldRecipient);
+            setSelectedParticipants([oldPayer]);
+            const invertedLinks = linkedTxns.map(l => ({ ...l, allocated: (parseFloat(l.allocated) * -1).toFixed(2) }));
+            setLinkedTxns(invertedLinks);
+        }
+    };
+
+    const forceSubmit = () => { setShowDupeModal(false); saveTransactionLogic(); };
+
+    return {
+        formGroupId, setFormGroupId, type, setType, refundSubType, setRefundSubType, name, setName,
+        amount, setAmount, date, setDate, category, setCategory, place, setPlace, tag, setTag,
+        mode, setMode, description, setDescription, payer, setPayer, selectedParticipants, setSelectedParticipants,
+        linkedTxns, setLinkedTxns, tempSelectId, setTempSelectId, repaymentFilter, setRepaymentFilter,
+        splitMethod, setSplitMethod, splits, setSplits, includeMe, setIncludeMe, includePayer, setIncludePayer,
+        showDupeModal, setShowDupeModal, dupeTxn, setDupeTxn, activePrompt, setActivePrompt, suggestion, setSuggestion,
+        showSuccess, isRefundTab, isSettlement, isProductRefund, isIncome, groupTransactions, allParticipants,
+        groups, categories, places, tags, modesOfPayment, splitAllocatorParticipants, validation, eligibleParents,
+        handlePayerChange, handleRecipientChange, handleParticipantAdd, handleParticipantRemove, handleQuickAddRequest,
+        handlePromptConfirm, handleTemplateSaveRequest, handleSubmit, forceSubmit, applySuggestion, handleManualSwap,
+        handleLinkSelect, removeLinkedTxn, updateLinkedAllocation, handleAmountChange, getTxnDateStr, getName,
+        totalAllocated: linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0),
+        allocationDiff: (parseFloat(amount) || 0) - linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0),
+        isAllocationValid: Math.abs((parseFloat(amount) || 0) - linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0)) < 0.05
+    };
+};

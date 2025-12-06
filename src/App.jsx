@@ -5,12 +5,13 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext'; 
 import { useAuth } from './hooks/useAuth'; 
 import { useFirestoreSync } from './hooks/useFirestoreSync';
+import { useTheme } from './hooks/useTheme'; // Import Theme Hook
 
 // Components
 import Loader from './components/common/Loader';
 import Layout from './components/layout/Layout';
 
-// --- STATIC IMPORTS (Debugging Mode) ---
+// Pages
 import Dashboard from './pages/Dashboard';
 import AddTransaction from './pages/AddTransaction'; 
 import History from './pages/History';
@@ -23,7 +24,13 @@ import Goals from './pages/Goals';
 import Templates from './pages/Templates';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
-import Timeline from './pages/Timeline'; // Import Timeline
+import Timeline from './pages/Timeline';
+
+// --- NEW: Theme Initializer Component ---
+const ThemeInit = () => {
+  useTheme(); // This activates the theme logic globally
+  return null;
+};
 
 const AppDataSyncer = ({ children }) => {
   useFirestoreSync();
@@ -45,6 +52,8 @@ const ProtectedRoute = ({ children }) => {
 const App = () => {
   return (
     <BrowserRouter>
+      {/* Initialize Theme immediately inside Router context if needed, or outside */}
+      <ThemeInit /> 
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -55,7 +64,7 @@ const App = () => {
             <Route path="/history" element={<History />} />
             <Route path="/data" element={<ManageData />} />
             <Route path="/analytics" element={<Analytics />} />
-            <Route path="/timeline" element={<Timeline />} /> {/* Added Route */}
+            <Route path="/timeline" element={<Timeline />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/insights" element={<Insights />} />
             <Route path="/tags" element={<TagsAnalysis />} />

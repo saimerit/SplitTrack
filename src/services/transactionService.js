@@ -1,34 +1,49 @@
-import { 
-  addDoc, updateDoc, deleteDoc as firestoreDeleteDoc, doc, 
+import {
+  addDoc, updateDoc, deleteDoc as firestoreDeleteDoc, doc,
   collection, getDocs, query, where, getDoc, runTransaction, Timestamp, writeBatch,
-  limit, startAfter, orderBy // Added imports for pagination
+  limit, startAfter, orderBy, increment // Added imports for pagination
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 const LEDGER_ID = 'main-ledger';
 const COLLECTION_PATH = `ledgers/${LEDGER_ID}/transactions`;
 
+// Use this for simple updates
+export const fastUpdateParentStats = async (parentId, changeInAmount) => {
+  if (!parentId) return;
+  const parentRef = doc(db, COLLECTION_PATH, parentId);
+
+  // We try to optimize, but if the doc doesn't exist or other issues occur, 
+  // it will just fail silently or throw.
+  // For robustness, one might want to check existence but that costs a read.
+  // The prompt explicitly asked for "no reads required".
+  await updateDoc(parentRef, {
+    netAmount: increment(changeInAmount),
+    hasRefunds: true
+  });
+};
+
 // Helper: Recalculate parent stats
 const updateParentStats = async (parentId) => {
   if (!parentId) return;
-  
+
   try {
     const colRef = collection(db, COLLECTION_PATH);
-    
+
     // 1. Get both legacy and new links
     const q1 = query(colRef, where("parentTransactionId", "==", parentId));
     const q2 = query(colRef, where("parentTransactionIds", "array-contains", parentId));
 
     const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-    
+
     const children = new Map();
     // Filter out deleted children
-    snap1.forEach(d => { if(!d.data().isDeleted) children.set(d.id, d.data()); });
-    snap2.forEach(d => { if(!d.data().isDeleted) children.set(d.id, d.data()); });
+    snap1.forEach(d => { if (!d.data().isDeleted) children.set(d.id, d.data()); });
+    snap2.forEach(d => { if (!d.data().isDeleted) children.set(d.id, d.data()); });
 
     let totalRefunds = 0;
     let lastRefundDate = null;
-    
+
     children.forEach((data) => {
       // Skip Repayments for Net Cost calculation
       if (data.isReturn) return;
@@ -37,12 +52,12 @@ const updateParentStats = async (parentId) => {
 
       // Find specific allocation
       if (data.linkedTransactions && Array.isArray(data.linkedTransactions)) {
-          const link = data.linkedTransactions.find(l => l.id === parentId);
-          allocatedAmount = link ? link.amount : data.amount;
+        const link = data.linkedTransactions.find(l => l.id === parentId);
+        allocatedAmount = link ? link.amount : data.amount;
       } else {
-          allocatedAmount = data.amount;
+        allocatedAmount = data.amount;
       }
-      
+
       totalRefunds += allocatedAmount; // Refunds are negative
 
       if (data.timestamp) {
@@ -54,12 +69,12 @@ const updateParentStats = async (parentId) => {
 
     const parentRef = doc(db, COLLECTION_PATH, parentId);
     const parentSnap = await getDoc(parentRef);
-    
+
     if (parentSnap.exists()) {
       const parentData = parentSnap.data();
       const originalAmount = parentData.amount;
       const newNet = originalAmount + totalRefunds;
-      
+
       await updateDoc(parentRef, {
         netAmount: newNet,
         hasRefunds: totalRefunds !== 0,
@@ -73,17 +88,17 @@ const updateParentStats = async (parentId) => {
 
 export const addTransaction = async (txnData) => {
   const docRef = await addDoc(collection(db, COLLECTION_PATH), {
-      ...txnData,
-      isDeleted: false, 
-      createdAt: Timestamp.now()
+    ...txnData,
+    isDeleted: false,
+    createdAt: Timestamp.now()
   });
-  
+
   if (txnData.parentTransactionIds && txnData.parentTransactionIds.length > 0) {
-      await Promise.all(txnData.parentTransactionIds.map(pid => updateParentStats(pid)));
+    await Promise.all(txnData.parentTransactionIds.map(pid => updateParentStats(pid)));
   } else if (txnData.parentTransactionId) {
-      await updateParentStats(txnData.parentTransactionId);
+    await updateParentStats(txnData.parentTransactionId);
   }
-  
+
   return docRef.id;
 };
 
@@ -92,15 +107,15 @@ export const updateTransaction = async (id, txnData, oldParentId) => {
   await updateDoc(docRef, txnData);
 
   if (txnData.parentTransactionIds && txnData.parentTransactionIds.length > 0) {
-      await Promise.all(txnData.parentTransactionIds.map(pid => updateParentStats(pid)));
+    await Promise.all(txnData.parentTransactionIds.map(pid => updateParentStats(pid)));
   } else if (txnData.parentTransactionId) {
-      await updateParentStats(txnData.parentTransactionId);
+    await updateParentStats(txnData.parentTransactionId);
   }
 
   if (oldParentId && (!txnData.parentTransactionIds || !txnData.parentTransactionIds.includes(oldParentId))) {
-      if (oldParentId !== txnData.parentTransactionId) {
-         await updateParentStats(oldParentId);
-      }
+    if (oldParentId !== txnData.parentTransactionId) {
+      await updateParentStats(oldParentId);
+    }
   }
 };
 
@@ -115,25 +130,25 @@ export const deleteTransaction = async (id, parentId) => {
 
       const colRef = collection(db, COLLECTION_PATH);
       const qChild = query(
-          colRef, 
-          where("parentTransactionIds", "array-contains", id),
-          where("isDeleted", "==", false) 
+        colRef,
+        where("parentTransactionIds", "array-contains", id),
+        where("isDeleted", "==", false)
       );
       const qChildLegacy = query(
-          colRef, 
-          where("parentTransactionId", "==", id),
-          where("isDeleted", "==", false)
+        colRef,
+        where("parentTransactionId", "==", id),
+        where("isDeleted", "==", false)
       );
-      
+
       const [snap1, snap2] = await Promise.all([getDocs(qChild), getDocs(qChildLegacy)]);
-      
+
       if (!snap1.empty || !snap2.empty) {
         throw new Error("Cannot delete: Active linked refunds/repayments exist.");
       }
 
-      transaction.update(txnRef, { 
-          isDeleted: true,
-          deletedAt: Timestamp.now()
+      transaction.update(txnRef, {
+        isDeleted: true,
+        deletedAt: Timestamp.now()
       });
     });
 
@@ -147,34 +162,34 @@ export const deleteTransaction = async (id, parentId) => {
 };
 
 export const restoreTransaction = async (id) => {
-    const txnRef = doc(db, COLLECTION_PATH, id);
-    await updateDoc(txnRef, { isDeleted: false, deletedAt: null });
+  const txnRef = doc(db, COLLECTION_PATH, id);
+  await updateDoc(txnRef, { isDeleted: false, deletedAt: null });
 };
 
 export const permanentDeleteTransaction = async (id) => {
-    await firestoreDeleteDoc(doc(db, COLLECTION_PATH, id));
+  await firestoreDeleteDoc(doc(db, COLLECTION_PATH, id));
 };
 
 export const moveTransactionToGroup = async (id, newGroupId) => {
-    const txnRef = doc(db, COLLECTION_PATH, id);
-    const colRef = collection(db, COLLECTION_PATH);
-    const qChildren = query(colRef, where("parentTransactionId", "==", id));
-    const snap = await getDocs(qChildren);
-    const batch = writeBatch(db);
-    
-    batch.update(txnRef, { groupId: newGroupId });
-    snap.forEach(childDoc => {
-        batch.update(childDoc.ref, { groupId: newGroupId });
-    });
-    
-    await batch.commit();
+  const txnRef = doc(db, COLLECTION_PATH, id);
+  const colRef = collection(db, COLLECTION_PATH);
+  const qChildren = query(colRef, where("parentTransactionId", "==", id));
+  const snap = await getDocs(qChildren);
+  const batch = writeBatch(db);
+
+  batch.update(txnRef, { groupId: newGroupId });
+  snap.forEach(childDoc => {
+    batch.update(childDoc.ref, { groupId: newGroupId });
+  });
+
+  await batch.commit();
 };
 
 // --- NEW PAGINATION FEATURE ---
 export const fetchPaginatedTransactions = async (pageSize, lastDoc = null, filters = {}) => {
   try {
     const colRef = collection(db, COLLECTION_PATH);
-    
+
     // 1. Base Query: Filter soft-deleted items AND sort by time
     // NOTE: This specific line REQUIRES the Index mentioned above.
     let q = query(colRef, where("isDeleted", "==", false), orderBy('timestamp', 'desc'));
@@ -189,20 +204,20 @@ export const fetchPaginatedTransactions = async (pageSize, lastDoc = null, filte
       start.setHours(0, 0, 0, 0);
       const end = new Date(filters.date);
       end.setHours(23, 59, 59, 999);
-      
+
       // FIX: Use .getTime() because you store dates as Numbers (milliseconds)
-      q = query(q, 
-        where('timestamp', '>=', start.getTime()), 
+      q = query(q,
+        where('timestamp', '>=', start.getTime()),
         where('timestamp', '<=', end.getTime())
       );
     } else if (filters.month) {
       const [year, month] = filters.month.split('-');
       const start = new Date(year, month - 1, 1);
       const end = new Date(year, month, 0, 23, 59, 59);
-      
+
       // FIX: Use .getTime() here too
-      q = query(q, 
-        where('timestamp', '>=', start.getTime()), 
+      q = query(q,
+        where('timestamp', '>=', start.getTime()),
         where('timestamp', '<=', end.getTime())
       );
     }
@@ -211,11 +226,11 @@ export const fetchPaginatedTransactions = async (pageSize, lastDoc = null, filte
     if (lastDoc) {
       q = query(q, startAfter(lastDoc));
     }
-    
+
     q = query(q, limit(pageSize));
 
     const snapshot = await getDocs(q);
-    
+
     return {
       data: snapshot.docs.map(d => ({ id: d.id, ...d.data() })),
       lastDoc: snapshot.docs[snapshot.docs.length - 1],

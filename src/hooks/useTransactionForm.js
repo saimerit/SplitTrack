@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Fuse from 'fuse.js';
-import { Timestamp, addDoc, collection } from 'firebase/firestore'; 
+import { Timestamp, addDoc, collection } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { addTransaction, updateTransaction } from '../services/transactionService';
 import { validateSplits } from '../utils/validators';
@@ -27,10 +27,10 @@ const generateSmartNameHelper = (links, subTypeStr) => {
 
 export const useTransactionFormLogic = (initialData, isEditMode) => {
     const navigate = useNavigate();
-    const { 
-        categories, places, tags, modesOfPayment, 
-        rawParticipants, rawTransactions, groups, 
-        userSettings, showToast, activeGroupId 
+    const {
+        categories, places, tags, modesOfPayment,
+        rawParticipants, rawTransactions, groups,
+        userSettings, showToast, activeGroupId
     } = useAppStore();
 
     const wasMeIncluded = initialData?.splits ? (initialData.splits['me'] !== undefined) : true;
@@ -42,11 +42,11 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         if (initialData && initialData.amount < 0) return 'refund';
         return initialData?.type || 'expense';
     });
-    
+
     const [refundSubType, setRefundSubType] = useState(() => initialData?.isReturn ? 'settlement' : 'product');
     const [name, setName] = useState(initialData?.expenseName || '');
-    const [amount, setAmount] = useState(initialData ? (Math.abs(initialData.amount)/100).toFixed(2) : '');
-    
+    const [amount, setAmount] = useState(initialData ? (Math.abs(initialData.amount) / 100).toFixed(2) : '');
+
     const [date, setDate] = useState(() => {
         try {
             if (initialData?.timestamp) {
@@ -67,19 +67,19 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     const [description, setDescription] = useState(initialData?.description || '');
     const [payer, setPayer] = useState(initialData?.payer || 'me');
     const [selectedParticipants, setSelectedParticipants] = useState(initialData?.participants || []);
-    
-    const [linkedTxns, setLinkedTxns] = useState([]); 
-    const [tempSelectId, setTempSelectId] = useState(''); 
-    const [repaymentFilter, setRepaymentFilter] = useState(''); 
+
+    const [linkedTxns, setLinkedTxns] = useState([]);
+    const [tempSelectId, setTempSelectId] = useState('');
+    const [repaymentFilter, setRepaymentFilter] = useState('');
     const [splitMethod, setSplitMethod] = useState(initialData?.splitMethod || 'equal');
-    const [splits, setSplits] = useState(initialData?.splits || {}); 
+    const [splits, setSplits] = useState(initialData?.splits || {});
     const [includeMe, setIncludeMe] = useState(wasMeIncluded);
     const [includePayer, setIncludePayer] = useState(false);
-    
+
     // UI Triggers
     const [showDupeModal, setShowDupeModal] = useState(false);
     const [dupeTxn, setDupeTxn] = useState(null);
-    const [activePrompt, setActivePrompt] = useState(null); 
+    const [activePrompt, setActivePrompt] = useState(null);
     const [suggestion, setSuggestion] = useState(null);
     const [showSuccess, setShowSuccess] = useState(false);
     const hasInitializedLinks = useRef(false);
@@ -98,8 +98,8 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     }, [allParticipants]);
 
     const isRefundTab = type === 'refund';
-    const isSettlement = isRefundTab && refundSubType === 'settlement'; 
-    const isProductRefund = isRefundTab && refundSubType === 'product'; 
+    const isSettlement = isRefundTab && refundSubType === 'settlement';
+    const isProductRefund = isRefundTab && refundSubType === 'product';
     const isIncome = type === 'income';
 
     const getName = useCallback((uid) => {
@@ -108,7 +108,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     }, [participantsLookup]);
 
     // --- INTERNAL HELPERS ---
-    
+
     const updateSmartName = (links, subTypeStr) => {
         const smartName = generateSmartNameHelper(links, subTypeStr);
         if (!smartName) return;
@@ -151,7 +151,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 .filter(t => t.remainingRefundable > 0)
                 .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
         }
-        
+
         const debtsIOwe = groupTransactions.filter(t => !t.isReturn && t.payer !== 'me' && t.splits?.['me'] > 0)
             .map(t => ({ ...t, relationType: 'owed_by_me', counterParty: t.payer, outstanding: getOutstandingDebt(t, 'me') }));
         const debtsTheyOwe = groupTransactions.filter(t => !t.isReturn && t.payer === 'me' && Object.keys(t.splits || {}).some(uid => uid !== 'me' && t.splits[uid] > 0))
@@ -159,8 +159,8 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 return Object.keys(t.splits).filter(uid => uid !== 'me' && t.splits[uid] > 0).map(uid => ({
                     ...t, relationType: 'owed_to_me', counterParty: uid, outstanding: getOutstandingDebt(t, uid)
                 }));
-        });
-        
+            });
+
         let all = [...debtsIOwe, ...debtsTheyOwe];
         if (repaymentFilter) all = all.filter(t => t.counterParty === repaymentFilter);
         else {
@@ -189,9 +189,9 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                     dateStr: getTxnDateStr(original),
                     timestamp: getTxnTime(original),
                     fullAmount: full,
-                    maxAllocatable: full, 
+                    maxAllocatable: full,
                     allocated: (allocVal / 100).toFixed(2),
-                    relationType: (original && original.payer !== 'me' && original.splits?.['me']) ? 'owed_by_me' : 'owed_to_me' 
+                    relationType: (original && original.payer !== 'me' && original.splits?.['me']) ? 'owed_by_me' : 'owed_to_me'
                 };
             });
             setTimeout(() => {
@@ -234,7 +234,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         const defaults = userSettings || {};
 
         setFormGroupId(source.groupId || activeGroupId || 'personal');
-        
+
         let newType = 'expense';
         if (source.isReturn) newType = 'refund';
         else if (source.amount < 0) newType = 'refund';
@@ -243,8 +243,8 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
         setRefundSubType(source.isReturn ? 'settlement' : 'product');
         setName(source.expenseName || '');
-        setAmount(source.amount ? (Math.abs(source.amount)/100).toFixed(2) : '');
-        
+        setAmount(source.amount ? (Math.abs(source.amount) / 100).toFixed(2) : '');
+
         let newDate = new Date().toISOString().split('T')[0];
         try {
             if (source.timestamp) {
@@ -266,7 +266,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         setDescription(source.description || '');
         setPayer(source.payer || 'me');
         setSelectedParticipants(source.participants || []);
-        
+
         setLinkedTxns([]);
         if (isEditMode) hasInitializedLinks.current = false;
 
@@ -276,7 +276,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         setSplits(source.splits || {});
         setIncludeMe(source.splits ? (source.splits['me'] !== undefined) : true);
         setIncludePayer(false);
-        
+
         setShowDupeModal(false);
         setDupeTxn(null);
         setSuggestion(null);
@@ -286,7 +286,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     // FEATURE: Handle Type Change (Clears relevant fields)
     const handleTypeChange = (newType) => {
         setType(newType);
-        
+
         // Clear fields irrelevant to new type
         setName('');
         setAmount('');
@@ -294,13 +294,13 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         setSplits({});
         setLinkedTxns([]);
         setSelectedParticipants([]);
-        
+
         // Reset Meta fields to defaults
         setCategory(userSettings.defaultCategory || '');
         setPlace(userSettings.defaultPlace || '');
         setTag(userSettings.defaultTag || '');
         setMode(userSettings.defaultMode || '');
-        
+
         if (newType === 'income') {
             setPayer('me');
         }
@@ -309,7 +309,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     // FEATURE: Handle Refund SubType Change (Product vs Settlement)
     const handleRefundSubTypeChange = (newSub) => {
         setRefundSubType(newSub);
-        
+
         // Clear data that might conflict
         setName('');
         setAmount('');
@@ -336,7 +336,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     const handleFlipDirection = (newPositiveAmount, currentLinks) => {
         const oldPayer = payer;
         const oldRecipient = selectedParticipants[0];
-        if (!oldRecipient || oldRecipient === oldPayer) return; 
+        if (!oldRecipient || oldRecipient === oldPayer) return;
         setPayer(oldRecipient);
         setSelectedParticipants([oldPayer]);
         const invertedLinks = currentLinks.map(l => ({ ...l, allocated: (parseFloat(l.allocated) * -1).toFixed(2) }));
@@ -353,69 +353,69 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         let newLink = null;
 
         if (!isSettlement) {
-             allocValue = (parent.remainingRefundable || parent.amount) / 100;
-             setAmount(allocValue.toFixed(2));
-             if (parent.payer) setPayer(parent.payer);
-             
-             const parentSplits = parent.splits || {};
-             const involvedIDs = Object.keys(parentSplits);
-             setSelectedParticipants(involvedIDs.filter(id => id !== 'me')); 
-             
-             if (parent.splitMethod === 'equal') {
-                 setSplitMethod('equal');
-                 setSplits({});
-             } else {
-                 const totalParent = Math.abs(parent.amount);
-                 const newSplits = {};
-                 involvedIDs.forEach(id => { newSplits[id] = (parentSplits[id] / totalParent) * 100; });
-                 setSplitMethod('percentage');
-                 setSplits(newSplits);
-             }
-             setIncludeMe(involvedIDs.includes('me'));
-             if (parent.payer !== 'me') setIncludePayer(involvedIDs.includes(parent.payer));
+            allocValue = (parent.remainingRefundable || parent.amount) / 100;
+            setAmount(allocValue.toFixed(2));
+            if (parent.payer) setPayer(parent.payer);
 
-             newLink = {
-                 id: parent.id, 
-                 name: parent.expenseName, 
-                 dateStr: getTxnDateStr(parent), 
-                 timestamp: getTxnTime(parent),
-                 fullAmount: Math.abs(parent.amount), 
-                 maxAllocatable: parent.remainingRefundable || parent.amount, 
-                 allocated: allocValue.toFixed(2), 
-                 relationType: 'product_refund' 
-             };
-             setLinkedTxns([newLink]);
-             updateSmartName([newLink], refundSubType);
+            const parentSplits = parent.splits || {};
+            const involvedIDs = Object.keys(parentSplits);
+            setSelectedParticipants(involvedIDs.filter(id => id !== 'me'));
+
+            if (parent.splitMethod === 'equal') {
+                setSplitMethod('equal');
+                setSplits({});
+            } else {
+                const totalParent = Math.abs(parent.amount);
+                const newSplits = {};
+                involvedIDs.forEach(id => { newSplits[id] = (parentSplits[id] / totalParent) * 100; });
+                setSplitMethod('percentage');
+                setSplits(newSplits);
+            }
+            setIncludeMe(involvedIDs.includes('me'));
+            if (parent.payer !== 'me') setIncludePayer(involvedIDs.includes(parent.payer));
+
+            newLink = {
+                id: parent.id,
+                name: parent.expenseName,
+                dateStr: getTxnDateStr(parent),
+                timestamp: getTxnTime(parent),
+                fullAmount: Math.abs(parent.amount),
+                maxAllocatable: parent.remainingRefundable || parent.amount,
+                allocated: allocValue.toFixed(2),
+                relationType: 'product_refund'
+            };
+            setLinkedTxns([newLink]);
+            updateSmartName([newLink], refundSubType);
         } else {
-             if (payer === 'me' && selectedParticipants.length === 0) {
-                  const inferred = parent.counterParty;
-                  if (inferred && inferred !== 'me') setSelectedParticipants([inferred]);
-             }
-             const outstandingRupees = parent.outstanding / 100;
-             const isMyDebt = parent.relationType === 'owed_by_me'; 
-             allocValue = (payer === 'me') ? (isMyDebt ? outstandingRupees : -outstandingRupees) : (isMyDebt ? -outstandingRupees : outstandingRupees);
-             
-             const currentTotal = parseFloat(amount) || 0;
-             let newTotal = currentTotal + allocValue;
-             let shouldFlip = false;
-             if (newTotal < 0) { shouldFlip = true; newTotal = Math.abs(newTotal); }
+            if (payer === 'me' && selectedParticipants.length === 0) {
+                const inferred = parent.counterParty;
+                if (inferred && inferred !== 'me') setSelectedParticipants([inferred]);
+            }
+            const outstandingRupees = parent.outstanding / 100;
+            const isMyDebt = parent.relationType === 'owed_by_me';
+            allocValue = (payer === 'me') ? (isMyDebt ? outstandingRupees : -outstandingRupees) : (isMyDebt ? -outstandingRupees : outstandingRupees);
 
-             newLink = {
-                 id: parent.id, 
-                 name: parent.expenseName, 
-                 dateStr: getTxnDateStr(parent), 
-                 timestamp: getTxnTime(parent),
-                 fullAmount: Math.abs(parent.amount), 
-                 maxAllocatable: parent.outstanding, 
-                 allocated: allocValue.toFixed(2), 
-                 relationType: parent.relationType 
-             };
+            const currentTotal = parseFloat(amount) || 0;
+            let newTotal = currentTotal + allocValue;
+            let shouldFlip = false;
+            if (newTotal < 0) { shouldFlip = true; newTotal = Math.abs(newTotal); }
 
-             // FIX: Append new link instead of replacing
-             const updatedLinks = [...linkedTxns, newLink];
-             if (shouldFlip) handleFlipDirection(newTotal, updatedLinks);
-             else { setLinkedTxns(updatedLinks); setAmount(newTotal.toFixed(2)); }
-             updateSmartName(updatedLinks, refundSubType);
+            newLink = {
+                id: parent.id,
+                name: parent.expenseName,
+                dateStr: getTxnDateStr(parent),
+                timestamp: getTxnTime(parent),
+                fullAmount: Math.abs(parent.amount),
+                maxAllocatable: parent.outstanding,
+                allocated: allocValue.toFixed(2),
+                relationType: parent.relationType
+            };
+
+            // FIX: Append new link instead of replacing
+            const updatedLinks = [...linkedTxns, newLink];
+            if (shouldFlip) handleFlipDirection(newTotal, updatedLinks);
+            else { setLinkedTxns(updatedLinks); setAmount(newTotal.toFixed(2)); }
+            updateSmartName(updatedLinks, refundSubType);
         }
         setTempSelectId('');
     };
@@ -429,17 +429,17 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         }
     };
 
-    const removeLinkedTxn = (id) => { 
-        const updatedLinks = linkedTxns.filter(t => t.id !== id); 
-        setLinkedTxns(updatedLinks); 
-        if (isSettlement) autoUpdateTotal(updatedLinks); 
-        updateSmartName(updatedLinks, refundSubType); 
+    const removeLinkedTxn = (id) => {
+        const updatedLinks = linkedTxns.filter(t => t.id !== id);
+        setLinkedTxns(updatedLinks);
+        if (isSettlement) autoUpdateTotal(updatedLinks);
+        updateSmartName(updatedLinks, refundSubType);
     };
-    
-    const updateLinkedAllocation = (id, val) => { 
-        const updatedLinks = linkedTxns.map(t => t.id === id ? { ...t, allocated: val } : t); 
-        setLinkedTxns(updatedLinks); 
-        if (isSettlement) autoUpdateTotal(updatedLinks); 
+
+    const updateLinkedAllocation = (id, val) => {
+        const updatedLinks = linkedTxns.map(t => t.id === id ? { ...t, allocated: val } : t);
+        setLinkedTxns(updatedLinks);
+        if (isSettlement) autoUpdateTotal(updatedLinks);
     };
 
     const handleAmountChange = (e) => {
@@ -456,45 +456,45 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         if (value === `add_new_${col}`) {
             setActivePrompt({ type: 'quickAdd', targetCollection: col, targetLabel: label, title: `Add New ${label}`, label: `New ${label} Name` });
         } else {
-            if(col === 'categories') setCategory(value);
-            if(col === 'places') setPlace(value);
-            if(col === 'tags') setTag(value);
-            if(col === 'modesOfPayment') setMode(value);
+            if (col === 'categories') setCategory(value);
+            if (col === 'places') setPlace(value);
+            if (col === 'tags') setTag(value);
+            if (col === 'modesOfPayment') setMode(value);
         }
     };
 
     const handlePromptConfirm = async (inputValue) => {
         if (!inputValue) return;
         const { type: promptType, targetCollection, targetLabel } = activePrompt || {};
-        
+
         if (promptType === 'quickAdd') {
             try {
                 await addDoc(collection(db, `ledgers/main-ledger/${targetCollection}`), { name: inputValue });
                 showToast(`${targetLabel} added!`);
-                if(targetCollection === 'categories') setCategory(inputValue);
-                if(targetCollection === 'places') setPlace(inputValue);
-                if(targetCollection === 'tags') setTag(inputValue);
-                if(targetCollection === 'modesOfPayment') setMode(inputValue);
+                if (targetCollection === 'categories') setCategory(inputValue);
+                if (targetCollection === 'places') setPlace(inputValue);
+                if (targetCollection === 'tags') setTag(inputValue);
+                if (targetCollection === 'modesOfPayment') setMode(inputValue);
             } catch (e) { console.error(e); showToast("Failed to add item.", true); }
         } else if (promptType === 'template') {
             // Template save logic
             const amountInRupees = parseFloat(amount);
             const multiplier = isProductRefund ? -1 : 1;
             const finalAmount = !isNaN(amountInRupees) ? Math.round(amountInRupees * 100) * multiplier : null;
-            
+
             const templateData = {
-                name: inputValue, expenseName: name, amount: finalAmount, 
+                name: inputValue, expenseName: name, amount: finalAmount,
                 type: isSettlement ? 'expense' : type, category, place, tag, modeOfPayment: mode, description,
-                payer: isIncome ? 'me' : payer, isReturn: isSettlement, 
+                payer: isIncome ? 'me' : payer, isReturn: isSettlement,
                 participants: isIncome ? [] : (isSettlement ? [selectedParticipants[0]] : selectedParticipants),
                 splitMethod: (isSettlement || isIncome) ? 'none' : splitMethod, splits: (isSettlement || isIncome) ? {} : splits,
-                groupId: formGroupId 
+                groupId: formGroupId
             };
-            try { 
-                await addDoc(collection(db, 'ledgers/main-ledger/templates'), templateData); 
-                showToast("Template saved successfully!"); 
-            } catch (error) { 
-                console.error(error); showToast("Failed to save template.", true); 
+            try {
+                await addDoc(collection(db, 'ledgers/main-ledger/templates'), templateData);
+                showToast("Template saved successfully!");
+            } catch (error) {
+                console.error(error); showToast("Failed to save template.", true);
             }
         }
         setActivePrompt(null);
@@ -509,8 +509,8 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         showToast("Autofilled details!");
     };
 
-    const handleTemplateSaveRequest = () => { 
-        setActivePrompt({ type: 'template', title: 'Save as Template', label: 'Template Name' }); 
+    const handleTemplateSaveRequest = () => {
+        setActivePrompt({ type: 'template', title: 'Save as Template', label: 'Template Name' });
     };
 
     const handleParticipantAdd = (uid) => setSelectedParticipants([...selectedParticipants, uid]);
@@ -534,26 +534,26 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         const amountInPaise = Math.round(parseFloat(amount) * 100);
         const multiplier = isProductRefund ? -1 : 1;
         const finalAmount = amountInPaise * multiplier;
-        
+
         let safeParticipants = selectedParticipants;
         if (isSettlement) {
-             // Settlement Logic: Ensure non-empty participants
-             if (!selectedParticipants || selectedParticipants.length === 0) {
-                 // Default to payer? No, settlement must have a recipient.
-                 // We rely on handleSubmit validation, but for safety, filter empty.
-             }
+            // Settlement Logic: Ensure non-empty participants
+            if (!selectedParticipants || selectedParticipants.length === 0) {
+                // Default to payer? No, settlement must have a recipient.
+                // We rely on handleSubmit validation, but for safety, filter empty.
+            }
         } else {
-             if (!selectedParticipants.length && payer === 'me') safeParticipants = []; // Just me
+            if (!selectedParticipants.length && payer === 'me') safeParticipants = []; // Just me
         }
-        
+
         if (!isSettlement && payer !== 'me' && !selectedParticipants.includes(payer) && includePayer) {
             safeParticipants = [...safeParticipants, payer];
         }
 
         let finalSplits = { ...splits };
         if (!isSettlement && !isIncome && splitMethod === 'equal') {
-             const involvedCount = splitAllocatorParticipants.length;
-             if (involvedCount > 0) {
+            const involvedCount = splitAllocatorParticipants.length;
+            if (involvedCount > 0) {
                 const absAmount = Math.abs(amountInPaise);
                 const share = Math.floor(absAmount / involvedCount);
                 const remainder = absAmount % involvedCount;
@@ -580,19 +580,20 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         const parentIds = linkedTransactionsData.map(t => t.id);
 
         const txnData = {
-            expenseName: name, amount: finalAmount, type: isSettlement ? 'expense' : type, 
-            category: category.startsWith('add_new') ? '' : category, 
-            place: place.startsWith('add_new') ? '' : place, 
+            expenseName: name, amount: finalAmount, type: isSettlement ? 'expense' : type,
+            category: category.startsWith('add_new') ? '' : category,
+            place: place.startsWith('add_new') ? '' : place,
             tag: tag.startsWith('add_new') ? '' : tag,
-            modeOfPayment: mode.startsWith('add_new') ? '' : mode, 
-            description, timestamp: Timestamp.fromDate(new Date(date)), 
-            payer: isIncome ? 'me' : payer, isReturn: isSettlement, 
+            modeOfPayment: mode.startsWith('add_new') ? '' : mode,
+            description, timestamp: Timestamp.fromDate(new Date(date)),
+            dateString: date,
+            payer: isIncome ? 'me' : payer, isReturn: isSettlement,
             participants: isIncome ? [] : (isSettlement ? [safeParticipants[0]] : safeParticipants),
             splitMethod: (isSettlement || isIncome) ? 'none' : splitMethod,
             splits: (isSettlement || isIncome) ? {} : finalSplits,
             linkedTransactions: linkedTransactionsData, parentTransactionIds: parentIds,
             parentTransactionId: parentIds.length > 0 ? parentIds[0] : null, isLinkedRefund: parentIds.length > 0,
-            groupId: formGroupId 
+            groupId: formGroupId
         };
 
         try {
@@ -605,16 +606,16 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 setShowSuccess(true);
                 setTimeout(() => { setShowSuccess(false); navigate('/history'); }, 1200);
             }
-        } catch(e) { console.error(e); showToast("Error saving: " + e.message, true); }
+        } catch (e) { console.error(e); showToast("Error saving: " + e.message, true); }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         const amountInRupees = parseFloat(amount);
         if (!name || isNaN(amountInRupees)) { showToast("Please enter valid name and amount", true); return; }
-        if (!isSettlement && !isIncome && !validation.isValid) { 
-            showToast(validation.message || "Please fix split errors.", true); 
-            return; 
+        if (!isSettlement && !isIncome && !validation.isValid) {
+            showToast(validation.message || "Please fix split errors.", true);
+            return;
         }
         if (!isEditMode) {
             const checkAmount = Math.round(amountInRupees * 100);
@@ -624,10 +625,10 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 if (isNaN(tDate.getTime())) return false;
                 return Math.abs(t.amount) === checkAmount && t.expenseName === name && tDate.toISOString().split('T')[0] === date;
             });
-            if (potentialDupe) { 
-                setDupeTxn(potentialDupe); 
-                setShowDupeModal(true); 
-                return; 
+            if (potentialDupe) {
+                setDupeTxn(potentialDupe);
+                setShowDupeModal(true);
+                return;
             }
         }
         saveTransactionLogic();
@@ -636,7 +637,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     const handleManualSwap = () => {
         const oldPayer = payer;
         const oldRecipient = selectedParticipants[0];
-        if(oldPayer && oldRecipient && oldRecipient !== oldPayer) {
+        if (oldPayer && oldRecipient && oldRecipient !== oldPayer) {
             setPayer(oldRecipient);
             setSelectedParticipants([oldPayer]);
             const invertedLinks = linkedTxns.map(l => ({ ...l, allocated: (parseFloat(l.allocated) * -1).toFixed(2) }));
@@ -647,20 +648,70 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     const forceSubmit = () => { setShowDupeModal(false); saveTransactionLogic(); };
 
     return {
-        formGroupId, setFormGroupId, type, setType, refundSubType, setRefundSubType, name, setName,
-        amount, setAmount, date, setDate, category, setCategory, place, setPlace, tag, setTag,
-        mode, setMode, description, setDescription, payer, setPayer, selectedParticipants, setSelectedParticipants,
-        linkedTxns, setLinkedTxns, tempSelectId, setTempSelectId, repaymentFilter, setRepaymentFilter,
-        splitMethod, setSplitMethod, splits, setSplits, includeMe, setIncludeMe, includePayer, setIncludePayer,
-        showDupeModal, setShowDupeModal, dupeTxn, setDupeTxn, activePrompt, setActivePrompt, suggestion, setSuggestion,
-        showSuccess, isRefundTab, isSettlement, isProductRefund, isIncome, groupTransactions, allParticipants,
-        groups, categories, places, tags, modesOfPayment, splitAllocatorParticipants, validation, eligibleParents,
-        handlePayerChange, handleRecipientChange, handleParticipantAdd, handleParticipantRemove, handleQuickAddRequest,
-        handlePromptConfirm, handleTemplateSaveRequest, handleSubmit, forceSubmit, applySuggestion, handleManualSwap,
-        handleLinkSelect, removeLinkedTxn, updateLinkedAllocation, handleAmountChange, getTxnDateStr, getName,
-        resetForm, handleTypeChange, handleRefundSubTypeChange, // NEW EXPORTS
-        totalAllocated: linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0),
-        allocationDiff: (parseFloat(amount) || 0) - linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0),
-        isAllocationValid: Math.abs((parseFloat(amount) || 0) - linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0)) < 0.05
+        // 1. Form Data (Values)
+        formData: {
+            formGroupId,
+            name, amount, date, category, place, tag, mode, description,
+            type, refundSubType, payer, selectedParticipants,
+            splitMethod, splits, includeMe, includePayer, repaymentFilter
+        },
+
+        // 2. Setters (Actions to change data)
+        setters: {
+            setFormGroupId,
+            setName, setAmount, setDate, setCategory, setPlace, setTag, setMode, setDescription,
+            setPayer, setSelectedParticipants, setSplitMethod, setSplits, setIncludeMe, setIncludePayer,
+            setRepaymentFilter, setType, setRefundSubType
+        },
+
+        // 3. UI State (Modals, Loading, Success)
+        ui: {
+            showDupeModal, setShowDupeModal, dupeTxn, setDupeTxn,
+            activePrompt, setActivePrompt,
+            suggestion, setSuggestion,
+            showSuccess,
+            // Computed booleans
+            isRefundTab, isSettlement, isProductRefund, isIncome
+        },
+
+        // 4. Linked Transaction Logic
+        links: {
+            items: linkedTxns,
+            set: setLinkedTxns,
+            tempId: tempSelectId,
+            setTempId: setTempSelectId,
+            handleSelect: handleLinkSelect,
+            remove: removeLinkedTxn,
+            updateAlloc: updateLinkedAllocation,
+            totalAllocated: linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0),
+            allocationDiff: (parseFloat(amount) || 0) - linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0),
+            isValid: Math.abs((parseFloat(amount) || 0) - linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0)) < 0.05
+        },
+
+        // 5. Participants & Data Sources
+        data: {
+            allParticipants,
+            splitAllocatorParticipants,
+            groupTransactions,
+            eligibleParents,
+            // Options from store
+            groups, categories, places, tags, modesOfPayment
+        },
+
+        // 6. High Level Actions
+        actions: {
+            handlePayerChange, handleRecipientChange,
+            handleParticipantAdd, handleParticipantRemove,
+            handleQuickAddRequest, handlePromptConfirm,
+            handleTemplateSaveRequest, handleManualSwap, applySuggestion,
+            handleSubmit, forceSubmit, resetForm,
+            handleTypeChange, handleRefundSubTypeChange,
+            handleAmountChange
+        },
+
+        // 7. Utilities
+        utils: {
+            getTxnDateStr, getName, validation
+        }
     };
 };

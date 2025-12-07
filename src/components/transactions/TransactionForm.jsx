@@ -88,8 +88,8 @@ const SearchableSelect = ({ label, value, onChange, options, placeholder, classN
                                 key={opt.value || idx}
                                 onClick={() => handleSelect(opt)}
                                 className={`px-4 py-2 cursor-pointer text-sm ${opt.className || ''} ${opt.value === value
-                                        ? 'bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-200 font-medium'
-                                        : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600'
+                                    ? 'bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-200 font-medium'
+                                    : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600'
                                     }`}
                             >
                                 {opt.label}
@@ -128,15 +128,20 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     const recipientOptions = useMemo(() => [{ value: "me", label: "You (me)" }, ...data.allParticipants.map(p => ({ value: p.uniqueId, label: p.name }))], [data.allParticipants]);
     const debtorOptions = useMemo(() => [{ value: '', label: '-- Show All --' }, ...data.allParticipants.map(p => ({ value: p.uniqueId, label: p.name }))], [data.allParticipants]);
 
+    // Destructure for dependencies
+    const { eligibleParents } = data;
+    const { getName, getTxnDateStr } = utils;
+    const { isSettlement } = ui;
+
     const linkableOptions = useMemo(() => {
         return [
             { value: '', label: '-- Select Expense to Link --' },
-            ...data.eligibleParents.map(t => {
-                if (!ui.isSettlement) {
+            ...eligibleParents.map(t => {
+                if (!isSettlement) {
                     const rem = t.netAmount !== undefined ? t.netAmount : t.amount;
                     return {
                         value: t.id,
-                        label: `${t.expenseName} (Refundable: ₹${(rem / 100).toFixed(2)}) - ${utils.getTxnDateStr(t)}`,
+                        label: `${t.expenseName} (Refundable: ₹${(rem / 100).toFixed(2)}) - ${getTxnDateStr(t)}`,
                         className: 'text-gray-800 dark:text-gray-200',
                         data: t
                     };
@@ -144,16 +149,17 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                 const isOwedToMe = t.relationType === 'owed_to_me';
                 const sign = isOwedToMe ? '+' : '-';
                 const colorClass = isOwedToMe ? 'text-green-600 dark:text-green-400 font-medium' : 'text-red-600 dark:text-red-400 font-medium';
-                const prefix = isOwedToMe ? `[${utils.getName(t.counterParty)} owes You] ` : `[You owe ${utils.getName(t.counterParty)}] `;
+                const prefix = isOwedToMe ? `[${getName(t.counterParty)} owes You] ` : `[You owe ${getName(t.counterParty)}] `;
                 return {
                     value: t.id,
-                    label: `${prefix}${t.expenseName} (${sign}₹${(t.outstanding / 100).toFixed(2)}) - ${utils.getTxnDateStr(t)}`,
+                    label: `${prefix}${t.expenseName} (${sign}₹${(t.outstanding / 100).toFixed(2)}) - ${getTxnDateStr(t)}`,
                     className: colorClass,
                     data: t
                 };
             }),
         ];
-    }, [data.eligibleParents, utils.getName, utils.getTxnDateStr, ui.isSettlement]);
+    }, [eligibleParents, getName, getTxnDateStr, isSettlement]);
+
 
     return (
         <>

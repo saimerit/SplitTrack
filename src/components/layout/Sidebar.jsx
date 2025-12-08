@@ -8,7 +8,7 @@ import {
 import useAppStore from '../../store/useAppStore';
 import OfflineBanner from './OfflineBanner';
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, onClose }) => {
   const { groups, activeGroupId, setActiveGroupId } = useAppStore();
   const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
 
@@ -29,6 +29,14 @@ const Sidebar = () => {
   };
 
   return (
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={onClose}
+        ></div>
+      )}
     <nav className="hidden md:flex md:flex-col md:w-64 h-full bg-white border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700">
       
       <OfflineBanner />
@@ -88,6 +96,7 @@ const Sidebar = () => {
         <NavLink to="/settings" className={navClass}><Settings size={20}/> Settings</NavLink>
       </div>
     </nav>
+    </>
   );
 };
 

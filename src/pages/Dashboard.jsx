@@ -124,13 +124,12 @@ const Dashboard = () => {
     });
   };
 
-  // --- Who Owes Whom Logic (Fixed Dependency Issue) ---
+  // --- Who Owes Whom Logic ---
   const debtSummaryHtml = useMemo(() => {
      if (!stats) return "";
      const lines = Object.entries(stats.myPersonalBalances)
         .filter(([, val]) => Math.abs(val) > 1)
         .map(([uid, val]) => {
-            // FIX: Inline lookup to avoid external dependency in useMemo
             const p = participants.find(x => x.uniqueId === uid);
             const name = p ? p.name : uid;
             
@@ -206,7 +205,6 @@ const Dashboard = () => {
             ) : (
               Object.entries(stats.myPersonalBalances).map(([uid, val]) => {
                 if (Math.abs(val) < 1) return null;
-                // Lookup logic was moved to useMemo, here we just display
                 const p = participants.find(x => x.uniqueId === uid);
                 const name = p ? p.name : uid;
                 
@@ -235,7 +233,8 @@ const Dashboard = () => {
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700 md:col-span-1">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">My Share by Category</h3>
-          <div className="h-64 relative">
+          {/* UPDATED: Responsive Height */}
+          <div className="h-48 md:h-64 relative">
             {stats.chartData.length > 0 ? (
               <CategoryDoughnut data={stats.chartData} />
             ) : (
@@ -246,7 +245,6 @@ const Dashboard = () => {
 
       </div>
 
-      {/* Who Owes Whom Modal */}
       <ConfirmModal 
         isOpen={showSummary}
         title="Who Owes Whom?"

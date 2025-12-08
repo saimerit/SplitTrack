@@ -14,7 +14,7 @@ import NetBalanceLine from '../components/charts/NetBalanceLine';
 import CategoryDoughnut from '../components/charts/CategoryDoughnut'; 
 import { useTheme } from '../hooks/useTheme';
 import Button from '../components/common/Button';
-import Loader from '../components/common/Loader'; // Reusing Loader
+import Loader from '../components/common/Loader'; 
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, PointElement, LineElement, Filler);
 
@@ -30,7 +30,6 @@ const Analytics = () => {
   const workerRef = useRef(null);
 
   useEffect(() => {
-        // 1. Initialize Worker
         workerRef.current = new Worker(new URL('../workers/analytics.worker.js', import.meta.url), { type: 'module' });
 
         workerRef.current.onmessage = (event) => {
@@ -46,7 +45,6 @@ const Analytics = () => {
     useEffect(() => {
     if (!workerRef.current) return;
 
-    // async state update avoids ESLint warning
     setTimeout(() => setIsCalculating(true), 0);
 
     const serializedTransactions = transactions
@@ -68,11 +66,6 @@ const Analytics = () => {
 
   if (isCalculating || !stats) return <Loader />;
 
-  // ... (Rest of the render logic remains EXACTLY the same, utilizing 'stats' object) ...
-  // [Copy the existing render code from Analytics.jsx starting from "const generatePDF = ..."]
-  
-  // -- FOR BREVITY, I AM INCLUDING THE RENDER PART, ASSUMING YOU PASTE IT BELOW --
-  
   const generatePDF = () => {
     const doc = new jsPDF();
     doc.setFontSize(20);
@@ -90,7 +83,6 @@ const Analytics = () => {
         ['Highest Spend Month', `${stats.peakSpendMonth} (${formatCurrency(stats.peakSpendAmount*100)})`]
       ],
     });
-    // ... (rest of PDF logic)
     doc.save(`SplitTrack_Report_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
@@ -181,12 +173,12 @@ const Analytics = () => {
 
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Net Balance History</h3>
-          <div className="h-64 relative">
+          {/* UPDATED: Responsive Height */}
+          <div className="h-48 md:h-64 relative">
             <NetBalanceLine labels={stats.netBalanceChart.labels} data={stats.netBalanceChart.data} />
           </div>
       </div>
 
-      {/* Forecast & Heatmap */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
          <div className="space-y-6">
              <ForecastCard title="Spending Forecast" spent={stats.currentMonthSpend} projected={stats.projectedSpend} percent={stats.forecastSpendPercent} colorClass="bg-sky-500"/>
@@ -201,7 +193,8 @@ const Analytics = () => {
         </ChartCard>
         <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">My Spending by Category</h3>
-            <div className="h-64 relative">
+            {/* UPDATED: Responsive Height */}
+            <div className="h-48 md:h-64 relative">
                 {stats.categoryData.length > 0 ? <CategoryDoughnut data={stats.categoryData} /> : <div className="flex items-center justify-center h-full text-gray-400">No data</div>}
             </div>
         </div>
@@ -213,7 +206,8 @@ const Analytics = () => {
          </ChartCard>
          <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
              <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Spending by Place</h3>
-             <div className="h-64 relative">
+             {/* UPDATED: Responsive Height */}
+             <div className="h-48 md:h-64 relative">
                  <Bar data={stats.placeData} options={barOptions} />
              </div>
          </div>
@@ -222,7 +216,6 @@ const Analytics = () => {
   );
 };
 
-// ... (Sub-components StatCard, ChartCard, ForecastCard, HeatmapPanel remain unchanged)
 const StatCard = ({ title, value, subValue, color }) => (
   <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
     <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</h3>
@@ -231,10 +224,11 @@ const StatCard = ({ title, value, subValue, color }) => (
   </div>
 );
 
+// UPDATED: ChartCard component now uses responsive height
 const ChartCard = ({ title, children }) => (
   <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
     <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">{title}</h3>
-    <div className="relative h-64">
+    <div className="relative h-48 md:h-64">
       {children}
     </div>
   </div>

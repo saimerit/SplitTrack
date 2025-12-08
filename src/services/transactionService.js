@@ -190,9 +190,9 @@ export const fetchPaginatedTransactions = async (pageSize, lastDoc = null, filte
   try {
     const colRef = collection(db, COLLECTION_PATH);
 
-    // 1. Base Query: Filter soft-deleted items AND sort by time
-    // NOTE: This specific line REQUIRES the Index mentioned above.
-    let q = query(colRef, where("isDeleted", "==", false), orderBy('timestamp', 'desc'));
+    // 1. Base Query: Sort by time (Removing 'isDeleted' server-side filter to bypass Composite Index requirement)
+    // NOTE: We fetch all and filter client-side. This avoids the "isDeleted + timestamp" index error.
+    let q = query(colRef, orderBy('timestamp', 'desc'));
 
     // 2. Apply Filters
     if (filters.tag) {
@@ -205,20 +205,20 @@ export const fetchPaginatedTransactions = async (pageSize, lastDoc = null, filte
       const end = new Date(filters.date);
       end.setHours(23, 59, 59, 999);
 
-      // FIX: Use .getTime() because you store dates as Numbers (milliseconds)
+      // FIX: Use Timestamp.fromMillis because you store dates as Firestore Timestamps
       q = query(q,
-        where('timestamp', '>=', start.getTime()),
-        where('timestamp', '<=', end.getTime())
+        where('timestamp', '>=', Timestamp.fromMillis(start.getTime())),
+        where('timestamp', '<=', Timestamp.fromMillis(end.getTime()))
       );
     } else if (filters.month) {
       const [year, month] = filters.month.split('-');
       const start = new Date(year, month - 1, 1);
       const end = new Date(year, month, 0, 23, 59, 59);
 
-      // FIX: Use .getTime() here too
+      // FIX: Use Timestamp.fromMillis here too
       q = query(q,
-        where('timestamp', '>=', start.getTime()),
-        where('timestamp', '<=', end.getTime())
+        where('timestamp', '>=', Timestamp.fromMillis(start.getTime())),
+        where('timestamp', '<=', Timestamp.fromMillis(end.getTime()))
       );
     }
 
@@ -227,18 +227,33 @@ export const fetchPaginatedTransactions = async (pageSize, lastDoc = null, filte
       q = query(q, startAfter(lastDoc));
     }
 
-    q = query(q, limit(pageSize));
+    // Fetch slightly more to ensure we have enough after active filtering
+    // (Optimization: Buffer for deleted items)
+    q = query(q, limit(pageSize * 1.5));
 
     const snapshot = await getDocs(q);
 
+    // 1. Filter Snapshots directly to keep reference to the Doc objects
+    const activeSnapshots = snapshot.docs.filter(d => !d.data().isDeleted);
+
+    // 2. Slice to page size
+    const visibleSnapshots = activeSnapshots.slice(0, pageSize);
+
+    // 3. Determine Cursor
+    // If we have visible items, the cursor is the last VISIBLE item. 
+    // (This ensures that if we fetched 15 valid items but showed 10, the next page starts after #10 to pick up #11)
+    // If NO visible items (all trash), cursor is the last SCANNED item (to advance past the trash pile).
+    const lastVisibleCursor = visibleSnapshots.length > 0
+      ? visibleSnapshots[visibleSnapshots.length - 1]
+      : snapshot.docs[snapshot.docs.length - 1];
+
     return {
-      data: snapshot.docs.map(d => ({ id: d.id, ...d.data() })),
-      lastDoc: snapshot.docs[snapshot.docs.length - 1],
-      hasMore: snapshot.docs.length === pageSize
+      data: visibleSnapshots.map(d => ({ id: d.id, ...d.data() })),
+      lastDoc: lastVisibleCursor,
+      hasMore: snapshot.docs.length >= pageSize // Approximate check
     };
   } catch (error) {
     console.error("Pagination Error:", error);
-    // If you see the index error, throwing it ensures the UI knows something went wrong
     throw error;
   }
 };

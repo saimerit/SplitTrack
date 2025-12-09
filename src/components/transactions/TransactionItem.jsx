@@ -2,23 +2,62 @@ import { useState, useEffect } from 'react';
 import { 
   Trash2, Edit2, X, RefreshCw, ChevronRight, ChevronDown, 
   Utensils, ShoppingCart, Car, Zap, Smartphone, Plane, 
-  IceCream, BookOpen, Coffee, Package, HandCoins, Calendar, MapPin, Tag
+  IceCream, BookOpen, Coffee, Package, HandCoins, Calendar, MapPin, Tag, Cookie
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 
 const getCategoryIcon = (category) => {
   const cat = (category || '').toLowerCase();
-  if (cat.includes('settlement') || cat.includes('repayment') || cat.includes('refund')) return <HandCoins size={20} className="text-emerald-600" />;
-  if (cat.includes('amazon') || cat.includes('delivery')) return <Package size={20} className="text-orange-600" />;
-  if (cat.includes('coffee') || cat.includes('tea')) return <Coffee size={20} className="text-amber-700" />;
-  if (cat.includes('dessert') || cat.includes('ice cream')) return <IceCream size={20} className="text-pink-500" />;
-  if (cat.includes('stationary') || cat.includes('book')) return <BookOpen size={20} className="text-indigo-500" />;
-  if (cat.includes('food')) return <Utensils size={20} className="text-orange-500" />;
-  if (cat.includes('grocer')) return <ShoppingCart size={20} className="text-green-500" />;
-  if (cat.includes('transport') || cat.includes('fuel')) return <Car size={20} className="text-blue-500" />;
-  if (cat.includes('bill')) return <Zap size={20} className="text-yellow-500" />;
-  if (cat.includes('shopping')) return <Smartphone size={20} className="text-purple-500" />;
-  if (cat.includes('travel')) return <Plane size={20} className="text-sky-500" />;
+
+  // Repayment, Return, Settlement -> HandCoins
+  if (cat.includes('settlement') || cat.includes('repayment') || cat.includes('refund') || cat.includes('return')) 
+    return <HandCoins size={20} className="text-emerald-600" />;
+
+  // Beverages, Drinks, Coffee -> Coffee
+  if (cat.includes('coffee') || cat.includes('tea') || cat.includes('beverage') || cat.includes('drink')) 
+    return <Coffee size={20} className="text-amber-700" />;
+
+  // Desserts, Sweets, Ice Cream -> IceCream
+  if (cat.includes('dessert') || cat.includes('desert') || cat.includes('ice cream') || cat.includes('sweet')) 
+    return <IceCream size={20} className="text-pink-500" />;
+
+  // Snacks, Chips -> Cookie
+  if (cat.includes('snack') || cat.includes('chip') || cat.includes('biscuit') || cat.includes('cookie')) 
+    return <Cookie size={20} className="text-orange-400" />;
+
+  // Courses, Education, Books -> BookOpen
+  if (cat.includes('stationary') || cat.includes('book') || cat.includes('course') || cat.includes('education')) 
+    return <BookOpen size={20} className="text-indigo-500" />;
+
+  // Amazon, Delivery -> Package
+  if (cat.includes('amazon') || cat.includes('delivery')) 
+    return <Package size={20} className="text-orange-600" />;
+
+  // General Food -> Utensils
+  if (cat.includes('food')) 
+    return <Utensils size={20} className="text-orange-500" />;
+
+  // Groceries -> ShoppingCart
+  if (cat.includes('grocer')) 
+    return <ShoppingCart size={20} className="text-green-500" />;
+
+  // Transport, Fuel -> Car
+  if (cat.includes('transport') || cat.includes('fuel')) 
+    return <Car size={20} className="text-blue-500" />;
+
+  // Bills, Utilities -> Zap
+  if (cat.includes('bill') || cat.includes('recharge')) 
+    return <Zap size={20} className="text-yellow-500" />;
+
+  // Shopping -> Smartphone
+  if (cat.includes('shopping') || cat.includes('cloth')) 
+    return <Smartphone size={20} className="text-purple-500" />;
+
+  // Travel -> Plane
+  if (cat.includes('travel') || cat.includes('trip')) 
+    return <Plane size={20} className="text-sky-500" />;
+
+  // Default
   return <div className="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700" />; 
 };
 

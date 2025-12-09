@@ -13,7 +13,6 @@ import ConfirmModal from '../modals/ConfirmModal';
 import PromptModal from '../modals/PromptModal';
 import SuccessAnimation from '../common/SuccessAnimation';
 
-// --- INTERNAL COMPONENT: SearchableSelect ---
 const SearchableSelect = ({ label, value, onChange, options, placeholder, className, disabled }) => {
     const [isOpen, setIsOpen] = useState(false);
     const wrapperRef = useRef(null);
@@ -21,9 +20,7 @@ const SearchableSelect = ({ label, value, onChange, options, placeholder, classN
 
     useEffect(() => {
         setTimeout(() => {
-            if (!value) {
-                setQuery("");
-            } else {
+            if (!value) { setQuery(""); } else {
                 const selected = options.find(o => o.value === value);
                 if (selected) setQuery(selected.label);
             }
@@ -35,10 +32,7 @@ const SearchableSelect = ({ label, value, onChange, options, placeholder, classN
         const lowerQuery = query.toLowerCase();
         const selected = options.find(o => o.value === value);
         if (selected && selected.label.toLowerCase() === lowerQuery) return options;
-
-        return options.filter(opt =>
-            opt.label.toLowerCase().includes(lowerQuery)
-        );
+        return options.filter(opt => opt.label.toLowerCase().includes(lowerQuery));
     }, [query, options, value]);
 
     const handleSelect = (option) => {
@@ -52,8 +46,7 @@ const SearchableSelect = ({ label, value, onChange, options, placeholder, classN
             if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
                 setIsOpen(false);
                 const selected = options.find(o => o.value === value);
-                if (selected) setQuery(selected.label);
-                else if (!value) setQuery('');
+                if (selected) setQuery(selected.label); else if (!value) setQuery('');
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
@@ -64,51 +57,25 @@ const SearchableSelect = ({ label, value, onChange, options, placeholder, classN
         <div className={`relative ${className}`} ref={wrapperRef}>
             {label && <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>}
             <div className="relative">
-                <input
-                    type="text"
-                    value={query}
-                    onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
-                    onFocus={() => setIsOpen(true)}
-                    placeholder={placeholder || "Select..."}
-                    disabled={disabled}
-                    className="block w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
-                />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
-                    <ChevronDown size={16} />
-                </div>
+                <input type="text" value={query} onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }} onFocus={() => setIsOpen(true)} placeholder={placeholder || "Select..."} disabled={disabled} className="block w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200" />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400"><ChevronDown size={16} /></div>
             </div>
-
             {isOpen && !disabled && (
                 <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                     {filteredOptions.length > 0 ? (
                         filteredOptions.map((opt, idx) => (
-                            <div
-                                key={opt.value || idx}
-                                onClick={() => handleSelect(opt)}
-                                className={`px-4 py-2 cursor-pointer text-sm ${opt.className || ''} ${opt.value === value
-                                    ? 'bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-200 font-medium'
-                                    : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600'
-                                    }`}
-                            >
-                                {opt.label}
-                            </div>
+                            <div key={opt.value || idx} onClick={() => handleSelect(opt)} className={`px-4 py-2 cursor-pointer text-sm ${opt.className || ''} ${opt.value === value ? 'bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-200 font-medium' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600'}`}>{opt.label}</div>
                         ))
-                    ) : (
-                        <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">No matches found</div>
-                    )}
+                    ) : (<div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">No matches found</div>)}
                 </div>
             )}
         </div>
     );
 };
 
-// --- MAIN COMPONENT ---
 const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     const navigate = useNavigate();
-
-    const {
-        formData, setters, ui, links, data, actions, utils
-    } = useTransactionFormLogic(initialData, isEditMode);
+    const { formData, setters, ui, links, data, actions, utils } = useTransactionFormLogic(initialData, isEditMode);
 
     const generateOptions = (items, collectionName, label) => [
         { value: "", label: "-- Select --" },
@@ -120,7 +87,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     const placeOptions = useMemo(() => generateOptions(data.places, 'places', 'Place'), [data.places]);
     const tagOptions = useMemo(() => generateOptions(data.tags, 'tags', 'Tag'), [data.tags]);
     const modeOptions = useMemo(() => generateOptions(data.modesOfPayment, 'modesOfPayment', 'Mode'), [data.modesOfPayment]);
-
     const payerOptions = useMemo(() => [{ value: "me", label: "You (me)" }, ...data.allParticipants.map(p => ({ value: p.uniqueId, label: p.name }))], [data.allParticipants]);
     const recipientOptions = useMemo(() => [{ value: "me", label: "You (me)" }, ...data.allParticipants.map(p => ({ value: p.uniqueId, label: p.name }))], [data.allParticipants]);
     const debtorOptions = useMemo(() => [{ value: '', label: '-- Show All --' }, ...data.allParticipants.map(p => ({ value: p.uniqueId, label: p.name }))], [data.allParticipants]);
@@ -135,35 +101,22 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
             ...eligibleParents.map(t => {
                 if (!isSettlement) {
                     const rem = t.netAmount !== undefined ? t.netAmount : t.amount;
-                    return {
-                        value: t.id,
-                        label: `${t.expenseName} (Refundable: ₹${(rem / 100).toFixed(2)}) - ${getTxnDateStr(t)}`,
-                        className: 'text-gray-800 dark:text-gray-200',
-                        data: t
-                    };
+                    return { value: t.id, label: `${t.expenseName} (Refundable: ₹${(rem / 100).toFixed(2)}) - ${getTxnDateStr(t)}`, className: 'text-gray-800 dark:text-gray-200', data: t };
                 }
                 const isOwedToMe = t.relationType === 'owed_to_me';
                 const sign = isOwedToMe ? '+' : '-';
                 const colorClass = isOwedToMe ? 'text-green-600 dark:text-green-400 font-medium' : 'text-red-600 dark:text-red-400 font-medium';
                 const prefix = isOwedToMe ? `[${getName(t.counterParty)} owes You] ` : `[You owe ${getName(t.counterParty)}] `;
-                return {
-                    value: t.id,
-                    label: `${prefix}${t.expenseName} (${sign}₹${(t.outstanding / 100).toFixed(2)}) - ${getTxnDateStr(t)}`,
-                    className: colorClass,
-                    data: t
-                };
+                return { value: t.id, label: `${prefix}${t.expenseName} (${sign}₹${(t.outstanding / 100).toFixed(2)}) - ${getTxnDateStr(t)}`, className: colorClass, data: t };
             }),
         ];
     }, [eligibleParents, getName, getTxnDateStr, isSettlement]);
 
-
     return (
         <>
             {ui.showSuccess && <SuccessAnimation message={isEditMode ? "Transaction Updated!" : "Transaction Logged!"} />}
-            
-            {/* UPDATED: Responsive padding (p-4 sm:p-6 md:p-8) */}
             <form onSubmit={actions.handleSubmit} className="max-w-7xl mx-auto bg-white dark:bg-gray-800 p-4 sm:p-6 md:p-8 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-
+                
                 {/* Space Switcher */}
                 <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-sky-50 dark:bg-sky-900/10 p-3 rounded-lg border border-sky-100 dark:border-sky-900 mb-2 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -195,12 +148,15 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
                 {ui.isRefundTab && (
                     <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-                        <div className="flex gap-4">
-                            <button type="button" onClick={() => actions.handleRefundSubTypeChange('product')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm border ${!ui.isSettlement ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
-                                <RefreshCw size={16} /> Product Refund
+                        {/* FIX: Stacked buttons on mobile to fix squishing */}
+                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                            <button type="button" onClick={() => actions.handleRefundSubTypeChange('product')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${!ui.isSettlement ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
+                                <RefreshCw size={18} className="shrink-0" />
+                                <span>Product Refund</span>
                             </button>
-                            <button type="button" onClick={() => actions.handleRefundSubTypeChange('settlement')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm border ${ui.isSettlement ? 'bg-purple-100 border-purple-500 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
-                                <HandCoins size={16} /> Peer Settlement
+                            <button type="button" onClick={() => actions.handleRefundSubTypeChange('settlement')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${ui.isSettlement ? 'bg-purple-100 border-purple-500 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
+                                <HandCoins size={18} className="shrink-0" />
+                                <span>Peer Settlement</span>
                             </button>
                         </div>
                     </div>
@@ -252,20 +208,11 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                             let borderColor = 'border-gray-300 dark:border-gray-600';
 
                             if (link.relationType === 'product_refund') {
-                                textColor = 'text-green-700 dark:text-green-400 font-medium';
-                                bgColor = 'bg-green-50 dark:bg-green-900/20';
-                                borderColor = 'border-green-200 dark:border-green-800';
+                                textColor = 'text-green-700 dark:text-green-400 font-medium'; bgColor = 'bg-green-50 dark:bg-green-900/20'; borderColor = 'border-green-200 dark:border-green-800';
                             } else {
                                 const isOwedToMe = link.relationType === 'owed_to_me';
-                                if (isOwedToMe) {
-                                    textColor = 'text-green-700 dark:text-green-400 font-medium';
-                                    bgColor = 'bg-green-50 dark:bg-green-900/20';
-                                    borderColor = 'border-green-200 dark:border-green-800';
-                                } else {
-                                    textColor = 'text-red-700 dark:text-red-400 font-medium';
-                                    bgColor = 'bg-red-50 dark:bg-red-900/20';
-                                    borderColor = 'border-red-200 dark:border-red-800';
-                                }
+                                if (isOwedToMe) { textColor = 'text-green-700 dark:text-green-400 font-medium'; bgColor = 'bg-green-50 dark:bg-green-900/20'; borderColor = 'border-green-200 dark:border-green-800'; } 
+                                else { textColor = 'text-red-700 dark:text-red-400 font-medium'; bgColor = 'bg-red-50 dark:bg-red-900/20'; borderColor = 'border-red-200 dark:border-red-800'; }
                             }
 
                             return (
@@ -288,12 +235,10 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                 {/* Basic Fields */}
                 <Input label="Amount (₹)" type="number" step="0.01" value={formData.amount} onChange={actions.handleAmountChange} required />
                 <Input label="Date" type="date" value={formData.date} onChange={e => setters.setDate(e.target.value)} required />
-
                 <SearchableSelect label="Category" value={formData.category} onChange={e => actions.handleQuickAddRequest(e.target.value, 'categories', 'Category')} options={categoryOptions} />
                 <SearchableSelect label="Place" value={formData.place} onChange={e => actions.handleQuickAddRequest(e.target.value, 'places', 'Place')} options={placeOptions} />
                 <SearchableSelect label="Tag" value={formData.tag} onChange={e => actions.handleQuickAddRequest(e.target.value, 'tags', 'Tag')} options={tagOptions} />
                 <SearchableSelect label="Mode" value={formData.mode} onChange={e => actions.handleQuickAddRequest(e.target.value, 'modesOfPayment', 'Mode')} options={modeOptions} />
-
                 <Input label="Description" value={formData.description} onChange={e => setters.setDescription(e.target.value)} className="col-span-full" />
 
                 {/* Inclusion Checks */}
@@ -328,27 +273,18 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                     </>
                 )}
 
-                {/* UPDATED: Mobile-responsive button group */}
+                {/* Mobile-responsive button group */}
                 <div className="col-span-full flex flex-col sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
                     <div className="flex gap-3 sm:contents">
-                        <Button type="button" variant="ghost" onClick={actions.resetForm} className="px-3 flex-none" title="Reset Form">
-                            <RefreshCw size={20} />
-                        </Button>
-                        <Button type="button" variant="secondary" onClick={() => navigate(-1)} className="flex-1 py-3 text-sm sm:text-base">
-                            Cancel
-                        </Button>
+                        <Button type="button" variant="ghost" onClick={actions.resetForm} className="px-3 flex-none" title="Reset Form"><RefreshCw size={20} /></Button>
+                        <Button type="button" variant="secondary" onClick={() => navigate(-1)} className="flex-1 py-3 text-sm sm:text-base">Cancel</Button>
                     </div>
-
                     {!isEditMode && (
                         <Button type="button" variant="secondary" onClick={actions.handleTemplateSaveRequest} className="flex-1 py-3 text-sm sm:text-base">
-                            <span className="sm:hidden">Save Template</span>
-                            <span className="hidden sm:inline">Save as Template</span>
+                            <span className="sm:hidden">Save Template</span><span className="hidden sm:inline">Save as Template</span>
                         </Button>
                     )}
-                    
-                    <Button type="submit" className="flex-1 sm:grow-2 py-3 text-base sm:text-lg shadow-md">
-                        {isEditMode ? 'Update' : 'Log Transaction'}
-                    </Button>
+                    <Button type="submit" className="flex-1 sm:grow-2 py-3 text-base sm:text-lg shadow-md">{isEditMode ? 'Update' : 'Log Transaction'}</Button>
                 </div>
             </form>
 

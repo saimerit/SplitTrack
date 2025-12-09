@@ -39,12 +39,7 @@ const History = () => {
   const loadTransactions = async (reset = false) => {
     setLoading(true);
     try {
-      // Determine cursor: If reset, null. Else use currentLastDoc (which is the end of the current page)
-      // Logic fix: currentLastDoc is the cursor FOR THE NEXT PAGE.
-      // If resetting, cursor is null.
-      // If Next Page, cursor is currentLastDoc.
       const cursor = reset ? null : currentLastDoc;
-
       const result = await fetchPaginatedTransactions(
         Number(pageSize),
         cursor,
@@ -69,14 +64,11 @@ const History = () => {
   };
 
   // --- Effects ---
-
-  // 1. Initial Load & Refetch on Filter Change
   useEffect(() => {
     loadTransactions(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageSize, filterTag, filterDate, filterMonth]);
 
-  // 2. Keyboard shortcut for Search
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -89,31 +81,19 @@ const History = () => {
   }, []);
 
   // --- Handlers ---
-
   const handleNextPage = () => {
     if (!currentLastDoc) return;
-    // Save current cursor to stack so we can go back to it
     setPageStack(prev => [...prev, currentLastDoc]);
     loadTransactions(false);
   };
 
   const handlePrevPage = async () => {
     if (pageStack.length === 0) return;
-
-    // We need to fetch the page BEFORE the current one.
-    // The stack holds cursors for [Page2Start, Page3Start...].
-    // To go back, we pop the current PageStart, and use the one before it.
-
     const newStack = [...pageStack];
-    newStack.pop(); // Remove the cursor that got us to the *current* page
-
-    // The cursor for the *previous* page is now the last one in the stack. 
-    // If empty, it means Page 1 (null cursor).
+    newStack.pop(); 
     const prevCursor = newStack.length > 0 ? newStack[newStack.length - 1] : null;
-
     setPageStack(newStack);
 
-    // Manual Fetch with explicit cursor
     setLoading(true);
     try {
       const result = await fetchPaginatedTransactions(
@@ -132,7 +112,6 @@ const History = () => {
   };
 
   const requestDelete = (id, parentId) => {
-    // Check local transactions for children
     const hasChildren = localTransactions.some(t =>
       t.parentTransactionId === id || (t.parentTransactionIds && t.parentTransactionIds.includes(id))
     );
@@ -147,7 +126,6 @@ const History = () => {
     if (!deleteData) return;
     try {
       await deleteTransaction(deleteData.id, deleteData.parentId);
-      // Remove locally to update UI instantly
       setLocalTransactions(prev => prev.filter(t => t.id !== deleteData.id));
       showToast("Transaction deleted.");
     } catch (error) {
@@ -160,32 +138,31 @@ const History = () => {
   const handleEdit = (txn) => navigate('/add', { state: { ...txn, isEditMode: true } });
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-20 md:pb-0">
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">History</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">History</h2>
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 w-full md:w-auto">
           <button
             onClick={() => setShowSearch(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:border-sky-500 transition-colors"
+            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:border-sky-500 transition-colors"
           >
             <Search size={16} /> <span>Search</span>
             <span className="hidden sm:inline-block bg-gray-100 dark:bg-gray-700 px-1.5 rounded text-xs border border-gray-200 dark:border-gray-600">⌘K</span>
           </button>
-          <Button onClick={() => exportToCSV(localTransactions, participantsLookup)} className="flex items-center gap-2 bg-green-600 hover:bg-green-700">
-            <Download size={16} /> Export View
+          <Button onClick={() => exportToCSV(localTransactions, participantsLookup)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700">
+            <Download size={16} /> <span className="hidden sm:inline">Export View</span><span className="sm:hidden">Export</span>
           </Button>
         </div>
       </div>
 
-      {/* --- Filter Bar with Pagination Control --- */}
+      {/* --- Filter Bar --- */}
       <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Select label="Filter by Tag" value={filterTag} onChange={e => setFilterTag(e.target.value)} options={[{ value: '', label: 'All Tags' }, ...tags.map(t => ({ value: t.name, label: t.name }))]} />
           <Input label="Filter by Date" type="date" value={filterDate} onChange={e => { setFilterDate(e.target.value); setFilterMonth(''); }} />
           <Input label="Filter by Month" type="month" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setFilterDate(''); }} />
-
-          {/* Rows Per Page Dropdown */}
           <Select
             label="Rows per page"
             value={pageSize}
@@ -199,11 +176,7 @@ const History = () => {
           />
         </div>
         <div className="flex justify-end">
-          <Button
-            variant="secondary"
-            onClick={() => { setFilterTag(''); setFilterDate(''); setFilterMonth(''); }}
-            className="text-xs px-4"
-          >
+          <Button variant="secondary" onClick={() => { setFilterTag(''); setFilterDate(''); setFilterMonth(''); }} className="text-xs px-4">
             Clear Filters
           </Button>
         </div>
@@ -221,7 +194,6 @@ const History = () => {
           <div className="p-8 text-center text-gray-500">No transactions found.</div>
         ) : (
           localTransactions.map(txn => {
-            // Note: Linked refunds might be on other pages, so we only show what's loaded.
             const linkedRefunds = localTransactions.filter(t =>
               t.parentTransactionId === txn.id || (t.parentTransactionIds && t.parentTransactionIds.includes(txn.id))
             );
@@ -242,27 +214,16 @@ const History = () => {
 
       {/* --- Pagination Controls --- */}
       <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700">
-        <Button
-          variant="secondary"
-          onClick={handlePrevPage}
-          disabled={pageStack.length === 0 || loading}
-          className="flex items-center gap-2"
-        >
-          <ChevronLeft size={16} /> Previous
+        <Button variant="secondary" onClick={handlePrevPage} disabled={pageStack.length === 0 || loading} className="flex items-center gap-2 text-sm px-3">
+          <ChevronLeft size={16} /> <span className="hidden sm:inline">Previous</span>
         </Button>
 
         <span className="text-sm text-gray-500 dark:text-gray-400">
-          {/* Show "Page 1" if stack empty, else stack length + 1 */}
           Page {pageStack.length + 1}
         </span>
 
-        <Button
-          variant="secondary"
-          onClick={handleNextPage}
-          disabled={!hasMore || loading}
-          className="flex items-center gap-2"
-        >
-          Next <ChevronRight size={16} />
+        <Button variant="secondary" onClick={handleNextPage} disabled={!hasMore || loading} className="flex items-center gap-2 text-sm px-3">
+          <span className="hidden sm:inline">Next</span> <ChevronRight size={16} />
         </Button>
       </div>
 

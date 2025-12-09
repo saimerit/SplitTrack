@@ -18,18 +18,9 @@ const Calendar = () => {
 
     transactions.forEach(txn => {
       if (!txn.timestamp) return;
-      
-      // --- FIX: Safe Date Parsing with Optional Catch Binding ---
       let d;
-      try {
-        d = txn.timestamp.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp);
-      } catch {
-        // Fixed: Removed (e) to satisfy ESLint "no-unused-vars"
-        return; // Skip invalid dates
-      }
-      
+      try { d = txn.timestamp.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp); } catch { return; }
       if (isNaN(d.getTime())) return;
-      // ----------------------------------------------------------
 
       if (d.getFullYear() === parseInt(selectedYear) && d.getMonth() === parseInt(selectedMonth) && !txn.isReturn) {
         const val = (txn.splits?.me || txn.amount || 0) / 100;
@@ -38,7 +29,6 @@ const Calendar = () => {
     });
 
     maxDailySpend = Math.max(...dailyTotals);
-
     return { daysInMonth, firstDayIndex, dailyTotals, maxDailySpend };
   }, [transactions, selectedMonth, selectedYear]);
 
@@ -46,33 +36,31 @@ const Calendar = () => {
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Cash Flow Calendar</h2>
-        <div className="flex gap-2">
+    <div className="space-y-6 pb-20">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">Cash Flow</h2>
+        <div className="flex gap-2 w-full sm:w-auto">
           <Select 
-            value={selectedMonth} 
-            onChange={e => setSelectedMonth(e.target.value)} 
-            options={months.map((m, i) => ({ value: i, label: m }))}
-            className="w-32"
+            value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} 
+            options={months.map((m, i) => ({ value: i, label: m }))} className="flex-1 sm:w-32"
           />
           <Select 
-            value={selectedYear} 
-            onChange={e => setSelectedYear(e.target.value)} 
-            options={years.map(y => ({ value: y, label: y }))}
-            className="w-24"
+            value={selectedYear} onChange={e => setSelectedYear(e.target.value)} 
+            options={years.map(y => ({ value: y, label: y }))} className="flex-1 sm:w-24"
           />
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 overflow-x-auto">
-        <div className="grid grid-cols-7 gap-1 min-w-[600px]">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <div key={day} className="text-center font-bold text-gray-500 dark:text-gray-400 p-2">{day}</div>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-2 sm:p-4">
+        {/* Adaptive Grid */}
+        <div className="grid grid-cols-7 gap-1">
+          {/* FIX: Used index 'i' as key to prevent duplicate key error for 'S' and 'T' */}
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+            <div key={i} className="text-center font-bold text-gray-500 dark:text-gray-400 p-2 text-xs sm:text-sm">{day}</div>
           ))}
 
           {[...Array(calendarData.firstDayIndex)].map((_, i) => (
-            <div key={`empty-${i}`} className="h-24 bg-gray-50/30 dark:bg-gray-800/30"></div>
+            <div key={`empty-${i}`} className="h-14 sm:h-24 bg-gray-50/30 dark:bg-gray-800/30"></div>
           ))}
 
           {[...Array(calendarData.daysInMonth)].map((_, i) => {
@@ -82,7 +70,6 @@ const Calendar = () => {
             
             let bgStyle = {};
             let textClass = 'text-gray-700 dark:text-gray-300';
-
             if (total > 0) {
                const alpha = 0.1 + (intensity * 0.8);
                bgStyle = { backgroundColor: `rgba(239, 68, 68, ${alpha})` };
@@ -94,13 +81,13 @@ const Calendar = () => {
             return (
               <div 
                 key={day} 
-                className={`h-24 border border-gray-200 dark:border-gray-700 p-1 flex flex-col justify-between transition hover:scale-105`}
+                className="h-14 sm:h-24 border border-gray-200 dark:border-gray-700 p-1 flex flex-col justify-between transition hover:scale-105 rounded-sm"
                 style={bgStyle}
               >
-                <span className={`text-xs font-semibold ${textClass}`}>{day}</span>
+                <span className={`text-[10px] sm:text-xs font-semibold ${textClass}`}>{day}</span>
                 {total !== 0 && (
-                  <span className={`text-xs ${textClass} text-right break-all`}>
-                    ₹{Math.round(total)}
+                  <span className={`text-[9px] sm:text-xs ${textClass} text-right break-all leading-tight`}>
+                    <span className="hidden sm:inline">₹</span>{Math.round(total)}
                   </span>
                 )}
               </div>

@@ -31,37 +31,26 @@ const Analytics = () => {
 
   useEffect(() => {
         workerRef.current = new Worker(new URL('../workers/analytics.worker.js', import.meta.url), { type: 'module' });
-
         workerRef.current.onmessage = (event) => {
             setStats(event.data);
             setIsCalculating(false);
         };
-
-        return () => {
-            workerRef.current?.terminate();
-        };
+        return () => { workerRef.current?.terminate(); };
     }, []);
 
     useEffect(() => {
     if (!workerRef.current) return;
-
     setTimeout(() => setIsCalculating(true), 0);
 
     const serializedTransactions = transactions
         .filter(t => !t.isDeleted)
         .map(t => ({
         ...t,
-        timestamp: t.timestamp?.toMillis
-            ? t.timestamp.toMillis()
-            : new Date(t.timestamp).getTime()
+        timestamp: t.timestamp?.toMillis ? t.timestamp.toMillis() : new Date(t.timestamp).getTime()
         }));
-
     const serializedLookup = Array.from(participantsLookup.entries());
 
-    workerRef.current.postMessage({
-        transactions: serializedTransactions,
-        participantsLookup: serializedLookup,
-    });
+    workerRef.current.postMessage({ transactions: serializedTransactions, participantsLookup: serializedLookup });
     }, [transactions, participantsLookup]);
 
   if (isCalculating || !stats) return <Loader />;
@@ -72,7 +61,6 @@ const Analytics = () => {
     doc.text("SplitTrack Monthly Report", 14, 22);
     doc.setFontSize(11);
     doc.text(`Generated on: ${new Date().toDateString()}`, 14, 30);
-
     doc.autoTable({
       startY: 40,
       head: [['Metric', 'Value']],
@@ -91,7 +79,6 @@ const Analytics = () => {
       maintainAspectRatio: false,
       plugins: { legend: { position: 'right', labels: { color: textColor, boxWidth: 12, font: { size: 11 } } } }
   };
-
   const barOptions = {
       ...commonOptions,
       plugins: { legend: { display: false } },
@@ -100,7 +87,6 @@ const Analytics = () => {
           y: { ticks: { color: textColor }, grid: { color: gridColor } }
       }
   };
-  
   const lendingBarOptions = {
       responsive: true,
       maintainAspectRatio: false,
@@ -110,17 +96,15 @@ const Analytics = () => {
           y: { ticks: { color: textColor }, grid: { color: gridColor } }
       }
   };
-
   const lendingBarData = {
       labels: stats.monthlyChart.labels,
       datasets: [
-          { label: 'Lent (Out)', data: stats.monthlyChart.lentData, backgroundColor: '#f59e0b', borderRadius: 4 },
-          { label: 'Received (In)', data: stats.monthlyChart.receivedData, backgroundColor: '#10b981', borderRadius: 4 }
+          { label: 'Lent', data: stats.monthlyChart.lentData, backgroundColor: '#f59e0b', borderRadius: 4 },
+          { label: 'Received', data: stats.monthlyChart.receivedData, backgroundColor: '#10b981', borderRadius: 4 }
       ]
   };
-
   const breakdownData = {
-      labels: ['My Expenses', 'Money Lent', 'Repayments I Made'],
+      labels: ['My Expenses', 'Money Lent', 'Repayments Made'],
       datasets: [{
           data: [stats.totalSpend, stats.totalLent, stats.totalRepaymentSent],
           backgroundColor: ['#f43f5e', '#f59e0b', '#3b82f6'], 
@@ -128,7 +112,6 @@ const Analytics = () => {
           borderWidth: 2
       }]
   };
-
   const participantPieData = {
       labels: Object.keys(stats.participantData),
       datasets: [{
@@ -140,41 +123,41 @@ const Analytics = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Analytics Dashboard</h2>
-        <Button onClick={generatePDF} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700">
+    <div className="space-y-6 animate-fade-in pb-20">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">Analytics</h2>
+        <Button onClick={generatePDF} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700">
             <Download size={18} /> PDF Report
         </Button>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="My Consumption (Expense)" value={formatCurrency(stats.totalSpend * 100)} />
-        <StatCard title="Total Lent (Asset)" value={formatCurrency(stats.totalLent * 100)} color="text-amber-600" />
-        <StatCard title="Total Repaid (Received)" value={formatCurrency(stats.totalReceived * 100)} color="text-green-600" />
+      {/* Responsive Grid: 1 col mobile, 2 col tablet, 4 col desktop */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard title="My Consumption" value={formatCurrency(stats.totalSpend * 100)} />
+        <StatCard title="Total Lent" value={formatCurrency(stats.totalLent * 100)} color="text-amber-600" />
+        <StatCard title="Total Repaid" value={formatCurrency(stats.totalReceived * 100)} color="text-green-600" />
         <StatCard title="Net Cash Flow" value={formatCurrency(stats.customCashFlow * 100)} subValue="Spend + Lent - Received" color="text-purple-600" />
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Highest Personal Spend" value={stats.peakSpendMonth} subValue={formatCurrency(stats.peakSpendAmount * 100)} />
-        <StatCard title="Highest Total Outflow" value={stats.peakOutflowMonth} subValue={formatCurrency(stats.peakOutflowAmount * 100)} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard title="Peak Monthly Spend" value={stats.peakSpendMonth} subValue={formatCurrency(stats.peakSpendAmount * 100)} />
+        <StatCard title="Peak Outflow" value={stats.peakOutflowMonth} subValue={formatCurrency(stats.peakOutflowAmount * 100)} />
         <StatCard title="Avg. Monthly Outflow" value={formatCurrency(stats.avgMonthly * 100)} />
         <StatCard title="Active Days" value={stats.activeDays} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartCard title="Monthly Cash Flow (Spend + Lent)">
+        <ChartCard title="Monthly Cash Flow">
           <MonthlyTrendLine labels={stats.monthlyChart.labels} spendData={stats.monthlyChart.spendData} lentData={stats.monthlyChart.lentData} />
         </ChartCard>
-        <ChartCard title="Lending vs Recovery (Monthly)">
+        <ChartCard title="Lending vs Recovery">
            <Bar data={lendingBarData} options={lendingBarOptions} />
         </ChartCard>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Net Balance History</h3>
-          {/* UPDATED: Responsive Height */}
-          <div className="h-48 md:h-64 relative">
+          <div className="h-56 md:h-64 relative">
             <NetBalanceLine labels={stats.netBalanceChart.labels} data={stats.netBalanceChart.data} />
           </div>
       </div>
@@ -193,8 +176,7 @@ const Analytics = () => {
         </ChartCard>
         <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">My Spending by Category</h3>
-            {/* UPDATED: Responsive Height */}
-            <div className="h-48 md:h-64 relative">
+            <div className="h-64 md:h-64 relative">
                 {stats.categoryData.length > 0 ? <CategoryDoughnut data={stats.categoryData} /> : <div className="flex items-center justify-center h-full text-gray-400">No data</div>}
             </div>
         </div>
@@ -206,8 +188,7 @@ const Analytics = () => {
          </ChartCard>
          <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
              <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Spending by Place</h3>
-             {/* UPDATED: Responsive Height */}
-             <div className="h-48 md:h-64 relative">
+             <div className="h-64 md:h-64 relative">
                  <Bar data={stats.placeData} options={barOptions} />
              </div>
          </div>
@@ -217,18 +198,17 @@ const Analytics = () => {
 };
 
 const StatCard = ({ title, value, subValue, color }) => (
-  <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</h3>
-    <div className={`text-2xl font-bold mt-2 ${color || 'text-gray-800 dark:text-gray-200'}`}>{value}</div>
-    {subValue && <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{subValue}</div>}
+  <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{title}</h3>
+    <div className={`text-xl sm:text-2xl font-bold mt-2 ${color || 'text-gray-800 dark:text-gray-200'}`}>{value}</div>
+    {subValue && <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">{subValue}</div>}
   </div>
 );
 
-// UPDATED: ChartCard component now uses responsive height
 const ChartCard = ({ title, children }) => (
-  <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+  <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
     <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">{title}</h3>
-    <div className="relative h-48 md:h-64">
+    <div className="relative h-64">
       {children}
     </div>
   </div>
@@ -241,21 +221,21 @@ const ForecastCard = ({ title, spent, projected, percent, label, colorClass, lig
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">{title} (Current Month)</h3>
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">{title} <span className="text-sm font-normal text-gray-500">(Current Month)</span></h3>
             <div className="relative pt-4">
                 <div className="flex mb-2 items-center justify-between">
                     <span className={`text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full ${finalTextColor} ${finalLightClass}`}>
                         {finalLabel} {formatCurrency(spent * 100)}
                     </span>
                     <span className={`text-xs font-semibold inline-block ${finalTextColor}`}>
-                        {Math.round(percent)}% of projection
+                        {Math.round(percent)}%
                     </span>
                 </div>
                 <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200 dark:bg-gray-700">
-                    <div style={{ width: `${percent}%` }} className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center ${colorClass} transition-all duration-500`}></div>
+                    <div style={{ width: `${Math.min(percent, 100)}%` }} className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center ${colorClass} transition-all duration-500`}></div>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Projected total: <span className="font-bold text-gray-700 dark:text-gray-200">{formatCurrency(projected * 100)}</span>
+                    Projected: <span className="font-bold text-gray-700 dark:text-gray-200">{formatCurrency(projected * 100)}</span>
                 </p>
             </div>
         </div>
@@ -268,32 +248,35 @@ const HeatmapPanel = ({ data }) => {
     <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700 overflow-hidden">
         <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Net Cash Flow Heatmap</h3>
         <div className="flex gap-4 mb-3 text-xs">
-            <span className="flex items-center gap-1"><div className="w-3 h-3 bg-red-500 rounded-sm"></div> Money Out</span>
-            <span className="flex items-center gap-1"><div className="w-3 h-3 bg-emerald-500 rounded-sm"></div> Money In</span>
+            <span className="flex items-center gap-1"><div className="w-3 h-3 bg-red-500 rounded-sm"></div> Out</span>
+            <span className="flex items-center gap-1"><div className="w-3 h-3 bg-emerald-500 rounded-sm"></div> In</span>
         </div>
         
-        <div className="grid gap-1 overflow-x-auto pb-2" style={{ gridTemplateColumns: 'repeat(31, 1fr)' }}>
-            {[...Array(31)].map((_, i) => (<div key={i} className="text-[9px] text-center text-gray-400">{i+1}</div>))}
-            {[...Array(31)].map((_, i) => {
-                const val = data[i+1];
-                let bgClass = 'bg-gray-100 dark:bg-gray-700';
-                let opacity = 1;
-                if (val > 0.01) {
-                    bgClass = 'bg-red-500';
-                    opacity = Math.max(0.2, val / (maxVal || 1));
-                } else if (val < -0.01) {
-                    bgClass = 'bg-emerald-500';
-                    opacity = Math.max(0.2, Math.abs(val) / (maxVal || 1));
-                }
-                return (
-                    <div 
-                        key={i} 
-                        title={`Day ${i+1}: ${val > 0 ? '-' : '+'}${formatCurrency(Math.abs(val)*100)}`} 
-                        className={`h-8 w-full rounded-sm ${bgClass}`} 
-                        style={{ opacity: val !== 0 ? opacity : 1 }} 
-                    />
-                );
-            })}
+        {/* Responsive Grid for Heatmap: Scrollable on mobile */}
+        <div className="overflow-x-auto">
+            <div className="grid gap-1 min-w-[300px]" style={{ gridTemplateColumns: 'repeat(31, 1fr)' }}>
+                {[...Array(31)].map((_, i) => (<div key={i} className="text-[9px] text-center text-gray-400">{i+1}</div>))}
+                {[...Array(31)].map((_, i) => {
+                    const val = data[i+1];
+                    let bgClass = 'bg-gray-100 dark:bg-gray-700';
+                    let opacity = 1;
+                    if (val > 0.01) {
+                        bgClass = 'bg-red-500';
+                        opacity = Math.max(0.2, val / (maxVal || 1));
+                    } else if (val < -0.01) {
+                        bgClass = 'bg-emerald-500';
+                        opacity = Math.max(0.2, Math.abs(val) / (maxVal || 1));
+                    }
+                    return (
+                        <div 
+                            key={i} 
+                            title={`Day ${i+1}: ${val > 0 ? '-' : '+'}${formatCurrency(Math.abs(val)*100)}`} 
+                            className={`h-8 w-full rounded-sm ${bgClass}`} 
+                            style={{ opacity: val !== 0 ? opacity : 1 }} 
+                        />
+                    );
+                })}
+            </div>
         </div>
     </div>
   );

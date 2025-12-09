@@ -146,7 +146,8 @@ const Dashboard = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Balances</h2>
+        {/* UPDATED: Responsive Title */}
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">Balances</h2>
         <Button variant="primary" onClick={() => setShowSummary(true)}>
           Who Owes Whom?
         </Button>
@@ -155,7 +156,8 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Your Net Position</h3>
-          <div className={`text-4xl font-bold mt-2 ${
+          {/* UPDATED: Responsive text size */}
+          <div className={`text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 ${
             stats.netPosition > 0 ? 'text-green-600' : stats.netPosition < 0 ? 'text-red-600' : 'text-gray-800 dark:text-gray-200'
           }`}>
             {formatCurrency(stats.netPosition)}
@@ -167,14 +169,16 @@ const Dashboard = () => {
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Income (This Month)</h3>
-          <div className="text-4xl font-bold mt-2 text-emerald-500">
+          {/* UPDATED: Responsive text size */}
+          <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-emerald-500">
             {formatCurrency(stats.monthlyIncome * 100)}
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Total Expenditure</h3>
-          <div className="text-4xl font-bold mt-2 text-blue-600">
+          {/* UPDATED: Responsive text size */}
+          <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-blue-600">
             {formatCurrency(stats.myTotalExpenditure)}
           </div>
           <p className="text-xs text-gray-400 mt-1">Total payments - Repayments</p>
@@ -182,14 +186,16 @@ const Dashboard = () => {
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">My Total Share</h3>
-          <div className="text-4xl font-bold mt-2 text-purple-600">
+          {/* UPDATED: Responsive text size */}
+          <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-purple-600">
             {formatCurrency(stats.myTotalShare)}
           </div>
         </div>
 
          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Paid By Others</h3>
-          <div className="text-4xl font-bold mt-2 text-orange-600">
+          {/* UPDATED: Responsive text size */}
+          <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-orange-600">
             {formatCurrency(stats.paidByOthers)}
           </div>
         </div>
@@ -233,7 +239,6 @@ const Dashboard = () => {
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700 md:col-span-1">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">My Share by Category</h3>
-          {/* UPDATED: Responsive Height */}
           <div className="h-48 md:h-64 relative">
             {stats.chartData.length > 0 ? (
               <CategoryDoughnut data={stats.chartData} />

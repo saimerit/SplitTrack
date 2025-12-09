@@ -19,7 +19,6 @@ const SearchableSelect = ({ label, value, onChange, options, placeholder, classN
     const wrapperRef = useRef(null);
     const [query, setQuery] = useState("");
 
-    // FIX: Removed Promise.resolve().then() to ensure immediate UI updates
     useEffect(() => {
         setTimeout(() => {
             if (!value) {
@@ -35,7 +34,6 @@ const SearchableSelect = ({ label, value, onChange, options, placeholder, classN
         if (!query) return options;
         const lowerQuery = query.toLowerCase();
         const selected = options.find(o => o.value === value);
-        // If current query matches selected label, show all options (user is just viewing)
         if (selected && selected.label.toLowerCase() === lowerQuery) return options;
 
         return options.filter(opt =>
@@ -112,7 +110,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         formData, setters, ui, links, data, actions, utils
     } = useTransactionFormLogic(initialData, isEditMode);
 
-    // --- MEMOIZED OPTIONS (UI) ---
     const generateOptions = (items, collectionName, label) => [
         { value: "", label: "-- Select --" },
         ...items.map(i => ({ value: i.name, label: i.name })),
@@ -128,7 +125,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     const recipientOptions = useMemo(() => [{ value: "me", label: "You (me)" }, ...data.allParticipants.map(p => ({ value: p.uniqueId, label: p.name }))], [data.allParticipants]);
     const debtorOptions = useMemo(() => [{ value: '', label: '-- Show All --' }, ...data.allParticipants.map(p => ({ value: p.uniqueId, label: p.name }))], [data.allParticipants]);
 
-    // Destructure for dependencies
     const { eligibleParents } = data;
     const { getName, getTxnDateStr } = utils;
     const { isSettlement } = ui;
@@ -164,7 +160,9 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     return (
         <>
             {ui.showSuccess && <SuccessAnimation message={isEditMode ? "Transaction Updated!" : "Transaction Logged!"} />}
-            <form onSubmit={actions.handleSubmit} className="max-w-7xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            
+            {/* UPDATED: Responsive padding (p-4 sm:p-6 md:p-8) */}
+            <form onSubmit={actions.handleSubmit} className="max-w-7xl mx-auto bg-white dark:bg-gray-800 p-4 sm:p-6 md:p-8 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
                 {/* Space Switcher */}
                 <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-sky-50 dark:bg-sky-900/10 p-3 rounded-lg border border-sky-100 dark:border-sky-900 mb-2 flex items-center justify-between">
@@ -249,7 +247,6 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                         <SearchableSelect value={links.tempId} onChange={e => links.handleSelect(e.target.value)} options={linkableOptions} placeholder="Select expense..." />
 
                         {links.items.map(link => {
-                            // Style Logic moved inside map for clarity
                             let textColor = 'text-gray-800 dark:text-gray-200';
                             let bgColor = 'bg-white dark:bg-gray-800';
                             let borderColor = 'border-gray-300 dark:border-gray-600';
@@ -331,13 +328,27 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                     </>
                 )}
 
-                <div className="col-span-full flex gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
-                    <Button type="button" variant="ghost" onClick={actions.resetForm} className="px-3" title="Reset Form">
-                        <RefreshCw size={20} />
+                {/* UPDATED: Mobile-responsive button group */}
+                <div className="col-span-full flex flex-col sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <div className="flex gap-3 sm:contents">
+                        <Button type="button" variant="ghost" onClick={actions.resetForm} className="px-3 flex-none" title="Reset Form">
+                            <RefreshCw size={20} />
+                        </Button>
+                        <Button type="button" variant="secondary" onClick={() => navigate(-1)} className="flex-1 py-3 text-sm sm:text-base">
+                            Cancel
+                        </Button>
+                    </div>
+
+                    {!isEditMode && (
+                        <Button type="button" variant="secondary" onClick={actions.handleTemplateSaveRequest} className="flex-1 py-3 text-sm sm:text-base">
+                            <span className="sm:hidden">Save Template</span>
+                            <span className="hidden sm:inline">Save as Template</span>
+                        </Button>
+                    )}
+                    
+                    <Button type="submit" className="flex-1 sm:grow-2 py-3 text-base sm:text-lg shadow-md">
+                        {isEditMode ? 'Update' : 'Log Transaction'}
                     </Button>
-                    {!isEditMode && <Button type="button" variant="secondary" onClick={actions.handleTemplateSaveRequest} className="flex-1 py-3">Save as Template</Button>}
-                    <Button type="button" variant="secondary" onClick={() => navigate(-1)} className="flex-1 py-3">Cancel</Button>
-                    <Button type="submit" className="flex-1 sm:grow-2 py-3 text-lg">{isEditMode ? 'Update' : 'Log'}</Button>
                 </div>
             </form>
 

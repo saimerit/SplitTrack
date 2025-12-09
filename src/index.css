@@ -1,13 +1,14 @@
 @import "tailwindcss";
 
 @theme {
-  /* This sets 'Inter' as the default sans font, replacing 'fontFamily' in config */
   --font-sans: "Inter", sans-serif;
 
   /* --- ANIMATIONS --- */
   --animate-fade-in: fade-in 0.3s ease-out;
   --animate-slide-up: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   --animate-slide-down: slide-down 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-slide-in-right: slide-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-slide-in-left: slide-in-left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   --animate-scale-in: scale-in 0.2s ease-out;
 
   @keyframes fade-in {
@@ -25,41 +26,48 @@
     100% { transform: translateY(0); opacity: 1; }
   }
 
+  /* NEW: Horizontal Animations */
+  @keyframes slide-in-right {
+    0% { transform: translateX(20px); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+  }
+
+  @keyframes slide-in-left {
+    0% { transform: translateX(-20px); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+  }
+
   @keyframes scale-in {
     0% { transform: scale(0.95); opacity: 0; }
     100% { transform: scale(1); opacity: 1; }
   }
 }
 
-/* This forces the 'dark' variant to work with the 'dark' class 
-   instead of system settings (replaces darkMode: 'class') */
 @variant dark (&:where(.dark, .dark *));
 
 /* --- THEME VARIABLES --- */
 :root {
-  /* Default Light Mode Base */
-  --bg-main: #f9fafb;      /* gray-50 */
-  --bg-surface: #ffffff;   /* white */
-  --text-main: #111827;    /* gray-900 */
-  --text-secondary: #6b7280; /* gray-500 */
-  --primary: #0284c7;      /* sky-600 */
-  --border: #e5e7eb;       /* gray-200 */
+  --bg-main: #f9fafb;      
+  --bg-surface: #ffffff;   
+  --text-main: #111827;    
+  --text-secondary: #6b7280; 
+  --primary: #0284c7;      
+  --border: #e5e7eb;       
 }
 
 .dark {
-  /* Default Dark Mode Base */
-  --bg-main: #111827;      /* gray-900 */
-  --bg-surface: #1f2937;   /* gray-800 */
-  --text-main: #f9fafb;    /* gray-50 */
-  --text-secondary: #9ca3af; /* gray-400 */
-  --primary: #38bdf8;      /* sky-400 */
-  --border: #374151;       /* gray-700 */
+  --bg-main: #111827;      
+  --bg-surface: #1f2937;   
+  --text-main: #f9fafb;    
+  --text-secondary: #9ca3af; 
+  --primary: #38bdf8;      
+  --border: #374151;       
 }
 
-/* --- FIX OVER-SCROLL BACKGROUND --- */
 html {
   background-color: var(--bg-main);
   transition: background-color 0.3s ease;
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -67,39 +75,16 @@ body {
   color: var(--text-main) !important;
   min-height: 100vh;
   font-family: var(--font-sans);
+  overscroll-behavior-y: none;
 }
 
-/* CRITICAL: Override Tailwind's bg classes with CSS variables */
-.bg-gray-50 {
-  background-color: var(--bg-main) !important;
-}
+/* Override Tailwind's bg classes */
+.bg-gray-50 { background-color: var(--bg-main) !important; }
+.dark .bg-gray-900 { background-color: var(--bg-main) !important; }
+.bg-white { background-color: var(--bg-surface) !important; }
+.dark .bg-gray-800 { background-color: var(--bg-surface) !important; }
+.text-gray-900 { color: var(--text-main) !important; }
+.dark .text-gray-100, .dark .text-gray-200 { color: var(--text-main) !important; }
 
-.dark .bg-gray-900 {
-  background-color: var(--bg-main) !important;
-}
-
-.bg-white {
-  background-color: var(--bg-surface) !important;
-}
-
-.dark .bg-gray-800 {
-  background-color: var(--bg-surface) !important;
-}
-
-.text-gray-900 {
-  color: var(--text-main) !important;
-}
-
-.dark .text-gray-100,
-.dark .text-gray-200 {
-  color: var(--text-main) !important;
-}
-
-/* Custom Scrollbar Hide */
-.no-scrollbar::-webkit-scrollbar {
-    display: none;
-}
-.no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

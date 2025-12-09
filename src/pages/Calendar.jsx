@@ -6,40 +6,49 @@ const Calendar = () => {
   const { transactions } = useAppStore();
   const now = new Date();
   
-  // Use state for month/year (ensure they are numbers for calculation)
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  
+  // Track animation direction: 'next' (slide-in-right) or 'prev' (slide-in-left)
+  const [slideDirection, setSlideDirection] = useState('next');
 
   // --- Swipe Logic State ---
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
 
-  const minSwipeDistance = 50; // Threshold in px to trigger change
+  const minSwipeDistance = 50; 
 
   const onTouchStart = (e) => {
     setTouchEnd(null); 
-    setTouchStart(e.targetTouches[0].clientY);
+    // CHANGE: Track X axis instead of Y
+    setTouchStart(e.targetTouches[0].clientX);
   }
 
   const onTouchMove = (e) => {
-    setTouchEnd(e.targetTouches[0].clientY);
+    // CHANGE: Track X axis
+    setTouchEnd(e.targetTouches[0].clientX);
   }
 
   const onTouchEnd = () => {
     if (!touchStart || !touchEnd) return;
     
     const distance = touchStart - touchEnd;
-    const isUpSwipe = distance > minSwipeDistance;
-    const isDownSwipe = distance < -minSwipeDistance;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
 
-    if (isUpSwipe) {
-      changeMonth(1); // Swipe Up -> Next Month
-    } else if (isDownSwipe) {
-      changeMonth(-1); // Swipe Down -> Prev Month
+    if (isLeftSwipe) {
+      // Swipe Left -> Next Month
+      changeMonth(1); 
+    } else if (isRightSwipe) {
+      // Swipe Right -> Prev Month
+      changeMonth(-1); 
     }
   }
 
   const changeMonth = (increment) => {
+    // Determine animation direction based on increment
+    setSlideDirection(increment > 0 ? 'next' : 'prev');
+
     let newMonth = parseInt(selectedMonth) + increment;
     let newYear = parseInt(selectedYear);
 
@@ -81,7 +90,6 @@ const Calendar = () => {
 
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   
-  // Dynamic years list: always includes selected year + surrounding years
   const years = useMemo(() => {
     const y = parseInt(selectedYear);
     const list = [y - 2, y - 1, y, y + 1, y + 2];
@@ -90,12 +98,14 @@ const Calendar = () => {
 
   return (
     <div 
-      className="space-y-6 pb-20 touch-pan-y" 
+      // touch-pan-y allows vertical scrolling while capturing horizontal swipes
+      // overscroll-x-none prevents browser back/forward navigation
+      className="space-y-6 pb-20 touch-pan-y overscroll-x-none" 
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-fade-in">
         <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">Cash Flow</h2>
         <div className="flex gap-2 w-full sm:w-auto">
           <Select 
@@ -113,8 +123,13 @@ const Calendar = () => {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-2 sm:p-4 select-none">
-        {/* Adaptive Grid */}
+      {/* Key forces remount on month/year change to trigger animation */}
+      <div 
+        key={`${selectedYear}-${selectedMonth}`}
+        className={`bg-white dark:bg-gray-800 rounded-lg shadow p-2 sm:p-4 select-none ${
+          slideDirection === 'next' ? 'animate-slide-in-right' : 'animate-slide-in-left'
+        }`}
+      >
         <div className="grid grid-cols-7 gap-1">
           {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
             <div key={i} className="text-center font-bold text-gray-500 dark:text-gray-400 p-2 text-xs sm:text-sm">{day}</div>
@@ -157,9 +172,8 @@ const Calendar = () => {
         </div>
       </div>
       
-      {/* Mobile Hint */}
-      <div className="text-center text-xs text-gray-400 mt-2 sm:hidden">
-        Swipe up/down to change month
+      <div className="text-center text-xs text-gray-400 mt-2 sm:hidden animate-fade-in">
+        Swipe left/right to change month
       </div>
     </div>
   );

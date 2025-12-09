@@ -13,7 +13,8 @@ const Layout = () => {
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 overflow-hidden">
+    // CHANGED: h-screen -> min-h-screen, removed overflow-hidden to allow body scroll
+    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       
       {/* Sidebar Component */}
       <Sidebar 
@@ -24,10 +25,12 @@ const Layout = () => {
       />
 
       {/* Main Content Wrapper */}
-      <div className="flex-1 flex flex-col h-full relative overflow-hidden transition-all duration-300">
+      {/* CHANGED: Removed h-full and overflow-hidden/relative to let content grow */}
+      <div className="flex-1 flex flex-col transition-all duration-300">
         
         {/* Header / Toggle Area */}
-        <header className="flex items-center p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0">
+        {/* CHANGED: Added sticky top-0 z-30 so header stays visible while scrolling */}
+        <header className="sticky top-0 z-30 flex items-center p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0">
           
           {/* Toggle Button - Visible on BOTH Mobile and Desktop */}
           <button 
@@ -40,13 +43,11 @@ const Layout = () => {
 
           {/* Title - Visible on Mobile (or always if you prefer) */}
           <h1 className="text-xl font-bold text-sky-600 dark:text-sky-500 md:hidden">SplitTrack</h1>
-          
-          {/* On Desktop, we can hide the title here if it's already in the sidebar, or keep it */}
         </header>
 
         {/* Page Content */}
-        {/* UPDATED: Reduced padding for mobile (p-3 sm:p-4 md:p-8) */}
-        <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-8 relative">
+        {/* CHANGED: Removed overflow-auto (since body scrolls now) */}
+        <main className="flex-1 p-3 sm:p-4 md:p-8">
            <Outlet />
         </main>
       </div>

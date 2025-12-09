@@ -38,12 +38,16 @@ const Sidebar = ({ isOpen, onClose }) => {
       )}
 
       {/* Sidebar Navigation */}
-      {/* logic: fixed on mobile, static (but toggleable width) on desktop */}
+      {/* Logic Updated: 
+         - Mobile: fixed (unchanged)
+         - Desktop: Changed from 'relative' to 'sticky top-0 h-screen' 
+           This ensures sidebar stays visible while body scrolls.
+      */}
       <nav className={`
         fixed inset-y-0 left-0 z-40 h-full bg-white border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700 
         transition-all duration-300 ease-in-out transform flex flex-col
         ${isOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64 md:translate-x-0 md:w-0 md:opacity-0 md:overflow-hidden'}
-        md:relative
+        md:sticky md:top-0 md:h-screen md:overflow-y-auto
       `}>
         
         {/* Header Section */}

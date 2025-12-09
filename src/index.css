@@ -67,7 +67,7 @@
 html {
   background-color: var(--bg-main);
   transition: background-color 0.3s ease;
-  overscroll-behavior-y: none;
+  /* Removed overscroll-behavior-y: none; to enable pull-to-refresh */
 }
 
 body {
@@ -75,7 +75,7 @@ body {
   color: var(--text-main) !important;
   min-height: 100vh;
   font-family: var(--font-sans);
-  overscroll-behavior-y: none;
+  /* Removed overscroll-behavior-y: none; to enable pull-to-refresh */
 }
 
 /* Override Tailwind's bg classes */

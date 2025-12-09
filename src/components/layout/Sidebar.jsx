@@ -12,7 +12,6 @@ const Sidebar = ({ isOpen, onClose }) => {
   const { groups, activeGroupId, setActiveGroupId } = useAppStore();
   const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
 
-  // Find active group name
   const activeGroup = groups.find(g => g.id === activeGroupId);
   const activeGroupName = activeGroup ? activeGroup.name : 'Personal';
 
@@ -30,7 +29,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   return (
     <>
-      {/* Mobile Overlay - Closes menu when clicking outside */}
+      {/* Mobile Overlay */}
       {isOpen && (
         <div 
           className="fixed inset-0 z-40 bg-black/50 md:hidden"
@@ -39,17 +38,20 @@ const Sidebar = ({ isOpen, onClose }) => {
       )}
 
       {/* Sidebar Navigation */}
+      {/* logic: fixed on mobile, static (but toggleable width) on desktop */}
       <nav className={`
-        fixed md:static inset-y-0 left-0 z-50 w-64 h-full bg-white border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700 transition-transform duration-300 ease-in-out transform flex flex-col
-        ${isOpen ? 'translate-x-0' : '-translate-x-full'} 
-        md:translate-x-0 
+        fixed inset-y-0 left-0 z-40 h-full bg-white border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700 
+        transition-all duration-300 ease-in-out transform flex flex-col
+        ${isOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64 md:translate-x-0 md:w-0 md:opacity-0 md:overflow-hidden'}
+        md:relative
       `}>
         
-        <OfflineBanner />
-
-        <div className="px-4 pt-5 pb-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
-          <h1 className="text-xl font-bold text-sky-600 dark:text-sky-500 mb-4">SplitTrack</h1>
+        {/* Header Section */}
+        <div className="px-4 pt-16 pb-4 border-b border-gray-100 dark:border-gray-700 shrink-0 md:pt-5">
+          <h1 className="text-xl font-bold text-sky-600 dark:text-sky-500 mb-4 whitespace-nowrap">SplitTrack</h1>
           
+          <OfflineBanner />
+
           {/* Group Switcher */}
           <div className="relative">
             <button 
@@ -78,7 +80,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                   ))}
                 </div>
                 <div className="border-t border-gray-100 dark:border-gray-700 p-2 bg-gray-50 dark:bg-gray-700/30">
-                   <NavLink to="/data" onClick={() => setIsGroupMenuOpen(false)} className="text-xs text-sky-600 hover:underline flex items-center justify-center gap-1">
+                   <NavLink to="/data" onClick={() => { setIsGroupMenuOpen(false); onClose(); }} className="text-xs text-sky-600 hover:underline flex items-center justify-center gap-1">
                       <PlusCircle size={12} /> Manage Spaces
                    </NavLink>
                 </div>
@@ -87,7 +89,8 @@ const Sidebar = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        <div className="flex-1 px-2 pb-2 mt-2 space-y-1 overflow-y-auto no-scrollbar">
+        {/* Links */}
+        <div className="flex-1 px-2 pb-2 mt-2 space-y-1 overflow-y-auto no-scrollbar whitespace-nowrap">
           <NavLink to="/" onClick={onClose} className={navClass}><LayoutDashboard size={20}/> Balances</NavLink>
           <NavLink to="/add" onClick={onClose} className={navClass}><PlusCircle size={20}/> Add Transaction</NavLink>
           <NavLink to="/history" onClick={onClose} className={navClass}><History size={20}/> History</NavLink>

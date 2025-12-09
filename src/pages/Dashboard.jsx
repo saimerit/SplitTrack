@@ -59,14 +59,14 @@ const Dashboard = () => {
           if (payer === 'me') {
             if (recipient && recipient !== 'me') {
               myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;
+              totalPaymentsMadeByMe += amount;
+            } else {
+              if (recipient === 'me') {
+                myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
+                totalRepaymentsMadeToMe += amount;
+              }
             }
-            totalPaymentsMadeByMe += amount;
-          } else {
-            if (recipient === 'me') {
-              myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
-              totalRepaymentsMadeToMe += amount;
-            }
-          }
+          } 
         } 
         else {
           if (payer === 'me') {
@@ -146,7 +146,6 @@ const Dashboard = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center mb-6">
-        {/* UPDATED: Responsive Title */}
         <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">Balances</h2>
         <Button variant="primary" onClick={() => setShowSummary(true)}>
           Who Owes Whom?
@@ -156,7 +155,6 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Your Net Position</h3>
-          {/* UPDATED: Responsive text size */}
           <div className={`text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 ${
             stats.netPosition > 0 ? 'text-green-600' : stats.netPosition < 0 ? 'text-red-600' : 'text-gray-800 dark:text-gray-200'
           }`}>
@@ -169,7 +167,6 @@ const Dashboard = () => {
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Income (This Month)</h3>
-          {/* UPDATED: Responsive text size */}
           <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-emerald-500">
             {formatCurrency(stats.monthlyIncome * 100)}
           </div>
@@ -177,7 +174,6 @@ const Dashboard = () => {
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Total Expenditure</h3>
-          {/* UPDATED: Responsive text size */}
           <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-blue-600">
             {formatCurrency(stats.myTotalExpenditure)}
           </div>
@@ -186,7 +182,6 @@ const Dashboard = () => {
 
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">My Total Share</h3>
-          {/* UPDATED: Responsive text size */}
           <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-purple-600">
             {formatCurrency(stats.myTotalShare)}
           </div>
@@ -194,7 +189,6 @@ const Dashboard = () => {
 
          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Paid By Others</h3>
-          {/* UPDATED: Responsive text size */}
           <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-orange-600">
             {formatCurrency(stats.paidByOthers)}
           </div>
@@ -215,21 +209,29 @@ const Dashboard = () => {
                 const name = p ? p.name : uid;
                 
                 return (
-                  <div key={uid} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                    <span className="font-medium text-gray-700 dark:text-gray-300">{name}</span>
-                    {val > 0 ? (
-                      <span className="font-semibold text-green-600">owes you {formatCurrency(val)}</span>
-                    ) : (
-                      <div className="flex items-center gap-3">
-                        <span className="font-semibold text-red-600">you owe {formatCurrency(Math.abs(val))}</span>
-                        <button 
-                          onClick={() => handleSettleUp(uid, val)}
-                          className="text-xs bg-sky-600 text-white px-2 py-1 rounded hover:bg-sky-700"
-                        >
-                          Settle
-                        </button>
-                      </div>
-                    )}
+                  /* REFACTORED: Stack vertically on mobile, row on tablet/desktop */
+                  <div key={uid} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg gap-2">
+                    <span className="font-medium text-gray-700 dark:text-gray-300 wrap-break-word text-lg sm:text-base">
+                      {name}
+                    </span>
+                    
+                    <div className="w-full sm:w-auto">
+                      {val > 0 ? (
+                        <div className="flex justify-end w-full">
+                           <span className="font-semibold text-green-600">owes you {formatCurrency(val)}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+                          <span className="font-semibold text-red-600">you owe {formatCurrency(Math.abs(val))}</span>
+                          <button 
+                            onClick={() => handleSettleUp(uid, val)}
+                            className="text-xs bg-sky-600 text-white px-3 py-1.5 rounded hover:bg-sky-700 whitespace-nowrap shrink-0 transition-colors"
+                          >
+                            Settle
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })

@@ -57,16 +57,18 @@ const Dashboard = () => {
           if (!recipient) return; 
 
           if (payer === 'me') {
-            if (recipient && recipient !== 'me') {
+            // Case 1: You paid someone (You settle up or lend money)
+            if (recipient !== 'me') {
               myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;
               totalPaymentsMadeByMe += amount;
-            } else {
-              if (recipient === 'me') {
-                myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
-                totalRepaymentsMadeToMe += amount;
-              }
             }
-          } 
+          } else {
+            // Case 2: Someone else paid YOU (They settle up or lend you money)
+            if (recipient === 'me') {
+              myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
+              totalRepaymentsMadeToMe += amount;
+            }
+          }
         } 
         else {
           if (payer === 'me') {

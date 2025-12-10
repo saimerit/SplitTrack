@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Trash2, Filter, Sparkles, Layers, ChevronDown, ArrowRightLeft, RefreshCw, HandCoins } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 import { useTransactionFormLogic } from '../../hooks/useTransactionForm';
+import useAppStore from '../../store/useAppStore';
 
 import Input from '../common/Input';
 import Button from '../common/Button';
@@ -76,6 +77,71 @@ const SearchableSelect = ({ label, value, onChange, options, placeholder, classN
 const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     const navigate = useNavigate();
     const { formData, setters, ui, links, data, actions, utils } = useTransactionFormLogic(initialData, isEditMode);
+    const { categories, transactions } = useAppStore();
+    const [budgetWarning, setBudgetWarning] = useState(null);
+
+    // Budget Check Logic
+    const checkBudget = () => {
+        if (!formData.category || !formData.amount) return true;
+
+        const cat = categories.find(c => c.name === formData.category);
+        if (!cat || !cat.budget) return true;
+
+        const amountNum = parseFloat(formData.amount);
+        if (isNaN(amountNum)) return true;
+
+        const now = new Date(formData.date || new Date());
+        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+        const currentUsage = transactions
+            .filter(t => !t.isDeleted && t.category === formData.category && t.amount > 0)
+            .filter(t => {
+                if (isEditMode && initialData?.id && t.id === initialData.id) return false;
+                const tDate = t.timestamp?.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
+                const tKey = `${tDate.getFullYear()}-${String(tDate.getMonth() + 1).padStart(2, '0')}`;
+                return tKey === currentMonthKey;
+            })
+            .reduce((sum, t) => {
+                const myShare = t.splits?.['me'] !== undefined ? t.splits['me'] : (t.payer === 'me' ? t.amount : 0);
+                return sum + (myShare / 100);
+            }, 0);
+
+        if (currentUsage + amountNum > cat.budget) {
+            const newTotal = currentUsage + amountNum;
+            const exceededBy = newTotal - cat.budget;
+
+            setBudgetWarning({
+                message: `
+                    <div class="space-y-2">
+                        <p><strong>Category:</strong> ${formData.category}</p>
+                        <p><strong>Monthly Limit:</strong> ₹${cat.budget}</p>
+                        <p><strong>Current Usage:</strong> ₹${currentUsage.toFixed(2)}</p>
+                        <p><strong>This Transaction:</strong> ₹${amountNum.toFixed(2)}</p>
+                        <hr class="border-gray-300 dark:border-gray-600"/>
+                        <p class="font-bold text-red-600">New Total: ₹${newTotal.toFixed(2)}</p>
+                        <p class="text-sm font-semibold text-orange-600">You are exceeding your budget by ₹${exceededBy.toFixed(2)}</p>
+                        <p class="text-sm text-gray-500 mt-2">Do you want to proceed?</p>
+                    </div>
+                 `
+            });
+            return false;
+        }
+        return true;
+    };
+
+    // Wrap the original handleSubmit
+    const originalHandleSubmit = actions.handleSubmit;
+    const augmentedHandleSubmit = (e) => {
+        e.preventDefault();
+        if (checkBudget()) {
+            originalHandleSubmit(e);
+        }
+    };
+
+    const confirmBudget = () => {
+        setBudgetWarning(null);
+        originalHandleSubmit({ preventDefault: () => { } });
+    };
 
     const generateOptions = (items, collectionName, label) => [
         { value: "", label: "-- Select --" },
@@ -115,8 +181,8 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     return (
         <>
             {ui.showSuccess && <SuccessAnimation message={isEditMode ? "Transaction Updated!" : "Transaction Logged!"} />}
-            <form onSubmit={actions.handleSubmit} className="max-w-7xl mx-auto bg-white dark:bg-gray-800 p-4 sm:p-6 md:p-8 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                
+            <form onSubmit={augmentedHandleSubmit} className="max-w-7xl mx-auto bg-white dark:bg-gray-800 p-4 sm:p-6 md:p-8 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
                 {/* Space Switcher */}
                 <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-sky-50 dark:bg-sky-900/10 p-3 rounded-lg border border-sky-100 dark:border-sky-900 mb-2 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -211,7 +277,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                                 textColor = 'text-green-700 dark:text-green-400 font-medium'; bgColor = 'bg-green-50 dark:bg-green-900/20'; borderColor = 'border-green-200 dark:border-green-800';
                             } else {
                                 const isOwedToMe = link.relationType === 'owed_to_me';
-                                if (isOwedToMe) { textColor = 'text-green-700 dark:text-green-400 font-medium'; bgColor = 'bg-green-50 dark:bg-green-900/20'; borderColor = 'border-green-200 dark:border-green-800'; } 
+                                if (isOwedToMe) { textColor = 'text-green-700 dark:text-green-400 font-medium'; bgColor = 'bg-green-50 dark:bg-green-900/20'; borderColor = 'border-green-200 dark:border-green-800'; }
                                 else { textColor = 'text-red-700 dark:text-red-400 font-medium'; bgColor = 'bg-red-50 dark:bg-red-900/20'; borderColor = 'border-red-200 dark:border-red-800'; }
                             }
 
@@ -289,6 +355,14 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
             </form>
 
             <ConfirmModal isOpen={ui.showDupeModal} title="Possible Duplicate" message={`Found similar transaction: <strong>${ui.dupeTxn?.expenseName}</strong>. Add anyway?`} confirmText="Add Anyway" onConfirm={actions.forceSubmit} onCancel={() => ui.setShowDupeModal(false)} />
+            <ConfirmModal
+                isOpen={!!budgetWarning}
+                title="⚠️ Budget Warning"
+                message={budgetWarning?.message || ''}
+                onConfirm={confirmBudget}
+                onCancel={() => setBudgetWarning(null)}
+                confirmText="Proceed"
+            />
             <PromptModal isOpen={!!ui.activePrompt} title={ui.activePrompt?.title || ''} label={ui.activePrompt?.label || ''} onConfirm={actions.handlePromptConfirm} onCancel={() => ui.setActivePrompt(null)} confirmText="Save" />
         </>
     );

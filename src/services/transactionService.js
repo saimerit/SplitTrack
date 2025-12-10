@@ -257,3 +257,113 @@ export const fetchPaginatedTransactions = async (pageSize, lastDoc = null, filte
     throw error;
   }
 };
+
+const RECURRING_PATH = `ledgers/${LEDGER_ID}/recurring`;
+
+// --- RECURRING TRANSACTIONS LOGIC ---
+
+// 1. Check for items due today or in the past
+export const checkDueRecurring = async () => {
+  const now = new Date();
+  now.setHours(23, 59, 59, 999); // End of today
+
+  const q = query(
+    collection(db, RECURRING_PATH),
+    where("nextDueDate", "<=", Timestamp.fromMillis(now.getTime())),
+    where("isActive", "==", true)
+  );
+
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+};
+
+// 2. Log the transaction and advance the due date
+export const processRecurringTransaction = async (recurringId, recurringData) => {
+  const batch = writeBatch(db);
+
+  // A. Create the actual Expense Transaction
+  const newTxnRef = doc(collection(db, COLLECTION_PATH));
+  const txnData = {
+    amount: recurringData.amount,
+    category: recurringData.category || 'Recurring',
+    expenseName: recurringData.name,
+    payer: 'me',
+    splits: { 'me': recurringData.amount },
+    timestamp: Timestamp.now(),
+    type: 'expense',
+    groupId: recurringData.groupId || 'personal',
+    isDeleted: false,
+    recurringSourceId: recurringId,
+    paymentMode: recurringData.paymentMode || 'Online',
+    tag: recurringData.tag || '',
+    place: recurringData.place || ''
+  };
+  batch.set(newTxnRef, txnData);
+
+  // B. Calculate Next Due Date (Default: Monthly)
+  const currentDue = recurringData.nextDueDate.toDate();
+  const nextDue = new Date(currentDue);
+
+  if (recurringData.frequency === 'yearly') {
+    nextDue.setFullYear(nextDue.getFullYear() + 1);
+  } else {
+    nextDue.setMonth(nextDue.getMonth() + 1);
+  }
+
+  // C. Update the Recurring Rule
+  const recurRef = doc(db, RECURRING_PATH, recurringId);
+  batch.update(recurRef, {
+    nextDueDate: Timestamp.fromDate(nextDue),
+    lastProcessedAt: Timestamp.now()
+  });
+
+  await batch.commit();
+  return newTxnRef.id;
+};
+
+// 3. Skip this month (just update the date)
+export const skipRecurringTransaction = async (recurringId, currentDueDate, frequency = 'monthly') => {
+  const nextDue = new Date(currentDueDate.toDate());
+
+  if (frequency === 'yearly') {
+    nextDue.setFullYear(nextDue.getFullYear() + 1);
+  } else {
+    nextDue.setMonth(nextDue.getMonth() + 1);
+  }
+
+  const recurRef = doc(db, RECURRING_PATH, recurringId);
+  await updateDoc(recurRef, {
+    nextDueDate: Timestamp.fromDate(nextDue)
+  });
+};
+
+// --- CRUD for Recurring Transactions ---
+export const addRecurringTransaction = async (data) => {
+  const ref = collection(db, RECURRING_PATH);
+  await addDoc(ref, {
+    ...data,
+    isActive: true,
+    createdAt: Timestamp.now()
+  });
+};
+
+export const updateRecurringTransaction = async (id, data) => {
+  const ref = doc(db, RECURRING_PATH, id);
+  await updateDoc(ref, data);
+};
+
+export const deleteRecurringTransaction = async (id) => {
+  const ref = doc(db, RECURRING_PATH, id);
+  await firestoreDeleteDoc(ref);
+};
+
+// --- CRUD for Templates (Pinning) ---
+export const updateTemplate = async (id, data) => {
+  const ref = doc(db, `ledgers/${LEDGER_ID}/templates`, id);
+  await updateDoc(ref, data);
+};
+
+export const deleteTemplate = async (id) => {
+  const ref = doc(db, `ledgers/${LEDGER_ID}/templates`, id);
+  await firestoreDeleteDoc(ref);
+};

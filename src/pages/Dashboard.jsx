@@ -1,19 +1,98 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import useAppStore from '../store/useAppStore';
 import { formatCurrency } from '../utils/formatters';
 import CategoryDoughnut from '../components/charts/CategoryDoughnut';
 import Button from '../components/common/Button';
 import { useNavigate } from 'react-router-dom';
 import ConfirmModal from '../components/modals/ConfirmModal';
+import { checkDueRecurring, processRecurringTransaction, skipRecurringTransaction, addTransaction } from '../services/transactionService';
+import { Timestamp } from 'firebase/firestore';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { transactions, participants, loading } = useAppStore();
+  const { transactions, participants, loading, templates, showToast } = useAppStore();
   const [showSummary, setShowSummary] = useState(false);
+
+  // --- NEW STATE: Recurring Logic ---
+  const [dueRecurringItem, setDueRecurringItem] = useState(null);
+  const [showRecurModal, setShowRecurModal] = useState(false);
+
+  // --- FEATURE 1: Check Recurring on Load ---
+  useEffect(() => {
+    const checkForRecurring = async () => {
+      if (loading) return;
+      try {
+        const dueItems = await checkDueRecurring();
+        if (dueItems && dueItems.length > 0) {
+          // Grab the first due item to process
+          setDueRecurringItem(dueItems[0]);
+          setShowRecurModal(true);
+        }
+      } catch (err) {
+        console.error("Failed to check recurring", err);
+      }
+    };
+    checkForRecurring();
+  }, [loading]);
+
+  const handleProcessRecurring = async () => {
+    if (!dueRecurringItem) return;
+    try {
+      await processRecurringTransaction(dueRecurringItem.id, dueRecurringItem);
+      showToast(`Auto-logged: ${dueRecurringItem.name}`, false);
+      setShowRecurModal(false);
+      setDueRecurringItem(null);
+    } catch {
+      showToast('Failed to log recurring item', true);
+    }
+  };
+
+  const handleSkipRecurring = async () => {
+    if (!dueRecurringItem) return;
+    try {
+      await skipRecurringTransaction(dueRecurringItem.id, dueRecurringItem.nextDueDate, dueRecurringItem.frequency);
+      showToast(`Skipped: ${dueRecurringItem.name}`, false);
+      setShowRecurModal(false);
+      setDueRecurringItem(null);
+    } catch {
+      showToast('Error skipping item', true);
+    }
+  };
+
+  // --- FEATURE 2: Quick Add Logic ---
+  const pinnedTemplates = useMemo(() => {
+    return templates ? templates.filter(t => t.isPinned) : [];
+  }, [templates]);
+
+  const handleQuickAdd = async (template) => {
+    try {
+      const txnData = {
+        amount: template.amount,
+        category: template.category,
+        expenseName: template.expenseName || template.description, // Fix: Use expenseName
+        payer: 'me', // Default to 'me' for quick add on personal dashboard
+        splits: { 'me': template.amount },
+        timestamp: Timestamp.now(), // Ensure current date
+        type: 'expense',
+        paymentMode: template.paymentMode || 'Cash', // Add paymentMode
+        isDeleted: false,
+        // Optional: Carry over other fields if present in template
+        tag: template.tag || '',
+        place: template.place || '',
+        note: template.note || ''
+      };
+      await addTransaction(txnData);
+      showToast(`Added ${template.expenseName || template.description}`, false);
+      // useAppStore.getState().refreshViews(); // Not strictly needed if firestore listener updates, but good for safety
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to quick-add', true);
+    }
+  };
 
   // --- Core Balance Logic ---
   const stats = useMemo(() => {
-    let myPersonalBalances = {}; 
+    let myPersonalBalances = {};
     let netPosition = 0;
     let totalPaymentsMadeByMe = 0;
     let totalRepaymentsMadeToMe = 0;
@@ -36,7 +115,7 @@ const Dashboard = () => {
       .forEach(txn => {
         const payer = txn.payer || 'me';
         const splits = txn.splits || {};
-        const amount = txn.amount || 0; 
+        const amount = txn.amount || 0;
 
         // Income Logic
         if (txn.type === 'income') {
@@ -47,14 +126,14 @@ const Dashboard = () => {
               monthlyIncome += (amount / 100);
             }
           }
-          return; 
+          return;
         }
 
         if (txn.isReturn) {
           const recipient = txn.participants?.[0];
-          
+
           // Guard clause: skip if data is malformed
-          if (!recipient) return; 
+          if (!recipient) return;
 
           if (payer === 'me') {
             // Case 1: You paid someone (You settle up or lend money)
@@ -69,7 +148,7 @@ const Dashboard = () => {
               totalRepaymentsMadeToMe += amount;
             }
           }
-        } 
+        }
         else {
           if (payer === 'me') {
             totalPaymentsMadeByMe += amount;
@@ -114,52 +193,71 @@ const Dashboard = () => {
   }, [transactions, participants]);
 
   const handleSettleUp = (uid, amount) => {
-    navigate('/add', { 
-      state: { 
-        type: 'expense', 
+    navigate('/add', {
+      state: {
+        type: 'expense',
         isReturn: true,
         payer: 'me',
         participants: [uid],
-        amount: Math.abs(amount/100),
+        amount: Math.abs(amount / 100),
         description: 'Settlement'
-      } 
+      }
     });
   };
 
   // --- Who Owes Whom Logic ---
   const debtSummaryHtml = useMemo(() => {
-     if (!stats) return "";
-     const lines = Object.entries(stats.myPersonalBalances)
-        .filter(([, val]) => Math.abs(val) > 1)
-        .map(([uid, val]) => {
-            const p = participants.find(x => x.uniqueId === uid);
-            const name = p ? p.name : uid;
-            
-            if (val > 0) return `<li class="text-green-600">${name} owes you ${formatCurrency(val)}</li>`;
-            return `<li class="text-red-600">You owe ${name} ${formatCurrency(Math.abs(val))}</li>`;
-        });
-     
-     if (lines.length === 0) return "Everyone is settled up!";
-     return `<ul class="space-y-2 list-disc list-inside">${lines.join('')}</ul>`;
-  }, [stats, participants]); 
+    if (!stats) return "";
+    const lines = Object.entries(stats.myPersonalBalances)
+      .filter(([, val]) => Math.abs(val) > 1)
+      .map(([uid, val]) => {
+        const p = participants.find(x => x.uniqueId === uid);
+        const name = p ? p.name : uid;
+
+        if (val > 0) return `<li class="text-green-600">${name} owes you ${formatCurrency(val)}</li>`;
+        return `<li class="text-red-600">You owe ${name} ${formatCurrency(Math.abs(val))}</li>`;
+      });
+
+    if (lines.length === 0) return "Everyone is settled up!";
+    return `<ul class="space-y-2 list-disc list-inside">${lines.join('')}</ul>`;
+  }, [stats, participants]);
 
   if (loading) return <div className="text-center text-gray-500 mt-10">Calculating balances...</div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-2">
         <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">Balances</h2>
         <Button variant="primary" onClick={() => setShowSummary(true)}>
           Who Owes Whom?
         </Button>
       </div>
 
+      {/* --- INSERT: Quick Add Shortcuts --- */}
+      {pinnedTemplates.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Quick Add</h3>
+          <div className="flex flex-wrap gap-3">
+            {pinnedTemplates.map(t => (
+              <button
+                key={t.id}
+                onClick={() => handleQuickAdd(t)}
+                className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full shadow-sm hover:shadow-md hover:border-sky-500 transition-all text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                <span>⚡</span>
+                <span>{t.expenseName || t.description}</span>
+                <span className="text-xs text-gray-400">({formatCurrency(t.amount)})</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Your Net Position</h3>
-          <div className={`text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 ${
-            stats.netPosition > 0 ? 'text-green-600' : stats.netPosition < 0 ? 'text-red-600' : 'text-gray-800 dark:text-gray-200'
-          }`}>
+          <div className={`text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 ${stats.netPosition > 0 ? 'text-green-600' : stats.netPosition < 0 ? 'text-red-600' : 'text-gray-800 dark:text-gray-200'
+            }`}>
             {formatCurrency(stats.netPosition)}
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -189,7 +287,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Paid By Others</h3>
           <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-orange-600">
             {formatCurrency(stats.paidByOthers)}
@@ -198,7 +296,7 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        
+
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700 md:col-span-2">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Detailed Breakdown</h3>
           <div className="space-y-3 max-h-64 overflow-y-auto no-scrollbar">
@@ -209,23 +307,23 @@ const Dashboard = () => {
                 if (Math.abs(val) < 1) return null;
                 const p = participants.find(x => x.uniqueId === uid);
                 const name = p ? p.name : uid;
-                
+
                 return (
                   /* REFACTORED: Stack vertically on mobile, row on tablet/desktop */
                   <div key={uid} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg gap-2">
                     <span className="font-medium text-gray-700 dark:text-gray-300 wrap-break-word text-lg sm:text-base">
                       {name}
                     </span>
-                    
+
                     <div className="w-full sm:w-auto">
                       {val > 0 ? (
                         <div className="flex justify-end w-full">
-                           <span className="font-semibold text-green-600">owes you {formatCurrency(val)}</span>
+                          <span className="font-semibold text-green-600">owes you {formatCurrency(val)}</span>
                         </div>
                       ) : (
                         <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
                           <span className="font-semibold text-red-600">you owe {formatCurrency(Math.abs(val))}</span>
-                          <button 
+                          <button
                             onClick={() => handleSettleUp(uid, val)}
                             className="text-xs bg-sky-600 text-white px-3 py-1.5 rounded hover:bg-sky-700 whitespace-nowrap shrink-0 transition-colors"
                           >
@@ -254,7 +352,7 @@ const Dashboard = () => {
 
       </div>
 
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={showSummary}
         title="Who Owes Whom?"
         message={debtSummaryHtml}
@@ -262,6 +360,19 @@ const Dashboard = () => {
         onConfirm={() => setShowSummary(false)}
         onCancel={() => setShowSummary(false)}
       />
+
+      {/* --- INSERT: Recurring Modal --- */}
+      {dueRecurringItem && (
+        <ConfirmModal
+          isOpen={showRecurModal}
+          title={`Recurring Expense Due`}
+          message={`Log payment for <b>${dueRecurringItem.name}</b> (${formatCurrency(dueRecurringItem.amount)})?`}
+          confirmText="Yes, Log It"
+          cancelText="Skip this Month"
+          onConfirm={handleProcessRecurring}
+          onCancel={handleSkipRecurring}
+        />
+      )}
     </div>
   );
 };

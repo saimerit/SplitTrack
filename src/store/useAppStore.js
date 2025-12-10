@@ -18,19 +18,19 @@ export const PALETTE_PRESETS = [
     type: 'dark',
     colors: {
       // Both modes use pure black
-      light: { 
-        bgMain: '#000000', 
-        bgSurface: '#0a0a0a', 
-        primary: '#ffffff', 
-        textMain: '#ffffff', 
-        border: '#1a1a1a' 
+      light: {
+        bgMain: '#000000',
+        bgSurface: '#0a0a0a',
+        primary: '#ffffff',
+        textMain: '#ffffff',
+        border: '#1a1a1a'
       },
-      dark: { 
-        bgMain: '#000000', 
-        bgSurface: '#0a0a0a', 
-        primary: '#ffffff', 
-        textMain: '#ffffff', 
-        border: '#1a1a1a' 
+      dark: {
+        bgMain: '#000000',
+        bgSurface: '#0a0a0a',
+        primary: '#ffffff',
+        textMain: '#ffffff',
+        border: '#1a1a1a'
       }
     }
   },
@@ -44,13 +44,13 @@ export const PALETTE_PRESETS = [
     }
   },
   {
-      id: 'midnight',
-      name: 'Midnight Blue',
-      type: 'dark',
-      colors: {
-          light: { bgMain: '#eff6ff', bgSurface: '#ffffff', primary: '#1e40af', textMain: '#1e3a8a' },
-          dark: { bgMain: '#0f172a', bgSurface: '#1e293b', primary: '#60a5fa', textMain: '#f1f5f9' }
-      }
+    id: 'midnight',
+    name: 'Midnight Blue',
+    type: 'dark',
+    colors: {
+      light: { bgMain: '#eff6ff', bgSurface: '#ffffff', primary: '#1e40af', textMain: '#1e3a8a' },
+      dark: { bgMain: '#0f172a', bgSurface: '#1e293b', primary: '#60a5fa', textMain: '#f1f5f9' }
+    }
   }
 ];
 
@@ -60,12 +60,12 @@ const useAppStore = create(
       // --- Master Data ---
       rawTransactions: [],
       rawParticipants: [],
-      
+
       // --- Derived Data ---
       transactions: [],
       participants: [],
       participantsLookup: new Map(),
-      
+
       // --- Auxiliary Data ---
       categories: [],
       places: [],
@@ -73,10 +73,11 @@ const useAppStore = create(
       modesOfPayment: [],
       templates: [],
       goals: [],
-      groups: [], 
+      recurring: [],
+      groups: [],
 
       // --- State & Settings ---
-      activeGroupId: 'personal', 
+      activeGroupId: 'personal',
       userSettings: {},
       currentUser: null,
       loading: true,
@@ -117,6 +118,7 @@ const useAppStore = create(
       setModes: (data) => set({ modesOfPayment: data }),
       setTemplates: (data) => set({ templates: data }),
       setGoals: (data) => set({ goals: data }),
+      setRecurring: (data) => set({ recurring: data }),
       setUserSettings: (data) => set({ userSettings: data || {} }),
       setCurrentUser: (user) => set({ currentUser: user }),
       setLoading: (isLoading) => set({ loading: isLoading }),
@@ -129,7 +131,7 @@ const useAppStore = create(
     }),
     {
       name: 'splittrack-storage',
-      partialize: (state) => ({ 
+      partialize: (state) => ({
         activeGroupId: state.activeGroupId,
         userSettings: state.userSettings,
         activePaletteId: state.activePaletteId,

@@ -118,7 +118,7 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
       {/* List Item (Truncated) */}
       <div
         onClick={() => selectionMode ? onToggleSelect(txn.id) : setShowModal(true)}
-        className={`sm:hidden p-4 flex flex-row justify-between items-center border-b border-gray-100 dark:border-gray-700 transition-colors cursor-pointer group ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+        className={`sm:hidden p-3 flex flex-row justify-between items-center border-b border-gray-100 dark:border-gray-700 transition-colors cursor-pointer group ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
       >
         <div className="flex gap-3 items-center min-w-0 flex-1">
           {selectionMode && (

@@ -30,38 +30,38 @@ const Timeline = () => {
     // Changed mx-auto max-w-3xl to include responsiveness
     <div className="max-w-3xl mx-auto space-y-8 relative before:absolute before:inset-0 before:ml-4 md:before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-linear-to-b before:from-transparent before:via-slate-300 before:to-transparent pb-20">
       {/* Adjusted padding left for title */}
-      <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200 mb-8 pl-10 md:pl-12">Timeline</h2>
-      
+      <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200 mb-8 pl-12 md:pl-12">Timeline</h2>
+
       {Object.entries(groups).map(([dateStr, txns]) => (
         <div key={dateStr} className="relative">
           {/* Date Header */}
-          <div className="sticky top-0 z-30 mb-6 pt-2">
-             {/* Blue Dot - Adjusted left position for mobile */}
-             <div className="absolute top-1/2 -translate-y-1/2 left-4 md:left-5 -translate-x-1/2 bg-sky-500 h-3 w-3 md:h-4 md:w-4 rounded-full border-2 border-white dark:border-gray-900 z-20 box-content"></div>
-             
-             {/* Date Text - Adjusted margin left for mobile */}
-             <h3 className="ml-10 md:ml-12 inline-block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-                 {dateStr === todayStr ? "Today" : dateStr}
-             </h3>
+          <div className="sticky top-20 z-20 mb-6 pt-2">
+            {/* Blue Dot - Adjusted left position for mobile */}
+            <div className="absolute top-1/2 -translate-y-1/2 left-4 md:left-5 -translate-x-1/2 bg-sky-500 h-3 w-3 md:h-4 md:w-4 rounded-full border-2 border-white dark:border-gray-900 z-20 box-content"></div>
+
+            {/* Date Text - Adjusted margin left for mobile */}
+            <h3 className="ml-12 md:ml-12 inline-block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm relative z-30">
+              {dateStr === todayStr ? "Today" : dateStr}
+            </h3>
           </div>
 
           {/* Transactions List - Adjusted margin left for mobile */}
-          <div className="ml-10 md:ml-12 space-y-4">
+          <div className="ml-12 md:ml-12 space-y-4">
             {txns.map(txn => {
-              const isReturn = txn.isReturn; 
+              const isReturn = txn.isReturn;
               const isRefund = txn.amount < 0;
               const isIncome = txn.type === 'income';
-              
+
               let sign = '-';
               let colorClass = 'text-gray-800 dark:text-gray-200';
               let amountVal = Math.abs(txn.amount / 100);
 
               if (isRefund || isIncome) {
-                 sign = '+';
-                 colorClass = 'text-green-600';
+                sign = '+';
+                colorClass = 'text-green-600';
               } else if (isReturn) {
-                 if (txn.payer === 'me') { sign = '-'; colorClass = 'text-red-600'; }
-                 else { sign = '+'; colorClass = 'text-green-600'; }
+                if (txn.payer === 'me') { sign = '-'; colorClass = 'text-red-600'; }
+                else { sign = '+'; colorClass = 'text-green-600'; }
               }
 
               const myShare = txn.splits?.me ? (txn.splits.me / 100) : 0;
@@ -77,10 +77,10 @@ const Timeline = () => {
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className={`font-bold text-sm sm:text-base ${colorClass}`}>{sign}₹{formatCurrency(amountVal * 100).replace('₹','')}</p>
+                    <p className={`font-bold text-sm sm:text-base ${colorClass}`}>{sign}₹{formatCurrency(amountVal * 100).replace('₹', '')}</p>
                     {myShare !== 0 && !isReturn && !isIncome && (
                       <p className={`text-[10px] sm:text-xs ${isRefund ? 'text-green-600' : 'text-gray-400'}`}>
-                         My Share: {shareText}
+                        My Share: {shareText}
                       </p>
                     )}
                   </div>

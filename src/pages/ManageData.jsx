@@ -40,8 +40,8 @@ const SimpleManager = ({ title, data, collectionName, onDelete }) => {
         <div className="divide-y dark:divide-gray-700 max-h-96 overflow-y-auto">
           {data.map(item => (
             <div key={item.id} className="p-4 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700">
-              <span className="dark:text-gray-300">{item.name}</span>
-              <button onClick={() => onDelete(item.id, collectionName, item.name)} className="text-gray-400 hover:text-red-500">
+              <span className="dark:text-gray-300 truncate pr-4 min-w-0 flex-1" title={item.name}>{item.name}</span>
+              <button onClick={() => onDelete(item.id, collectionName, item.name)} className="text-gray-400 hover:text-red-500 shrink-0">
                 <Trash2 size={18} />
               </button>
             </div>
@@ -121,11 +121,11 @@ const CategoryManager = ({ data, onDelete }) => {
         <div className="divide-y dark:divide-gray-700 max-h-96 overflow-y-auto">
           {data.map(item => (
             <div key={item.id} className="p-4 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700">
-              <div>
-                <span className="dark:text-gray-300 block font-medium">{item.name}</span>
+              <div className="min-w-0 flex-1 pr-4">
+                <span className="dark:text-gray-300 block font-medium truncate" title={item.name}>{item.name}</span>
                 {item.budget > 0 && <span className="text-xs text-gray-500 dark:text-gray-400">Budget: ₹{item.budget}</span>}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button onClick={() => startEdit(item)} className="text-gray-400 hover:text-blue-500">
                   <Edit2 size={18} />
                 </button>

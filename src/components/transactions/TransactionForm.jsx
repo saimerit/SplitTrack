@@ -90,6 +90,30 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         const amountNum = parseFloat(formData.amount);
         if (isNaN(amountNum)) return true;
 
+        // Calculate My Share based on Split Method
+        let myShareVal = 0;
+        if (formData.splitMethod === 'equal') {
+            let count = 0;
+            if (formData.includeMe) count++;
+            if (formData.payer !== 'me' && !formData.selectedParticipants.includes(formData.payer) && formData.includePayer) count++;
+            count += (formData.selectedParticipants || []).length;
+
+            if (formData.includeMe && count > 0) {
+                myShareVal = amountNum / count;
+            }
+        } else if (formData.splitMethod === 'percentage') {
+            // Splits in percentage store the percent value (0-100)
+            const myPercent = formData.splits?.['me'] || 0;
+            myShareVal = (myPercent / 100) * amountNum;
+        } else if (formData.splitMethod === 'dynamic') {
+            // Splits in dynamic store the value in Paise (integers)
+            const myPaise = formData.splits?.['me'] || 0;
+            myShareVal = myPaise / 100;
+        } else {
+            // Fallback: If I am included, assume full amount (just in case)
+            if (formData.includeMe) myShareVal = amountNum;
+        }
+
         const now = new Date(formData.date || new Date());
         const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -106,8 +130,8 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                 return sum + (myShare / 100);
             }, 0);
 
-        if (currentUsage + amountNum > cat.budget) {
-            const newTotal = currentUsage + amountNum;
+        if (currentUsage + myShareVal > cat.budget) {
+            const newTotal = currentUsage + myShareVal;
             const exceededBy = newTotal - cat.budget;
 
             setBudgetWarning({
@@ -116,7 +140,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                         <p><strong>Category:</strong> ${formData.category}</p>
                         <p><strong>Monthly Limit:</strong> ₹${cat.budget}</p>
                         <p><strong>Current Usage:</strong> ₹${currentUsage.toFixed(2)}</p>
-                        <p><strong>This Transaction:</strong> ₹${amountNum.toFixed(2)}</p>
+                        <p><strong>Your Share of this Txn:</strong> ₹${myShareVal.toFixed(2)}</p>
                         <hr class="border-gray-300 dark:border-gray-600"/>
                         <p class="font-bold text-red-600">New Total: ₹${newTotal.toFixed(2)}</p>
                         <p class="text-sm font-semibold text-orange-600">You are exceeding your budget by ₹${exceededBy.toFixed(2)}</p>

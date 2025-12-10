@@ -200,7 +200,7 @@ const Dashboard = () => {
         payer: 'me',
         participants: [uid],
         amount: Math.abs(amount / 100),
-        description: 'Settlement'
+        expenseName: 'Settlement'
       }
     });
   };

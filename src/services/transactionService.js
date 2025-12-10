@@ -4,6 +4,7 @@ import {
   limit, startAfter, orderBy, increment // Added imports for pagination
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import useAppStore from '../store/useAppStore';
 
 const LEDGER_ID = 'main-ledger';
 const COLLECTION_PATH = `ledgers/${LEDGER_ID}/transactions`;
@@ -17,10 +18,18 @@ export const fastUpdateParentStats = async (parentId, changeInAmount) => {
   // it will just fail silently or throw.
   // For robustness, one might want to check existence but that costs a read.
   // The prompt explicitly asked for "no reads required".
-  await updateDoc(parentRef, {
-    netAmount: increment(changeInAmount),
-    hasRefunds: true
-  });
+  try {
+    await updateDoc(parentRef, {
+      netAmount: increment(changeInAmount),
+      hasRefunds: true
+    });
+  } catch (error) {
+    console.error("Failed to fast-update parent stats:", error);
+    useAppStore.getState().showToast(
+      `CRITICAL: Parent transaction ${parentId} failed to update! Balance may be wrong.`,
+      true
+    );
+  }
 };
 
 // Helper: Recalculate parent stats
@@ -83,6 +92,10 @@ const updateParentStats = async (parentId) => {
     }
   } catch (error) {
     console.error("Failed to update parent stats:", error);
+    useAppStore.getState().showToast(
+      `CRITICAL: Parent transaction ${parentId} failed to update! Balance may be wrong.`,
+      true
+    );
   }
 };
 
@@ -157,6 +170,10 @@ export const deleteTransaction = async (id, parentId) => {
     }
   } catch (e) {
     console.error("Delete failed:", e);
+    useAppStore.getState().showToast(
+      `CRITICAL: Failed to delete transaction ${id}. ${e.message}`,
+      true
+    );
     throw e;
   }
 };

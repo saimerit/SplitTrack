@@ -1,8 +1,10 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useBalances } from '../hooks/useBalances';
 import useAppStore from '../store/useAppStore';
 import { formatCurrency } from '../utils/formatters';
 import CategoryDoughnut from '../components/charts/CategoryDoughnut';
 import Button from '../components/common/Button';
+import StatCard from '../components/common/StatCard';
 import { useNavigate } from 'react-router-dom';
 import ConfirmModal from '../components/modals/ConfirmModal';
 import { checkDueRecurring, processRecurringTransaction, skipRecurringTransaction, addTransaction } from '../services/transactionService';
@@ -91,106 +93,7 @@ const Dashboard = () => {
   };
 
   // --- Core Balance Logic ---
-  const stats = useMemo(() => {
-    let myPersonalBalances = {};
-    let netPosition = 0;
-    let totalPaymentsMadeByMe = 0;
-    let totalRepaymentsMadeToMe = 0;
-    let myTotalExpenseShare = 0;
-    let totalPaidByOthersForMe = 0;
-    let monthlyIncome = 0;
-    let categorySums = {};
-
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    participants.forEach(p => {
-      if (p.uniqueId !== 'me') myPersonalBalances[p.uniqueId] = 0;
-    });
-
-    // Only process non-deleted transactions
-    transactions
-      .filter(t => !t.isDeleted)
-      .forEach(txn => {
-        const payer = txn.payer || 'me';
-        const splits = txn.splits || {};
-        const amount = txn.amount || 0;
-
-        // Income Logic
-        if (txn.type === 'income') {
-          if (txn.timestamp) {
-            // Handle both Firestore Timestamp and Date objects for robustness
-            const d = txn.timestamp.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp);
-            if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
-              monthlyIncome += (amount / 100);
-            }
-          }
-          return;
-        }
-
-        if (txn.isReturn) {
-          const recipient = txn.participants?.[0];
-
-          // Guard clause: skip if data is malformed
-          if (!recipient) return;
-
-          if (payer === 'me') {
-            // Case 1: You paid someone (You settle up or lend money)
-            if (recipient !== 'me') {
-              myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;
-              totalPaymentsMadeByMe += amount;
-            }
-          } else {
-            // Case 2: Someone else paid YOU (They settle up or lend you money)
-            if (recipient === 'me') {
-              myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
-              totalRepaymentsMadeToMe += amount;
-            }
-          }
-        }
-        else {
-          if (payer === 'me') {
-            totalPaymentsMadeByMe += amount;
-            Object.entries(splits).forEach(([uid, share]) => {
-              if (uid === 'me') {
-                myTotalExpenseShare += share;
-                const cat = txn.category || 'Uncategorized';
-                categorySums[cat] = (categorySums[cat] || 0) + share;
-              } else {
-                myPersonalBalances[uid] = (myPersonalBalances[uid] || 0) + share;
-              }
-            });
-          } else {
-            const myShare = splits['me'] || 0;
-            if (myShare > 0) {
-              myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - myShare;
-              myTotalExpenseShare += myShare;
-              totalPaidByOthersForMe += myShare;
-              const cat = txn.category || 'Uncategorized';
-              categorySums[cat] = (categorySums[cat] || 0) + myShare;
-            }
-          }
-        }
-      });
-
-    netPosition = Object.values(myPersonalBalances).reduce((sum, val) => sum + val, 0);
-
-    const chartData = Object.entries(categorySums)
-      .map(([label, val]) => ({ label, value: val / 100 }))
-      .sort((a, b) => b.value - a.value);
-
-    return {
-      netPosition,
-      myPersonalBalances,
-      myTotalExpenditure: totalPaymentsMadeByMe - totalRepaymentsMadeToMe,
-      myTotalShare: myTotalExpenseShare,
-      paidByOthers: totalPaidByOthersForMe,
-      monthlyIncome,
-      chartData
-    };
-
-  }, [transactions, participants]);
+  const stats = useBalances(transactions, participants);
 
   const handleSettleUp = (uid, amount) => {
     navigate('/add', {
@@ -254,45 +157,38 @@ const Dashboard = () => {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Your Net Position</h3>
-          <div className={`text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 ${stats.netPosition > 0 ? 'text-green-600' : stats.netPosition < 0 ? 'text-red-600' : 'text-gray-800 dark:text-gray-200'
-            }`}>
-            {formatCurrency(stats.netPosition)}
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {stats.netPosition > 0 ? "You are owed money" : "You owe money"}
-          </p>
-        </div>
+        <StatCard
+          title="Your Net Position"
+          value={stats.netPosition}
+          subtitle={stats.netPosition > 0 ? "You are owed money" : "You owe money"}
+          colorTheme="dynamic"
+          className="lg:col-span-1"
+        />
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Income (This Month)</h3>
-          <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-emerald-500">
-            {formatCurrency(stats.monthlyIncome * 100)}
-          </div>
-        </div>
+        <StatCard
+          title="Income (This Month)"
+          value={stats.monthlyIncome * 100}
+          colorTheme="emerald"
+        />
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Total Expenditure</h3>
-          <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-blue-600">
-            {formatCurrency(stats.myTotalExpenditure)}
-          </div>
-          <p className="text-xs text-gray-400 mt-1">Total payments - Repayments</p>
-        </div>
+        <StatCard
+          title="Total Expenditure"
+          value={stats.myTotalExpenditure}
+          subtitle="Total payments - Repayments"
+          colorTheme="blue"
+        />
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">My Total Share</h3>
-          <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-purple-600">
-            {formatCurrency(stats.myTotalShare)}
-          </div>
-        </div>
+        <StatCard
+          title="My Total Share"
+          value={stats.myTotalShare}
+          colorTheme="purple"
+        />
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Paid By Others</h3>
-          <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-2 text-orange-600">
-            {formatCurrency(stats.paidByOthers)}
-          </div>
-        </div>
+        <StatCard
+          title="Paid By Others"
+          value={stats.paidByOthers}
+          colorTheme="orange"
+        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

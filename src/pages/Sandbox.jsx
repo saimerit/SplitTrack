@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useBalances } from '../hooks/useBalances';
 import useAppStore from '../store/useAppStore';
-import { Plus, Trash2, RotateCcw, Sparkles } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, Sparkles, User, Check } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
@@ -21,7 +21,7 @@ const Sandbox = () => {
         type: 'expense', // expense | income
         category: '',
         payer: 'me',
-        splitType: 'me' // 'me' | 'them' | 'equal'
+        beneficiaries: ['me'] // List of uniqueIds involved in the split
     });
 
     // 1. Calculate Real Stats
@@ -33,28 +33,23 @@ const Sandbox = () => {
             let payer = t.payer || 'me';
             let splits = {};
             const amount = t.amount || 0;
+            const beneficiaries = t.beneficiaries || ['me'];
 
             if (t.type === 'expense') {
-                if (t.splitType === 'me') {
-                    // For Me: Only I am involved in the split (assumes payer is Me, or Someone paid for Me)
-                    // If payer is Me -> I paid for Me.
-                    // If payer is Other -> They paid for Me.
-                    splits = { 'me': amount };
-                } else if (t.splitType === 'others') {
-                    // I paid for someone else.
-                    if (payer === 'me') {
-                        // Paid for "Others". Default to first non-me participant for now to trigger debt.
-                        const other = participants.find(p => p.uniqueId !== 'me');
-                        if (other) splits = { [other.uniqueId]: amount };
-                    } else {
-                        // Someone else paid for someone else? Irrelevant for my net position usually, unless I'm involved.
-                        // Ignore for simplicity.
-                    }
-                } else if (t.splitType === 'equal') {
-                    // Split Equally among ALL participants
-                    const partCount = participants.length;
-                    const share = Math.floor(amount / partCount);
-                    participants.forEach(p => splits[p.uniqueId] = share);
+                const count = beneficiaries.length;
+                if (count > 0) {
+                    // Precision handling: calculating share in paise integers
+                    const share = Math.floor(amount / count);
+                    let remainder = amount % count;
+
+                    // Distribute equally
+                    beneficiaries.forEach((id, index) => {
+                        // Distribute remainder paise to first few to ensure total matches exactly
+                        splits[id] = share + (index < remainder ? 1 : 0);
+                    });
+                } else {
+                    // Fallback: Payer pays for themselves
+                    splits[payer] = amount;
                 }
             }
 
@@ -75,6 +70,10 @@ const Sandbox = () => {
     const handleAdd = (e) => {
         e.preventDefault();
         if (!formData.name || !formData.amount) return;
+        if (formData.beneficiaries.length === 0) {
+            // Ideally show toast/error. For now just return.
+            return;
+        }
 
         const newTxn = {
             id: `sandbox-${Date.now()}`,
@@ -83,12 +82,12 @@ const Sandbox = () => {
             type: formData.type,
             category: formData.category || 'Sandbox',
             payer: formData.payer,
-            splitType: formData.splitType,
+            beneficiaries: formData.beneficiaries,
             timestamp: new Date()
         };
 
         setSandboxTxns([...sandboxTxns, newTxn]);
-        // Reset form but keep last payer/split settings for convenience
+        // Reset form but keep last payer settings for convenience
         setFormData({ ...formData, name: '', amount: '' });
     };
 
@@ -98,8 +97,17 @@ const Sandbox = () => {
 
     const resetSandbox = () => setSandboxTxns([]);
 
+    const toggleBeneficiary = (id) => {
+        const current = formData.beneficiaries;
+        if (current.includes(id)) {
+            setFormData({ ...formData, beneficiaries: current.filter(b => b !== id) });
+        } else {
+            setFormData({ ...formData, beneficiaries: [...current, id] });
+        }
+    };
+
     return (
-        <div className="space-y-8 pb-20 animate-fade-in max-w-6xl mx-auto">
+        <div className="space-y-8 pb-20 animate-fade-in max-w-6xl mx-auto min-h-screen bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(139,92,246,0.03)_10px,rgba(139,92,246,0.03)_20px)] p-6 rounded-3xl">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
@@ -178,32 +186,78 @@ const Sandbox = () => {
                                 onChange={e => setFormData({ ...formData, amount: e.target.value })}
                             />
 
-                            <div className="grid grid-cols-2 gap-3">
-                                <Select
-                                    label="Paid By"
-                                    value={formData.payer}
-                                    onChange={e => setFormData({ ...formData, payer: e.target.value })}
-                                    options={[
-                                        { value: 'me', label: 'Me' },
-                                        ...participants
-                                            .filter(p => p.uniqueId !== 'me')
-                                            .map(p => ({ value: p.uniqueId, label: p.name.split(' ')[0] }))
-                                    ]}
-                                />
-
-                                {formData.type === 'expense' && formData.payer === 'me' && (
+                            {/* Expense Logic: Who Paid? Who is it for? */}
+                            {formData.type === 'expense' && (
+                                <div className="space-y-3">
                                     <Select
-                                        label="For Whom?"
-                                        value={formData.splitType}
-                                        onChange={e => setFormData({ ...formData, splitType: e.target.value })}
+                                        label="Paid By"
+                                        value={formData.payer}
+                                        onChange={e => setFormData({ ...formData, payer: e.target.value })}
                                         options={[
-                                            { value: 'me', label: 'For Me' },
-                                            { value: 'others', label: 'For Others (Lend)' }, // Simplification: "For Others" assigns to first Friend? Or we should allow picking?
-                                            { value: 'equal', label: 'Split Equally' }
+                                            { value: 'me', label: 'Me' },
+                                            ...participants
+                                                .filter(p => p.uniqueId !== 'me')
+                                                .map(p => ({ value: p.uniqueId, label: p.name.split(' ')[0] }))
                                         ]}
                                     />
-                                )}
-                            </div>
+
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Split With ({formData.beneficiaries.length})
+                                        </label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {/* Me Toggle */}
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleBeneficiary('me')}
+                                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${formData.beneficiaries.includes('me')
+                                                    ? 'bg-purple-100 border-purple-300 text-purple-700 dark:bg-purple-900/30 dark:border-purple-700 dark:text-purple-300'
+                                                    : 'bg-gray-50 border-gray-200 text-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400'
+                                                    }`}
+                                            >
+                                                {formData.beneficiaries.includes('me') && <Check size={12} />} You
+                                            </button>
+
+                                            {/* Other Participants */}
+                                            {participants.filter(p => p.uniqueId !== 'me').map(p => (
+                                                <button
+                                                    key={p.uniqueId}
+                                                    type="button"
+                                                    onClick={() => toggleBeneficiary(p.uniqueId)}
+                                                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${formData.beneficiaries.includes(p.uniqueId)
+                                                        ? 'bg-purple-100 border-purple-300 text-purple-700 dark:bg-purple-900/30 dark:border-purple-700 dark:text-purple-300'
+                                                        : 'bg-gray-50 border-gray-200 text-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400'
+                                                        }`}
+                                                >
+                                                    {formData.beneficiaries.includes(p.uniqueId) && <Check size={12} />} {p.name.split(' ')[0]}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Breakdown Summary */}
+                                    {formData.amount && formData.beneficiaries.length > 0 && (
+                                        <div className="text-xs bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700 mt-3 space-y-1">
+                                            <div className="flex justify-between text-gray-500 dark:text-gray-400">
+                                                <span>Total Amount:</span>
+                                                <span>{formatCurrency(parseFloat(formData.amount) * 100)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-gray-500 dark:text-gray-400">
+                                                <span>Split Between:</span>
+                                                <span>{formData.beneficiaries.length} people</span>
+                                            </div>
+                                            <div className="flex justify-between font-medium pt-2 border-t border-gray-200 dark:border-gray-600 mt-2">
+                                                <span className="text-gray-700 dark:text-gray-200">Your Share:</span>
+                                                <span className={formData.beneficiaries.includes('me') ? "text-purple-600 dark:text-purple-400" : "text-gray-400"}>
+                                                    {formData.beneficiaries.includes('me')
+                                                        ? formatCurrency((parseFloat(formData.amount) * 100) / formData.beneficiaries.length)
+                                                        : formatCurrency(0)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             <Select
                                 value={formData.category}
@@ -229,12 +283,14 @@ const Sandbox = () => {
                         </div>
 
                         {sandboxTxns.length === 0 ? (
-                            <div className="p-12 text-center text-gray-400 flex flex-col items-center">
-                                <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
-                                    <Sparkles size={24} className="text-gray-400" />
+                            <div className="flex flex-col items-center justify-center py-16 text-center">
+                                <div className="bg-purple-50 dark:bg-purple-900/20 p-6 rounded-full mb-4 animate-bounce-slow">
+                                    <Sparkles size={48} className="text-purple-400" />
                                 </div>
-                                <p>No active simulations.</p>
-                                <p className="text-sm mt-1">Add items on the left to predict your future balance.</p>
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Start Simulating</h3>
+                                <p className="text-gray-500 max-w-sm mt-1 mb-6">
+                                    Add theoretical expenses or incomes to see how they impact your financial future.
+                                </p>
                             </div>
                         ) : (
                             <div className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -245,8 +301,8 @@ const Sandbox = () => {
                                             <div className="min-w-0">
                                                 <p className="font-bold text-gray-800 dark:text-gray-200 truncate">{t.expenseName}</p>
                                                 <p className="text-xs text-gray-500 truncate">
-                                                    {t.payer === 'me' ? 'You' : participants.find(p => p.uniqueId === t.payer)?.name}
-                                                    {t.type === 'expense' && ` • ${t.splitType === 'others' ? 'Lent' : t.category}`}
+                                                    {t.payer === 'me' ? 'You' : participants.find(p => p.uniqueId === t.payer)?.name} paid
+                                                    {t.type === 'expense' && ` • Split w/ ${t.beneficiaries?.length || 1}`}
                                                 </p>
                                             </div>
                                         </div>

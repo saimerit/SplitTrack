@@ -288,27 +288,43 @@ const History = () => {
             <p>No transactions match your filters.</p>
           </div>
         ) : (
-          currentTransactions.map(txn => {
-            // Find linked items from the FULL dataset, not just the page
-            const linkedRefunds = transactions.filter(t =>
-              !t.isDeleted && (t.parentTransactionId === txn.id || (t.parentTransactionIds && t.parentTransactionIds.includes(txn.id)))
-            );
-
-            return (
-              <TransactionItem
-                key={txn.id}
-                txn={txn}
-                linkedRefunds={linkedRefunds}
-                participantsLookup={participantsLookup}
-                onEdit={() => handleEdit(txn)}
-                onDelete={requestDelete}
-                selectionMode={isSelectionMode}
-                isSelected={selectedIds.has(txn.id)}
-                onToggleSelect={toggleSelection}
-                onClone={handleClone}
-              />
-            );
-          })
+          Object.entries(
+            currentTransactions.reduce((groups, txn) => {
+              const d = txn.timestamp?.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp || 0);
+              const dateKey = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+              if (!groups[dateKey]) groups[dateKey] = [];
+              groups[dateKey].push(txn);
+              return groups;
+            }, {})
+          ).map(([date, txns]) => (
+            <div key={date} className="">
+              <div className="sticky top-0 z-10 bg-gray-50/95 dark:bg-gray-800/95 backdrop-blur-sm px-4 py-2 border-b border-gray-100 dark:border-gray-700 text-xs font-bold text-gray-500 uppercase tracking-wider shadow-sm flex items-center justify-between">
+                <span>{date}</span>
+                <span className="text-[10px] font-normal opacity-70">{txns.length} items</span>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                {txns.map(txn => {
+                  const linkedRefunds = transactions.filter(t =>
+                    !t.isDeleted && (t.parentTransactionId === txn.id || (t.parentTransactionIds && t.parentTransactionIds.includes(txn.id)))
+                  );
+                  return (
+                    <TransactionItem
+                      key={txn.id}
+                      txn={txn}
+                      linkedRefunds={linkedRefunds}
+                      participantsLookup={participantsLookup}
+                      onEdit={() => handleEdit(txn)}
+                      onDelete={requestDelete}
+                      selectionMode={isSelectionMode}
+                      isSelected={selectedIds.has(txn.id)}
+                      onToggleSelect={toggleSelection}
+                      onClone={handleClone}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ))
         )}
       </div>
 

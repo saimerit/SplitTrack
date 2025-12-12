@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import Sidebar from './Sidebar';
+import MobileNav from './MobileNav';
 import Toast from '../common/Toast';
 import useAppStore from '../../store/useAppStore';
 
@@ -44,13 +45,16 @@ const Layout = () => {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-3 sm:p-4 md:p-8">
+        <main className="flex-1 p-3 sm:p-4 md:p-8 pb-24 md:pb-8">
           <Outlet />
         </main>
       </div>
 
       {/* Global Toast */}
       {toast.show && <Toast message={toast.message} isError={toast.isError} />}
+
+      {/* Mobile Bottom Nav */}
+      <MobileNav />
     </div>
   );
 };

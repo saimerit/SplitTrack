@@ -322,8 +322,27 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                     </div>
                 )}
 
-                {/* Basic Fields */}
-                <Input label="Amount (₹)" type="number" step="0.01" value={formData.amount} onChange={actions.handleAmountChange} required />
+                {/* Smart Amount Input */}
+                <div className="col-span-full flex flex-col items-center justify-center py-6 bg-gray-50 dark:bg-gray-900/50 rounded-xl mb-2">
+                    <label className="text-sm font-medium text-gray-500 mb-1">Amount</label>
+                    <div className="flex items-baseline text-gray-900 dark:text-white">
+                        <span className="text-3xl font-light mr-1">₹</span>
+                        <input
+                            ref={(el) => {
+                                // Direct DOM manipulation to add non-passive listener
+                                if (el) {
+                                    el.addEventListener('wheel', (e) => { e.preventDefault(); e.target.blur(); }, { passive: false });
+                                }
+                            }}
+                            type="number"
+                            value={formData.amount}
+                            onChange={actions.handleAmountChange}
+                            placeholder="0"
+                            className="text-5xl font-bold bg-transparent border-none focus:ring-0 p-0 w-48 text-center placeholder-gray-300 dark:placeholder-gray-700 focus:outline-none"
+                            autoFocus
+                        />
+                    </div>
+                </div>
                 <Input label="Date" type="date" value={formData.date} onChange={e => setters.setDate(e.target.value)} required />
                 <SearchableSelect label="Category" value={formData.category} onChange={e => actions.handleQuickAddRequest(e.target.value, 'categories', 'Category')} options={categoryOptions} />
                 <SearchableSelect label="Place" value={formData.place} onChange={e => actions.handleQuickAddRequest(e.target.value, 'places', 'Place')} options={placeOptions} />

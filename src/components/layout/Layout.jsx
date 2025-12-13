@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import Toast from '../common/Toast';
@@ -10,6 +11,7 @@ const Layout = () => {
   const toast = useAppStore(state => state.toast);
   // Default: Closed on Mobile, Open on Desktop
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
+  const navigate = useNavigate();
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
@@ -34,7 +36,7 @@ const Layout = () => {
           {/* Toggle Button */}
           <button
             onClick={toggleSidebar}
-            className="p-2 mr-4 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg focus:outline-none"
+            className="hidden md:block p-2 mr-4 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg focus:outline-none"
             title={isSidebarOpen ? "Close Menu" : "Open Menu"}
           >
             {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
@@ -55,6 +57,14 @@ const Layout = () => {
 
       {/* Mobile Bottom Nav */}
       <MobileNav />
+      {/* Mobile FAB */}
+      <button
+        onClick={() => navigate('/add')}
+        className="md:hidden fixed bottom-24 right-5 h-14 w-14 bg-sky-600 hover:bg-sky-700 text-white rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-95 z-50 focus:outline-none focus:ring-4 focus:ring-sky-300"
+        aria-label="Add Transaction"
+      >
+        <Plus size={28} />
+      </button>
     </div>
   );
 };

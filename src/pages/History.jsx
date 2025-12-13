@@ -170,6 +170,17 @@ const History = () => {
   // Generate page options for dropdown
   const pageOptions = Array.from({ length: totalPages }, (_, i) => ({ value: i + 1, label: `Page ${i + 1}` }));
 
+  const groupedData = useMemo(() => {
+    const groups = {};
+    currentTransactions.forEach(txn => {
+      const d = txn.timestamp?.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp || 0);
+      const dateKey = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(txn);
+    });
+    return groups;
+  }, [currentTransactions]);
+
   return (
     <div className="space-y-6 animate-fade-in pb-20 md:pb-0">
 
@@ -288,15 +299,7 @@ const History = () => {
             <p>No transactions match your filters.</p>
           </div>
         ) : (
-          Object.entries(
-            currentTransactions.reduce((groups, txn) => {
-              const d = txn.timestamp?.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp || 0);
-              const dateKey = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-              if (!groups[dateKey]) groups[dateKey] = [];
-              groups[dateKey].push(txn);
-              return groups;
-            }, {})
-          ).map(([date, txns]) => (
+          Object.entries(groupedData).map(([date, txns]) => (
             <div key={date} className="">
               <div className="sticky top-0 z-10 bg-gray-50/95 dark:bg-gray-800/95 backdrop-blur-sm px-4 py-2 border-b border-gray-100 dark:border-gray-700 text-xs font-bold text-gray-500 uppercase tracking-wider shadow-sm flex items-center justify-between">
                 <span>{date}</span>

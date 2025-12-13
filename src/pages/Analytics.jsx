@@ -6,7 +6,7 @@ import {
 import { Doughnut, Pie, Bar } from 'react-chartjs-2';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { Download } from 'lucide-react';
+import { Download, TrendingUp, Calendar, PieChart, Layers } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { formatCurrency } from '../utils/formatters';
 import MonthlyTrendLine from '../components/charts/MonthlyTrendLine';
@@ -15,6 +15,7 @@ import CategoryDoughnut from '../components/charts/CategoryDoughnut';
 import { useTheme } from '../hooks/useTheme';
 import Button from '../components/common/Button';
 import Loader from '../components/common/Loader';
+import StatCard from '../components/common/StatCard';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, PointElement, LineElement, Filler);
 
@@ -22,8 +23,8 @@ const Analytics = () => {
   const { transactions, participantsLookup, categories } = useAppStore();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const textColor = isDark ? '#d1d5db' : '#374151';
-  const gridColor = isDark ? '#374151' : '#e5e7eb';
+  const textColor = isDark ? '#9ca3af' : '#4b5563';
+  const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
 
   const [stats, setStats] = useState(null);
   const [isCalculating, setIsCalculating] = useState(true);
@@ -40,8 +41,7 @@ const Analytics = () => {
 
   useEffect(() => {
     if (!workerRef.current) return;
-    setTimeout(() => setIsCalculating(true), 0);
-
+    setIsCalculating(true);
     const serializedTransactions = transactions
       .filter(t => !t.isDeleted)
       .map(t => ({
@@ -49,289 +49,248 @@ const Analytics = () => {
         timestamp: t.timestamp?.toMillis ? t.timestamp.toMillis() : new Date(t.timestamp).getTime()
       }));
     const serializedLookup = Array.from(participantsLookup.entries());
-
     workerRef.current.postMessage({ transactions: serializedTransactions, participantsLookup: serializedLookup });
   }, [transactions, participantsLookup]);
 
   if (isCalculating || !stats) return <Loader />;
 
+  // --- PDF GENERATION ---
   const generatePDF = () => {
     const doc = new jsPDF();
-    doc.setFontSize(20);
-    doc.text("SplitTrack Monthly Report", 14, 22);
-    doc.setFontSize(11);
-    doc.text(`Generated on: ${new Date().toDateString()}`, 14, 30);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.text("Financial Report", 14, 22);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 28);
+
     doc.autoTable({
       startY: 40,
+      headStyles: { fillColor: [14, 165, 233] },
       head: [['Metric', 'Value']],
       body: [
-        ['Total Spent', formatCurrency(stats.totalSpend * 100)],
+        ['Total Consumption', formatCurrency(stats.totalSpend * 100)],
         ['Total Lent', formatCurrency(stats.totalLent * 100)],
-        ['Net Cash Flow', formatCurrency(stats.customCashFlow * 100)],
+        ['Net Position', formatCurrency(stats.customCashFlow * 100)],
         ['Highest Spend Month', `${stats.peakSpendMonth} (${formatCurrency(stats.peakSpendAmount * 100)})`]
       ],
     });
-    doc.save(`SplitTrack_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`SplitTrack_Analytics_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
+  // --- CHART OPTIONS ---
   const commonOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: { legend: { position: 'right', labels: { color: textColor, boxWidth: 12, font: { size: 11 } } } }
-  };
-  const barOptions = {
-    ...commonOptions,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { ticks: { color: textColor }, grid: { display: false } },
-      y: { ticks: { color: textColor }, grid: { color: gridColor } }
-    }
-  };
-  const lendingBarOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { labels: { color: textColor } } },
-    scales: {
-      x: { ticks: { color: textColor }, grid: { display: false } },
-      y: { ticks: { color: textColor }, grid: { color: gridColor } }
-    }
-  };
-  const lendingBarData = {
-    labels: stats.monthlyChart.labels,
-    datasets: [
-      { label: 'Lent', data: stats.monthlyChart.lentData, backgroundColor: '#f59e0b', borderRadius: 4 },
-      { label: 'Received', data: stats.monthlyChart.receivedData, backgroundColor: '#10b981', borderRadius: 4 }
-    ]
-  };
-  const breakdownData = {
-    labels: ['My Expenses', 'Money Lent', 'Repayments Made'],
-    datasets: [{
-      data: [stats.totalSpend, stats.totalLent, stats.totalRepaymentSent],
-      backgroundColor: ['#f43f5e', '#f59e0b', '#3b82f6'],
-      borderColor: isDark ? '#1f2937' : '#ffffff',
-      borderWidth: 2
-    }]
-  };
-  const participantPieData = {
-    labels: Object.keys(stats.participantData),
-    datasets: [{
-      data: Object.values(stats.participantData),
-      backgroundColor: ['#0ea5e9', '#f97316', '#10b981', '#6366f1', '#ec4899', '#f59e0b', '#ef4444'],
-      borderColor: isDark ? '#1f2937' : '#ffffff',
-      borderWidth: 2
-    }]
-  };
-
-  const budgetCategories = categories?.filter(c => c.budget && c.budget > 0) || [];
-  const budgetChartData = {
-    labels: budgetCategories.map(c => c.name),
-    datasets: [
-      {
-        label: 'Spent (within limit)',
-        data: budgetCategories.map(c => {
-          const catEntry = stats?.currentMonthBreakdown?.find(entry => entry[0] === c.name);
-          const spent = catEntry ? catEntry[1] : 0;
-          return Math.min(spent, c.budget); // Cap at budget for this color
-        }),
-        backgroundColor: '#ef4444', // Red
-        stack: 'Stack 0',
-      },
-      {
-        label: 'Exceeded',
-        data: budgetCategories.map(c => {
-          const catEntry = stats?.currentMonthBreakdown?.find(entry => entry[0] === c.name);
-          const spent = catEntry ? catEntry[1] : 0;
-          return Math.max(0, spent - c.budget); // Only the excess
-        }),
-        backgroundColor: '#f97316', // Orange
-        stack: 'Stack 0',
-      },
-      {
-        label: 'Remaining',
-        data: budgetCategories.map(c => {
-          const catEntry = stats?.currentMonthBreakdown?.find(entry => entry[0] === c.name);
-          const spent = catEntry ? catEntry[1] : 0;
-          return Math.max(0, c.budget - spent);
-        }),
-        backgroundColor: '#10b981', // Green
-        stack: 'Stack 0',
+    plugins: {
+      legend: { position: 'bottom', labels: { color: textColor, padding: 20, usePointStyle: true } },
+      tooltip: {
+        backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+        titleColor: isDark ? '#fff' : '#111',
+        bodyColor: isDark ? '#ccc' : '#444',
+        borderColor: isDark ? '#374151' : '#e5e7eb',
+        borderWidth: 1,
+        padding: 10,
+        cornerRadius: 8
       }
-    ]
+    },
+    layout: { padding: 10 }
   };
 
-  const budgetOptions = {
-    ...commonOptions,
-    indexAxis: 'y',
-    scales: {
-      x: { stacked: true, ticks: { color: textColor }, grid: { color: gridColor } },
-      y: { stacked: true, ticks: { color: textColor }, grid: { display: false } }
-    }
-  };
+  const chartCardClass = "glass-panel p-6 rounded-2xl transition-all hover:shadow-md";
 
+  // --- RENDER HELPERS ---
   return (
-    <div className="space-y-6 animate-fade-in pb-20">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">Analytics</h2>
-        <Button onClick={generatePDF} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700">
-          <Download size={18} /> PDF Report
+    <div className="space-y-8 animate-fade-in pb-24 max-w-7xl mx-auto">
+
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-gray-200/50 dark:border-gray-700/50 pb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-3">
+            <div className="p-2 bg-sky-100 dark:bg-sky-900/30 rounded-lg text-sky-600 dark:text-sky-400">
+              <TrendingUp size={28} />
+            </div>
+            Financial Analytics
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 max-w-xl">
+            Deep dive into your spending habits, cash flow trends, and category breakdowns.
+          </p>
+        </div>
+        <Button onClick={generatePDF} className="shadow-lg shadow-indigo-500/20">
+          <Download size={18} className="mr-2" /> Download Report
         </Button>
       </div>
 
-      {/* Responsive Grid: 1 col mobile, 2 col tablet, 4 col desktop */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="My Consumption" value={formatCurrency(stats.totalSpend * 100)} />
-        <StatCard title="Total Lent" value={formatCurrency(stats.totalLent * 100)} color="text-amber-600" />
-        <StatCard title="Total Repaid" value={formatCurrency(stats.totalReceived * 100)} color="text-green-600" />
-        <StatCard title="Net Cash Flow" value={formatCurrency(stats.customCashFlow * 100)} subValue="Spend + Lent - Received" color="text-purple-600" />
+      {/* KPI GRID */}
+      <section>
+        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 px-1">Key Performance Indicators</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <StatCard title="Total Consumption" value={stats.totalSpend * 100} colorTheme="blue" />
+          <StatCard title="Total Received" value={stats.totalReceived * 100} colorTheme="emerald" />
+          <StatCard title="Net Cash Flow" value={stats.customCashFlow * 100} subValue="Spend + Lent - Received" colorTheme="dynamic" />
+          <StatCard title="Total Lent" value={stats.totalLent * 100} colorTheme="orange" />
+          <StatCard title="Active Days" value={stats.activeDays} colorTheme="gray" formatter={(v) => v} />
+        </div>
+      </section>
+
+      {/* DETAILED OUTFLOW ANALYSIS */}
+      <section>
+        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 px-1">Analysis Metrics</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard
+            title="Peak Monthly Spend"
+            value={stats.peakSpendAmount * 100}
+            subtitle={stats.peakSpendMonth}
+            colorTheme="rose"
+          />
+          <StatCard
+            title="Peak Total Outflow"
+            value={stats.peakOutflowAmount * 100}
+            subtitle={stats.peakOutflowMonth}
+            colorTheme="purple"
+          />
+          <StatCard
+            title="Avg. Monthly Outflow"
+            value={stats.avgMonthly * 100}
+            subtitle="Spend + Lent"
+            colorTheme="blue"
+          />
+        </div>
+      </section>
+
+      {/* MAIN TRENDS ROW */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Net Balance (Wide) */}
+        <div className={`xl:col-span-2 ${chartCardClass}`}>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2">
+              <Layers size={18} className="text-sky-500" /> Net Balance History
+            </h3>
+          </div>
+          <div className="h-72 w-full">
+            <NetBalanceLine labels={stats.netBalanceChart.labels} data={stats.netBalanceChart.data} />
+          </div>
+        </div>
+
+        {/* Monthly Heatmap */}
+        <div className={`xl:col-span-1 ${chartCardClass} flex flex-col`}>
+          <h3 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center gap-2">
+            <Calendar size={18} className="text-purple-500" /> Daily Activity
+          </h3>
+          <div className="flex-1 flex flex-col justify-center">
+            <HeatmapPanel data={stats.heatmapData} />
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Peak Monthly Spend" value={stats.peakSpendMonth} subValue={formatCurrency(stats.peakSpendAmount * 100)} />
-        <StatCard title="Peak Outflow" value={stats.peakOutflowMonth} subValue={formatCurrency(stats.peakOutflowAmount * 100)} />
-        <StatCard title="Avg. Monthly Outflow" value={formatCurrency(stats.avgMonthly * 100)} />
-        <StatCard title="Active Days" value={stats.activeDays} />
-      </div>
-
+      {/* CATEGORY & BREAKDOWN ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartCard title="Monthly Cash Flow">
-          <MonthlyTrendLine labels={stats.monthlyChart.labels} spendData={stats.monthlyChart.spendData} lentData={stats.monthlyChart.lentData} />
-        </ChartCard>
-        <ChartCard title="Lending vs Recovery">
-          <Bar data={lendingBarData} options={lendingBarOptions} />
-        </ChartCard>
-      </div>
-
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Net Balance History</h3>
-        <div className="h-56 md:h-64 relative">
-          <NetBalanceLine labels={stats.netBalanceChart.labels} data={stats.netBalanceChart.data} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-6">
-          <ForecastCard title="Spending Forecast" spent={stats.currentMonthSpend} projected={stats.projectedSpend} percent={stats.forecastSpendPercent} colorClass="bg-sky-500" />
-          <ForecastCard title="Lending Forecast" spent={stats.currentMonthLent} projected={stats.projectedLending} percent={stats.forecastLentPercent} colorClass="bg-amber-500" textColor="text-amber-600 dark:text-amber-400" />
-        </div>
-        <HeatmapPanel data={stats.heatmapData} />
-      </div>
-
-      {budgetCategories.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Budget Adherence</h3>
-          <div className="h-64 sm:h-80 relative">
-            <Bar data={budgetChartData} options={budgetOptions} />
+        <div className={chartCardClass}>
+          <h3 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-6 flex items-center gap-2">
+            <PieChart size={18} className="text-rose-500" /> Spending by Category
+          </h3>
+          <div className="h-64 relative">
+            {stats.categoryData.length > 0 ? (
+              <CategoryDoughnut data={stats.categoryData} />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">No data available</div>
+            )}
           </div>
         </div>
-      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <ChartCard title="Outflow Breakdown">
-          <Doughnut data={breakdownData} options={commonOptions} />
-        </ChartCard>
-        <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">My Spending by Category</h3>
-          <div className="h-64 md:h-64 relative">
-            {stats.categoryData.length > 0 ? <CategoryDoughnut data={stats.categoryData} /> : <div className="flex items-center justify-center h-full text-gray-400">No data</div>}
+        <div className={chartCardClass}>
+          <h3 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-6">Forecast vs Reality</h3>
+          <div className="space-y-8 mt-4">
+            <ForecastBar
+              title="Spending"
+              current={stats.currentMonthSpend}
+              projected={stats.projectedSpend}
+              percent={stats.forecastSpendPercent}
+              color="bg-rose-500"
+            />
+            <ForecastBar
+              title="Lending"
+              current={stats.currentMonthLent}
+              projected={stats.projectedLending}
+              percent={stats.forecastLentPercent}
+              color="bg-amber-500"
+            />
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <ChartCard title="Spending by Participant">
-          <Pie data={participantPieData} options={commonOptions} />
-        </ChartCard>
-        <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Spending by Place</h3>
-          <div className="h-64 md:h-64 relative">
-            <Bar data={stats.placeData} options={barOptions} />
-          </div>
+      {/* MONTHLY TRENDS */}
+      <div className={chartCardClass}>
+        <h3 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-6">Cash Flow Trends</h3>
+        <div className="h-80">
+          <MonthlyTrendLine
+            labels={stats.monthlyChart.labels}
+            spendData={stats.monthlyChart.spendData}
+            lentData={stats.monthlyChart.lentData}
+          />
         </div>
       </div>
+
     </div>
   );
 };
 
-const StatCard = ({ title, value, subValue, color }) => (
-  <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{title}</h3>
-    <div className={`text-xl sm:text-2xl font-bold mt-2 ${color || 'text-gray-800 dark:text-gray-200'}`}>{value}</div>
-    {subValue && <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">{subValue}</div>}
+// --- SUB-COMPONENTS ---
+
+const ForecastBar = ({ title, current, projected, percent, color }) => (
+  <div>
+    <div className="flex justify-between text-sm mb-2">
+      <span className="font-semibold text-gray-600 dark:text-gray-300">{title}</span>
+      <span className="text-gray-500 dark:text-gray-400">
+        <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(current * 100)}</span> / {formatCurrency(projected * 100)}
+      </span>
+    </div>
+    <div className="h-3 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+      <div
+        className={`h-full ${color} rounded-full transition-all duration-1000 ease-out`}
+        style={{ width: `${Math.min(percent, 100)}%` }}
+      />
+    </div>
+    <div className="text-right text-xs text-gray-400 mt-1">{Math.round(percent)}% of projection</div>
   </div>
 );
-
-const ChartCard = ({ title, children }) => (
-  <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-    <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">{title}</h3>
-    <div className="relative h-64">
-      {children}
-    </div>
-  </div>
-);
-
-const ForecastCard = ({ title, spent, projected, percent, label, colorClass, lightClass, textColor }) => {
-  const finalTextColor = textColor || 'text-sky-600 dark:text-sky-400';
-  const finalLightClass = lightClass || 'bg-gray-100 dark:bg-gray-700';
-  const finalLabel = label || 'Current';
-
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">{title} <span className="text-sm font-normal text-gray-500">(Current Month)</span></h3>
-      <div className="relative pt-4">
-        <div className="flex mb-2 items-center justify-between">
-          <span className={`text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full ${finalTextColor} ${finalLightClass}`}>
-            {finalLabel} {formatCurrency(spent * 100)}
-          </span>
-          <span className={`text-xs font-semibold inline-block ${finalTextColor}`}>
-            {Math.round(percent)}%
-          </span>
-        </div>
-        <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200 dark:bg-gray-700">
-          <div style={{ width: `${Math.min(percent, 100)}%` }} className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center ${colorClass} transition-all duration-500`}></div>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          Projected: <span className="font-bold text-gray-700 dark:text-gray-200">{formatCurrency(projected * 100)}</span>
-        </p>
-      </div>
-    </div>
-  );
-};
 
 const HeatmapPanel = ({ data }) => {
-  const maxVal = Math.max(...data.map(Math.abs));
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700 overflow-hidden">
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Net Cash Flow Heatmap</h3>
-      <div className="flex gap-4 mb-3 text-xs">
-        <span className="flex items-center gap-1"><div className="w-3 h-3 bg-red-500 rounded-sm"></div> Out</span>
-        <span className="flex items-center gap-1"><div className="w-3 h-3 bg-emerald-500 rounded-sm"></div> In</span>
-      </div>
+  const maxVal = Math.max(...data.map(Math.abs)) || 1;
+  const days = Array.from({ length: 31 }, (_, i) => i + 1);
 
-      {/* Responsive Grid for Heatmap: Scrollable on mobile */}
-      <div className="overflow-x-auto">
-        <div className="grid gap-1 min-w-[300px]" style={{ gridTemplateColumns: 'repeat(31, 1fr)' }}>
-          {[...Array(31)].map((_, i) => (<div key={i} className="text-[9px] text-center text-gray-400">{i + 1}</div>))}
-          {[...Array(31)].map((_, i) => {
-            const val = data[i + 1];
-            let bgClass = 'bg-gray-100 dark:bg-gray-700';
-            let opacity = 1;
-            if (val > 0.01) {
-              bgClass = 'bg-red-500';
-              opacity = Math.max(0.2, val / (maxVal || 1));
-            } else if (val < -0.01) {
-              bgClass = 'bg-emerald-500';
-              opacity = Math.max(0.2, Math.abs(val) / (maxVal || 1));
-            }
-            return (
-              <div
-                key={i}
-                title={`Day ${i + 1}: ${val > 0 ? '-' : '+'}${formatCurrency(Math.abs(val) * 100)}`}
-                className={`h-8 w-full rounded-sm ${bgClass}`}
-                style={{ opacity: val !== 0 ? opacity : 1 }}
-              />
-            );
-          })}
-        </div>
+  return (
+    <div className="w-full">
+      <div className="grid grid-cols-7 gap-2">
+        {days.map((day) => {
+          const val = data[day] || 0;
+          let bgColor = 'bg-gray-100 dark:bg-gray-700'; // Default empty
+          let opacity = 1;
+
+          if (val > 0) { // Expense/Out
+            // Scale redness opacity based on value relative to max
+            opacity = 0.3 + (0.7 * (Math.abs(val) / maxVal));
+            bgColor = `bg-rose-500`;
+          } else if (val < 0) { // Income/In
+            opacity = 0.3 + (0.7 * (Math.abs(val) / maxVal));
+            bgColor = `bg-emerald-500`;
+          }
+
+          return (
+            <div
+              key={day}
+              className={`aspect-square rounded-md flex items-center justify-center text-[10px] font-medium transition-all hover:scale-110 cursor-default ${bgColor} ${val !== 0 ? 'text-white shadow-sm' : 'text-gray-300 dark:text-gray-600'}`}
+              style={{ opacity: val !== 0 ? opacity : 1 }}
+              title={`Day ${day}: ${formatCurrency(Math.abs(val) * 100)}`}
+            >
+              {day}
+            </div>
+          )
+        })}
+      </div>
+      <div className="flex justify-between mt-4 text-xs text-gray-400">
+        <div className="flex items-center gap-1"><div className="w-2 h-2 bg-emerald-500 rounded-full"></div> In</div>
+        <div className="flex items-center gap-1"><div className="w-2 h-2 bg-rose-500 rounded-full"></div> Out</div>
       </div>
     </div>
   );

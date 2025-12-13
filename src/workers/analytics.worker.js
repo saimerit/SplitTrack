@@ -53,22 +53,32 @@ self.onmessage = (e) => {
         const day = date.getDate();
 
         // --- Calculate Base Amounts ---
-        let amountIPaid = (txn.payer === 'me') ? (txn.amount / 100) : 0;
+        const rawAmount = Number(txn.amount) || 0;
+        const amountIPaid = (txn.payer === 'me') ? (rawAmount / 100) : 0;
         let myConsumption = 0;
 
         if (txn.type === 'income') {
-            amountIPaid = (txn.amount / 100);
+            // Income logic remains same
             totalIncome += amountIPaid;
-        } else if (txn.splits && txn.splits['me'] !== undefined) {
-            myConsumption = txn.splits['me'] / 100;
-        } else if (txn.payer === 'me' && (!txn.splits || Object.keys(txn.splits).length === 0)) {
-            if (txn.participants && txn.participants.length > 0) {
-                myConsumption = 0;
-            } else {
-                myConsumption = (txn.amount / 100);
+        } else {
+            // Expense Logic
+            if (txn.splits && Object.keys(txn.splits).length > 0) {
+                // If splits exist, strictly trust them
+                const myShare = Number(txn.splits['me']) || 0;
+                myConsumption = myShare / 100;
+            } else if (txn.payer === 'me') {
+                // No splits: If I paid, did I pay for myself or everyone?
+                // Logic: If there are other participants defined but no splits, it's ambiguous.
+                // But standard app behavior for 'No Splits' usually implies 'Split Equally' or 'Paid for All'?
+                // Safe default: If I paid and no splits object, assume I consumed it ALL unless logic dictates otherwise.
+                // However, to differentiate "Lent", we must be careful.
+                // If I paid 100 and participants = [Me, You], usually splits should be {me:50, you:50}.
+                // If splits is missing, we assume 100% my consumption to be safe, avoiding "Lent" accidental classification.
+                myConsumption = (rawAmount / 100);
             }
         }
 
+        // --- Running Balance ---
         runningBalance += (amountIPaid - myConsumption);
         balanceLabels.push(dateStr);
         balancePoints.push(runningBalance);
@@ -80,70 +90,61 @@ self.onmessage = (e) => {
         // --- Heatmap Logic ---
         if (monthKey === currentMonthKey && day >= 1 && day <= 31) {
             let flow = 0;
+            const safeAmt = Number(txn.amount) || 0;
             if (txn.type === 'income') {
-                flow -= (txn.amount / 100);
+                flow -= safeAmt / 100;
             } else {
                 if (txn.payer === 'me') {
-                    flow += (txn.amount / 100);
+                    flow += safeAmt / 100;
                 }
                 if (txn.isReturn && txn.participants.includes('me') && txn.payer !== 'me') {
-                    flow -= (txn.amount / 100);
+                    flow -= safeAmt / 100;
                 }
             }
             heatmapData[day] += flow;
         }
 
-        // --- Detailed Stats ---
-        if (txn.type !== 'income') {
-            if (txn.isReturn) {
-                if (txn.payer === 'me') {
-                    totalRepaymentSent += (txn.amount / 100);
-                } else if (txn.participants.includes('me') || txn.payer !== 'me') {
-                    if (txn.participants.includes('me')) {
-                        totalReceived += (txn.amount / 100);
-                        monthlyReceivedStats[monthKey] = (monthlyReceivedStats[monthKey] || 0) + (txn.amount / 100);
-                    }
-                }
-            } else {
-                // 1. Lending
-                if (txn.payer === 'me') {
-                    const lent = amountIPaid - myConsumption;
-                    if (lent > 0.01) {
-                        totalLent += lent;
-                        monthlyLentStats[monthKey] = (monthlyLentStats[monthKey] || 0) + lent;
-                        monthlyTotalStats[monthKey] = (monthlyTotalStats[monthKey] || 0) + lent;
+        // 1. Lending Logic (Revised)
+        // Lent is strictly what I paid minus what I consumed.
+        // If result is negative (someone else paid for me), it's Borrowed (not tracked in 'Lent' total usually, but net position).
+        // Here we track "Total Lent" (Outflow for others).
+        let lent = 0;
+        if (txn.payer === 'me') {
+            lent = Math.max(0, amountIPaid - myConsumption);
+            if (lent > 0.01) {
+                totalLent += lent;
+                monthlyLentStats[monthKey] = (monthlyLentStats[monthKey] || 0) + lent;
+                monthlyTotalStats[monthKey] = (monthlyTotalStats[monthKey] || 0) + lent; // Total Outflow tracks Lent + Spend
 
-                        if (monthKey === currentMonthKey) currentMonthLent += lent;
-                    }
-                }
-
-                // 2. Spending
-                if (Math.abs(myConsumption) > 0.001) {
-                    totalSpend += myConsumption;
-                    monthlySpendStats[monthKey] = (monthlySpendStats[monthKey] || 0) + myConsumption;
-                    monthlyTotalStats[monthKey] = (monthlyTotalStats[monthKey] || 0) + myConsumption;
-
-                    const place = txn.place || 'Unknown';
-                    placeStats[place] = (placeStats[place] || 0) + myConsumption;
-
-                    const cat = txn.category || 'Uncategorized';
-                    categoryStats[cat] = (categoryStats[cat] || 0) + myConsumption;
-
-                    if (monthKey === currentMonthKey) {
-                        currentMonthSpend += myConsumption;
-                        currentMonthCatStats[cat] = (currentMonthCatStats[cat] || 0) + myConsumption;
-                    }
-                }
-
-                // 3. Participants
-                if (txn.splits) {
-                    Object.entries(txn.splits).forEach(([uid, sharePaise]) => {
-                        const pData = participantsMap.get(uid);
-                        const name = uid === 'me' ? 'You' : (pData?.name || uid);
-                        participantShareStats[name] = (participantShareStats[name] || 0) + (sharePaise / 100);
-                    });
-                }
+                if (monthKey === currentMonthKey) currentMonthLent += lent;
             }
+        }
+
+        // 2. Spending
+        if (Math.abs(myConsumption) > 0.001) {
+            totalSpend += myConsumption;
+            monthlySpendStats[monthKey] = (monthlySpendStats[monthKey] || 0) + myConsumption;
+            monthlyTotalStats[monthKey] = (monthlyTotalStats[monthKey] || 0) + myConsumption;
+
+            const place = txn.place || 'Unknown';
+            placeStats[place] = (placeStats[place] || 0) + myConsumption;
+
+            const cat = txn.category || 'Uncategorized';
+            categoryStats[cat] = (categoryStats[cat] || 0) + myConsumption;
+
+            if (monthKey === currentMonthKey) {
+                currentMonthSpend += myConsumption;
+                currentMonthCatStats[cat] = (currentMonthCatStats[cat] || 0) + myConsumption;
+            }
+        }
+
+        // 3. Participants
+        if (txn.splits) {
+            Object.entries(txn.splits).forEach(([uid, sharePaise]) => {
+                const pData = participantsMap.get(uid);
+                const name = uid === 'me' ? 'You' : (pData?.name || uid);
+                participantShareStats[name] = (participantShareStats[name] || 0) + ((Number(sharePaise) || 0) / 100);
+            });
         }
     });
 

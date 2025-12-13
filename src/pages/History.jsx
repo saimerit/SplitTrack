@@ -378,7 +378,7 @@ const History = () => {
 
       {/* Floating Action Bar */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-6 py-3 rounded-full shadow-xl border border-gray-200 dark:border-gray-700 flex items-center gap-6 z-50 animate-slide-up">
+        <div className="fixed bottom-24 md:bottom-6 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-6 py-3 rounded-full shadow-xl border border-gray-200 dark:border-gray-700 flex items-center gap-6 z-[60] animate-slide-up">
           <span className="font-semibold text-sm whitespace-nowrap">{selectedIds.size} Selected</span>
           <div className="h-4 w-px bg-gray-300 dark:bg-gray-600"></div>
           <button onClick={handleBulkDelete} className="flex items-center gap-2 text-red-600 hover:text-red-700 font-medium text-sm">

@@ -145,7 +145,7 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
 
       {/* Full Page Modal (Mobile Only) */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-6 animate-fade-in sm:hidden">
+        <div className="fixed inset-0 z-60 flex items-end sm:items-center justify-center sm:p-6 animate-fade-in sm:hidden">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowModal(false)}></div>
           <div className="relative w-full h-[95vh] bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
 

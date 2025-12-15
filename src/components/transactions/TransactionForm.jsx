@@ -1,9 +1,9 @@
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Filter, Sparkles, Layers, ChevronDown, ArrowRightLeft, RefreshCw, HandCoins } from 'lucide-react';
-import { formatCurrency } from '../../utils/formatters';
+import { RefreshCw, Sparkles, Layers, ArrowRightLeft } from 'lucide-react';
 import { useTransactionFormLogic } from '../../hooks/useTransactionForm';
 import useAppStore from '../../store/useAppStore';
+import useBudgetCheck from '../../hooks/useBudgetCheck';
 
 import Input from '../common/Input';
 import Button from '../common/Button';
@@ -13,145 +13,17 @@ import ParticipantSelector from './ParticipantSelector';
 import ConfirmModal from '../modals/ConfirmModal';
 import PromptModal from '../modals/PromptModal';
 import SuccessAnimation from '../common/SuccessAnimation';
-
-const SearchableSelect = ({ label, value, onChange, options, placeholder, className, disabled }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const wrapperRef = useRef(null);
-    const [query, setQuery] = useState("");
-
-    useEffect(() => {
-        setTimeout(() => {
-            if (!value) { setQuery(""); } else {
-                const selected = options.find(o => o.value === value);
-                if (selected) setQuery(selected.label);
-            }
-        }, 0);
-    }, [value, options]);
-
-    const filteredOptions = useMemo(() => {
-        if (!query) return options;
-        const lowerQuery = query.toLowerCase();
-        const selected = options.find(o => o.value === value);
-        if (selected && selected.label.toLowerCase() === lowerQuery) return options;
-        return options.filter(opt => opt.label.toLowerCase().includes(lowerQuery));
-    }, [query, options, value]);
-
-    const handleSelect = (option) => {
-        onChange({ target: { value: option.value, option: option } });
-        setQuery(option.label);
-        setIsOpen(false);
-    };
-
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-                setIsOpen(false);
-                const selected = options.find(o => o.value === value);
-                if (selected) setQuery(selected.label); else if (!value) setQuery('');
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [wrapperRef, value, options]);
-
-    return (
-        <div className={`relative ${className}`} ref={wrapperRef}>
-            {label && <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>}
-            <div className="relative">
-                <input type="text" value={query} onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }} onFocus={() => setIsOpen(true)} placeholder={placeholder || "Select..."} disabled={disabled} className="block w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200" />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400"><ChevronDown size={16} /></div>
-            </div>
-            {isOpen && !disabled && (
-                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {filteredOptions.length > 0 ? (
-                        filteredOptions.map((opt, idx) => (
-                            <div key={opt.value || idx} onClick={() => handleSelect(opt)} className={`px-4 py-2 cursor-pointer text-sm ${opt.className || ''} ${opt.value === value ? 'bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-200 font-medium' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600'}`}>{opt.label}</div>
-                        ))
-                    ) : (<div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">No matches found</div>)}
-                </div>
-            )}
-        </div>
-    );
-};
+import SearchableSelect from '../common/SearchableSelect';
+import TransactionTypeSelector from './form/TransactionTypeSelector';
+import ExpenseLinker from './form/ExpenseLinker';
+import NumberInput from '../common/NumberInput';
 
 const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     const navigate = useNavigate();
     const { formData, setters, ui, links, data, actions, utils } = useTransactionFormLogic(initialData, isEditMode);
-    const { categories, transactions } = useAppStore();
-    const [budgetWarning, setBudgetWarning] = useState(null);
 
-    // Budget Check Logic
-    const checkBudget = () => {
-        if (!formData.category || !formData.amount) return true;
-
-        const cat = categories.find(c => c.name === formData.category);
-        if (!cat || !cat.budget) return true;
-
-        const amountNum = parseFloat(formData.amount);
-        if (isNaN(amountNum)) return true;
-
-        // Calculate My Share based on Split Method
-        let myShareVal = 0;
-        if (formData.splitMethod === 'equal') {
-            let count = 0;
-            if (formData.includeMe) count++;
-            if (formData.payer !== 'me' && !formData.selectedParticipants.includes(formData.payer) && formData.includePayer) count++;
-            count += (formData.selectedParticipants || []).length;
-
-            if (formData.includeMe && count > 0) {
-                myShareVal = amountNum / count;
-            }
-        } else if (formData.splitMethod === 'percentage') {
-            // Splits in percentage store the percent value (0-100)
-            const myPercent = formData.splits?.['me'] || 0;
-            myShareVal = (myPercent / 100) * amountNum;
-        } else if (formData.splitMethod === 'dynamic') {
-            // Splits in dynamic store the value in Paise (integers)
-            const myPaise = formData.splits?.['me'] || 0;
-            myShareVal = myPaise / 100;
-        } else {
-            // Fallback: If I am included, assume full amount (just in case)
-            if (formData.includeMe) myShareVal = amountNum;
-        }
-
-        const now = new Date(formData.date || new Date());
-        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-        const currentUsage = transactions
-            .filter(t => !t.isDeleted && t.category === formData.category && t.amount > 0)
-            .filter(t => {
-                if (isEditMode && initialData?.id && t.id === initialData.id) return false;
-                const tDate = t.timestamp?.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
-                const tKey = `${tDate.getFullYear()}-${String(tDate.getMonth() + 1).padStart(2, '0')}`;
-                return tKey === currentMonthKey;
-            })
-            .reduce((sum, t) => {
-                const myShare = t.splits?.['me'] !== undefined ? t.splits['me'] : (t.payer === 'me' ? t.amount : 0);
-                return sum + (myShare / 100);
-            }, 0);
-
-        if (currentUsage + myShareVal > cat.budget) {
-            const newTotal = currentUsage + myShareVal;
-            const exceededBy = newTotal - cat.budget;
-
-            setBudgetWarning({
-                message: `
-                    <div class="space-y-2">
-                        <p><strong>Category:</strong> ${formData.category}</p>
-                        <p><strong>Monthly Limit:</strong> ₹${cat.budget}</p>
-                        <p><strong>Current Usage:</strong> ₹${currentUsage.toFixed(2)}</p>
-                        <p><strong>Your Share of this Txn:</strong> ₹${myShareVal.toFixed(2)}</p>
-                        <hr class="border-gray-300 dark:border-gray-600"/>
-                        <p class="font-bold text-red-600">New Total: ₹${newTotal.toFixed(2)}</p>
-                        <p class="text-sm font-semibold text-orange-600">You are exceeding your budget by ₹${exceededBy.toFixed(2)}</p>
-                        <p class="text-sm text-gray-500 mt-2">Do you want to proceed?</p>
-                    </div>
-                 `
-            });
-            return false;
-        }
-        return true;
-    };
+    // Extracted Budget Check Hook
+    const { budgetWarning, checkBudget, setBudgetWarning } = useBudgetCheck(formData, isEditMode, initialData);
 
     // Wrap the original handleSubmit
     const originalHandleSubmit = actions.handleSubmit;
@@ -181,11 +53,12 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     const recipientOptions = useMemo(() => [{ value: "me", label: "You (me)" }, ...data.allParticipants.map(p => ({ value: p.uniqueId, label: p.name }))], [data.allParticipants]);
     const debtorOptions = useMemo(() => [{ value: '', label: '-- Show All --' }, ...data.allParticipants.map(p => ({ value: p.uniqueId, label: p.name }))], [data.allParticipants]);
 
-    const { eligibleParents } = data;
+    const { eligibleParents = [] } = data;
     const { getName, getTxnDateStr } = utils;
     const { isSettlement } = ui;
 
     const linkableOptions = useMemo(() => {
+        if (!eligibleParents) return [];
         return [
             { value: '', label: '-- Select Expense to Link --' },
             ...eligibleParents.map(t => {
@@ -221,33 +94,21 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                     </div>
                 </div>
 
-                {/* Type Radios */}
-                <div className="col-span-1 md:col-span-2 lg:col-span-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Transaction Type</label>
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        {['expense', 'income', 'refund'].map(t => (
-                            <label key={t} className="flex-1 cursor-pointer group">
-                                <input type="radio" name="txnType" value={t} checked={formData.type === t} onChange={() => actions.handleTypeChange(t)} className="peer sr-only" />
-                                <div className={`text-center py-3 rounded-lg border transition-all font-medium capitalize ${formData.type === t ? 'bg-sky-50 border-sky-500 text-sky-700 dark:bg-sky-900 dark:border-sky-500 dark:text-sky-300' : 'border-gray-300 dark:border-gray-600 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-                                    {t === 'expense' ? 'Expense (Out)' : t === 'income' ? 'Income (In)' : 'Refund / Repayment'}
-                                </div>
-                            </label>
-                        ))}
-                    </div>
-                </div>
+                {/* Transaction Type Selector (Extracted) */}
+                <TransactionTypeSelector currentType={formData.type} onTypeChange={actions.handleTypeChange} />
 
+                {/* Refund Sub-types */}
                 {ui.isRefundTab && (
                     <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-                        {/* FIX: Stacked buttons on mobile to fix squishing */}
                         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                            <button type="button" onClick={() => actions.handleRefundSubTypeChange('product')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${!ui.isSettlement ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
+                            <Button type="button" onClick={() => actions.handleRefundSubTypeChange('product')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${!ui.isSettlement ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
                                 <RefreshCw size={18} className="shrink-0" />
                                 <span>Product Refund</span>
-                            </button>
-                            <button type="button" onClick={() => actions.handleRefundSubTypeChange('settlement')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${ui.isSettlement ? 'bg-purple-100 border-purple-500 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
-                                <HandCoins size={18} className="shrink-0" />
+                            </Button>
+                            <Button type="button" onClick={() => actions.handleRefundSubTypeChange('settlement')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${ui.isSettlement ? 'bg-purple-100 border-purple-500 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
+                                <ArrowRightLeft size={18} className="shrink-0" />
                                 <span>Peer Settlement</span>
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 )}
@@ -280,61 +141,22 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                     </div>
                 )}
 
-                {/* Linking Section */}
-                {(ui.isProductRefund || ui.isSettlement) && (
-                    <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-blue-50 dark:bg-blue-900/20 p-4 rounded border border-blue-100 dark:border-blue-800">
-                        {ui.isSettlement && (
-                            <div className="mb-4">
-                                <label className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase mb-1 flex items-center gap-2"><Filter size={12} /> Filter by Debtor</label>
-                                <SearchableSelect value={formData.repaymentFilter} onChange={e => setters.setRepaymentFilter(e.target.value)} options={debtorOptions} placeholder="Filter..." />
-                            </div>
-                        )}
-                        <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Link Expense</label>
-                        <SearchableSelect value={links.tempId} onChange={e => links.handleSelect(e.target.value)} options={linkableOptions} placeholder="Select expense..." />
+                {/* Linking Section (Extracted) */}
+                <ExpenseLinker
+                    ui={ui}
+                    formData={formData}
+                    setters={setters}
+                    links={links}
+                    debtorOptions={debtorOptions}
+                    linkableOptions={linkableOptions}
+                />
 
-                        {links.items.map(link => {
-                            let textColor = 'text-gray-800 dark:text-gray-200';
-                            let bgColor = 'bg-white dark:bg-gray-800';
-                            let borderColor = 'border-gray-300 dark:border-gray-600';
-
-                            if (link.relationType === 'product_refund') {
-                                textColor = 'text-green-700 dark:text-green-400 font-medium'; bgColor = 'bg-green-50 dark:bg-green-900/20'; borderColor = 'border-green-200 dark:border-green-800';
-                            } else {
-                                const isOwedToMe = link.relationType === 'owed_to_me';
-                                if (isOwedToMe) { textColor = 'text-green-700 dark:text-green-400 font-medium'; bgColor = 'bg-green-50 dark:bg-green-900/20'; borderColor = 'border-green-200 dark:border-green-800'; }
-                                else { textColor = 'text-red-700 dark:text-red-400 font-medium'; bgColor = 'bg-red-50 dark:bg-red-900/20'; borderColor = 'border-red-200 dark:border-red-800'; }
-                            }
-
-                            return (
-                                <div key={link.id} className={`flex items-center gap-2 mt-2 p-2 rounded border ${bgColor} ${borderColor}`}>
-                                    <span className={`flex-1 truncate text-sm ${textColor}`}>{link.name}</span>
-                                    <input type="number" value={link.allocated} onChange={e => links.updateAlloc(link.id, e.target.value)} className="w-24 border rounded px-1 text-black dark:text-white dark:bg-gray-700" />
-                                    <button type="button" onClick={() => links.remove(link.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
-                                </div>
-                            );
-                        })}
-                        {links.items.length > 0 && (
-                            <div className={`mt-2 text-xs font-medium flex justify-between ${links.isValid ? 'text-green-600' : 'text-red-500'}`}>
-                                <span>Total Allocated: {formatCurrency(links.totalAllocated * 100)}</span>
-                                <span>{links.isValid ? "✓ Matches" : `${formatCurrency(Math.abs(links.allocationDiff) * 100)} Diff`}</span>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Smart Amount Input */}
+                {/* Smart Amount Input (Refactored to Safe NumberInput) */}
                 <div className="col-span-full flex flex-col items-center justify-center py-6 bg-gray-50 dark:bg-gray-900/50 rounded-xl mb-2">
                     <label className="text-sm font-medium text-gray-500 mb-1">Amount</label>
                     <div className="flex items-baseline text-gray-900 dark:text-white">
                         <span className="text-3xl font-light mr-1">₹</span>
-                        <input
-                            ref={(el) => {
-                                // Direct DOM manipulation to add non-passive listener
-                                if (el) {
-                                    el.addEventListener('wheel', (e) => { e.preventDefault(); e.target.blur(); }, { passive: false });
-                                }
-                            }}
-                            type="number"
+                        <NumberInput
                             value={formData.amount}
                             onChange={actions.handleAmountChange}
                             placeholder="0"

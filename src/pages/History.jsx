@@ -33,10 +33,87 @@ const History = () => {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
 
+  // --- Advanced Pagination & Data Merging ---
+  const [archivedTransactions, setArchivedTransactions] = useState([]);
+  const [lastLoadedDoc, setLastLoadedDoc] = useState(null); // Cursor for API
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+
+  // Filters are handled primarily client-side for the *loaded* data.
+  // Ideally, if a filter is active, we might want to search the server directly if not found in store.
+  // For simplicity and robustness, "Load More" simply fetches the next batch of *any* transaction, 
+  // and we rely on the extensive client-side filter to show matches. 
+  // If the user filters by date (e.g. 2023), store is empty, so we must fetch from server.
+
+  const loadMoreTransactions = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+
+    try {
+      const { fetchPaginatedTransactions } = await import('../services/transactionService');
+
+      // Determine Cursor
+      // If we have archived loaded, use the last one's doc/timestamp.
+      // If not, use the last item from the Store (which is the "end" of recent history).
+      let cursor = lastLoadedDoc;
+      if (!cursor && transactions.length > 0) {
+        // Use the oldest transaction in the store as the starting point
+        // We need its timestamp.
+        const oldestStore = transactions[transactions.length - 1]; // Sorted desc in store? No, store is unsorted usually.
+        // We need to sort store first to find oldest.
+        const sortedStore = [...transactions].sort((a, b) => {
+          const tA = a.timestamp?.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
+          const tB = b.timestamp?.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
+          return tB - tA; // Descending
+        });
+        const last = sortedStore[sortedStore.length - 1];
+        if (last) cursor = last.timestamp;
+      }
+
+      // If we are filtering by specific criteria that MIGHT be server-side optimized, we could pass filters.
+      // But TransactionService's fetchPaginatedTransactions logic for filters is basic.
+      // Let's pass NO filters to fetch *all* history sequentially, then filter client side.
+      // UNLESS: filtering by Date Range that is outside store.
+
+      const result = await fetchPaginatedTransactions(20, cursor, {});
+
+      if (result.data.length === 0) {
+        setHasMoreHistory(false);
+      } else {
+        setArchivedTransactions(prev => {
+          // Deduplicate: Filter out items already in store or prev archive
+          // (Though startAfter should prevent overlap ideally)
+          const allIds = new Set([...transactions.map(t => t.id), ...prev.map(t => t.id)]);
+          const uniqueNew = result.data.filter(t => !allIds.has(t.id));
+          return [...prev, ...uniqueNew];
+        });
+        setLastLoadedDoc(result.lastDoc);
+        if (!result.hasMore) setHasMoreHistory(false);
+      }
+    } catch (e) {
+      console.error("Load More Error", e);
+      showToast("Failed to load more history", true);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // Merge Store + Archive for Display
+  const allAvailableData = useMemo(() => {
+    // Deduplicate just in case
+    const combined = [...transactions, ...archivedTransactions];
+    const seen = new Set();
+    return combined.filter(t => {
+      if (seen.has(t.id)) return false;
+      seen.add(t.id);
+      return true;
+    });
+  }, [transactions, archivedTransactions]);
+
   // --- Derived Data (Filtering & Sorting) ---
   const filteredData = useMemo(() => {
     // 1. Sort by Date Descending
-    const sorted = [...transactions].sort((a, b) => {
+    const sorted = [...allAvailableData].sort((a, b) => {
       const tA = a.timestamp?.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
       const tB = b.timestamp?.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
       return tB - tA;
@@ -62,19 +139,23 @@ const History = () => {
 
       return true;
     });
-  }, [transactions, filterTag, filterDate, filterMonth]);
+  }, [allAvailableData, filterTag, filterDate, filterMonth]);
 
-  // --- Pagination Logic ---
+  // --- Pagination Logic (Client Side Slicing of Loaded Data) ---
   const totalItems = filteredData.length;
-  const totalPages = Math.ceil(totalItems / pageSize);
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
   // Reset to page 1 if filters change
+  // Note: We don't auto-reset page on "Load More" because user might be at bottom
 
   // Get current slice
   const currentTransactions = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredData.slice(start, start + pageSize);
   }, [filteredData, currentPage, pageSize]);
+
+  // If user searches/filters for older data, they might see empty results until they click "Load More".
+  // This is a UI quirk. Ideally "Load More" should be "Load Older" and visible even if empty.
 
   // --- Handlers ---
   const handlePageChange = (newPage) => {
@@ -87,7 +168,7 @@ const History = () => {
 
   const requestDelete = (id, parentId) => {
     // Check for linked children in the FULL dataset (not just current page)
-    const hasChildren = transactions.some(t =>
+    const hasChildren = allAvailableData.some(t =>
       !t.isDeleted && (t.parentTransactionId === id || (t.parentTransactionIds && t.parentTransactionIds.includes(id)))
     );
 
@@ -141,15 +222,47 @@ const History = () => {
   };
 
   const confirmBulkDelete = async () => {
-    try {
-      const promises = Array.from(selectedIds).map(id => deleteTransaction(id));
-      await Promise.all(promises);
-      showToast(`Deleted ${selectedIds.size} items`);
+    let successCount = 0;
+    let failCount = 0;
+
+    const itemsToDelete = Array.from(selectedIds).map(id => {
+      const t = allAvailableData.find(tx => tx.id === id);
+      // Fallback timestamp
+      const ts = t?.timestamp?.toMillis ? t.timestamp.toMillis() : new Date(t?.timestamp || 0).getTime();
+      return {
+        id,
+        parentId: t?.parentTransactionId,
+        isChild: !!t?.parentTransactionId, // true if it's a child (Repayment/Split Payment)
+        timestamp: ts
+      };
+    })
+      .sort((a, b) => {
+        // Priority 1: Delete Children FIRST (so parents can be deleted subsequently)
+        if (a.isChild && !b.isChild) return -1; // a (Child) comes first
+        if (!a.isChild && b.isChild) return 1;  // b (Child) comes first
+
+        // Priority 2: Newest first (Secondary safety for chains)
+        return b.timestamp - a.timestamp;
+      });
+
+    for (const { id, parentId } of itemsToDelete) {
+      try {
+        await deleteTransaction(id, parentId);
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to delete ${id}`, error);
+        failCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      showToast(`Deleted ${successCount} items`);
       setIsSelectionMode(false);
       setSelectedIds(new Set());
-    } catch (error) {
-      console.error(error);
-      showToast("Error deleting items", true);
+    }
+
+    if (failCount > 0) {
+      showToast(`Failed to delete ${failCount} items`, true);
     }
     setShowBulkConfirm(false);
   };
@@ -331,6 +444,21 @@ const History = () => {
         )}
       </div>
 
+      {/* --- Load More Button (Server Side) --- */}
+      {hasMoreHistory && (
+        <div className="flex justify-center mt-6">
+          <Button
+            variant="secondary"
+            onClick={loadMoreTransactions}
+            disabled={loadingMore}
+            className="w-full sm:w-auto min-w-[200px] flex items-center justify-center gap-2"
+          >
+            {loadingMore ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />}
+            <span>{loadingMore ? 'Loading History...' : 'Load Older Transactions'}</span>
+          </Button>
+        </div>
+      )}
+
       {/* --- Pagination Controls (Bottom - Simple) --- */}
       {totalPages > 1 && (
         <div className="flex justify-center mt-4">
@@ -356,7 +484,7 @@ const History = () => {
         message={`
           <div class="text-left max-h-60 overflow-y-auto space-y-2 mt-2 p-2 bg-gray-50 dark:bg-gray-700 rounded text-sm">
             ${Array.from(selectedIds).map(id => {
-          const t = transactions.find(tx => tx.id === id);
+          const t = allAvailableData.find(tx => tx.id === id);
           if (!t) return '';
           return `
                   <div class="flex justify-between border-b border-gray-200 dark:border-gray-600 pb-1 last:border-0">
@@ -364,7 +492,7 @@ const History = () => {
                       <div class="font-medium text-gray-800 dark:text-gray-200">${t.expenseName}</div>
                       <div class="text-xs text-gray-500">${new Date(t.timestamp?.toDate ? t.timestamp.toDate() : t.timestamp).toLocaleDateString()}</div>
                     </div>
-                    <div class="font-bold text-red-600">₹${t.amount}</div>
+                    <div class="font-bold text-red-600">₹${(t.amount / 100).toFixed(2)}</div>
                   </div>
                 `;
         }).join('')}

@@ -5,7 +5,7 @@ import useAppStore from '../store/useAppStore';
 import { useAuth } from './useAuth';
 import { runLedgerIntegrityChecks } from '../utils/integrityChecks';
 
-const LEDGER_ID = 'main-ledger';
+import { LEDGER_ID } from '../config/constants';
 
 export const useFirestoreSync = () => {
   const { isAllowed } = useAuth();
@@ -27,7 +27,7 @@ export const useFirestoreSync = () => {
   useEffect(() => {
     if (!isAllowed) return;
 
-    // OPTIMIZED QUERY: Only sync this year's data for the global store
+    // OPTIMIZED QUERY: Sync Current Year to ensure balance integrity while avoiding full history
     const startOfYear = new Date(new Date().getFullYear(), 0, 1);
     const startTimestamp = Timestamp.fromMillis(startOfYear.getTime());
 

@@ -6,7 +6,8 @@ import {
 import { db } from '../config/firebase';
 import useAppStore from '../store/useAppStore';
 
-const LEDGER_ID = 'main-ledger';
+import { LEDGER_ID } from '../config/constants';
+
 const COLLECTION_PATH = `ledgers/${LEDGER_ID}/transactions`;
 
 // Use this for simple updates

@@ -46,17 +46,18 @@ const Templates = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Transaction Templates</h2>
-        <Button onClick={() => navigate('/add')} className="flex items-center gap-2">
-          <FilePlus size={18} /> Create New via Form
-        </Button>
+    <div className="space-y-6 max-w-5xl mx-auto pb-24">
+      <div className="glass-card p-6 md:p-8">
+        <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+          <div>
+            <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400">Transaction Templates</h2>
+            <p className="text-gray-400 mt-1">Quick-add frequently used transactions</p>
+          </div>
+          <Button onClick={() => navigate('/add')} className="gap-2">
+            <FilePlus size={18} /> Create New via Form
+          </Button>
+        </div>
       </div>
-
-      <p className="text-sm text-gray-600 dark:text-gray-400">
-        Save frequently used transactions as templates to add them quickly.
-      </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {templates.length === 0 ? (
@@ -68,18 +69,18 @@ const Templates = () => {
             const participantCount = (t.participants || []).length + 1;
 
             return (
-              <div key={t.id} className="bg-white dark:bg-gray-800 p-5 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div key={t.id} className="glass-card p-5 flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200 truncate" title={t.name}>
+                    <h3 className="font-bold text-lg text-gray-200 truncate" title={t.name}>
                       {t.name}
                     </h3>
-                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-white/5 text-gray-400">
                       {cat}
                     </span>
                   </div>
-                  <p className="text-2xl font-bold text-sky-600 dark:text-sky-500 mb-1">{amount}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  <p className="text-2xl font-bold mb-1" style={{ color: 'var(--primary)' }}>{amount}</p>
+                  <p className="text-sm text-gray-500 mb-4">
                     {t.expenseName} • {participantCount} people
                   </p>
                 </div>
@@ -90,8 +91,8 @@ const Templates = () => {
                   <button
                     onClick={() => togglePin(t)}
                     className={`p-2 rounded-lg border transition-all ${t.isPinned
-                        ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100 dark:bg-amber-900/20 dark:border-amber-900/30'
-                        : 'border-gray-200 text-gray-400 hover:text-amber-500 hover:border-amber-300 dark:border-gray-600 dark:hover:border-amber-700'
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
+                      : 'border-white/10 text-gray-400 hover:text-amber-500 hover:border-amber-500/30'
                       }`}
                     title={t.isPinned ? "Unpin from Quick Add" : "Pin to Quick Add"}
                   >
@@ -99,7 +100,7 @@ const Templates = () => {
                   </button>
                   <button
                     onClick={() => confirmDelete(t.id, t.name)}
-                    className="p-2 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
+                    className="p-2 text-gray-400 hover:text-red-500 transition-colors"
                     title="Delete"
                   >
                     <Trash2 size={18} />

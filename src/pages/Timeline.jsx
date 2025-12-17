@@ -27,69 +27,75 @@ const Timeline = () => {
   if (transactions.length === 0) return <div className="text-center text-gray-500 mt-10">No timeline data.</div>;
 
   return (
-    // Changed mx-auto max-w-3xl to include responsiveness
-    <div className="max-w-3xl mx-auto space-y-8 relative before:absolute before:inset-0 before:ml-4 md:before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-linear-to-b before:from-transparent before:via-slate-300 before:to-transparent pb-20">
-      {/* Adjusted padding left for title */}
-      <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200 mb-8 pl-12 md:pl-12">Timeline</h2>
+    <div className="max-w-3xl mx-auto space-y-8 pb-20">
+      {/* Header - Full width, no margin */}
+      <div className="glass-card p-6 md:p-8">
+        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-blue-400">Timeline</h2>
+        <p className="text-gray-400 mt-1">A chronological view of your transactions</p>
+      </div>
 
-      {Object.entries(groups).map(([dateStr, txns]) => (
-        <div key={dateStr} className="relative">
-          {/* Date Header */}
-          <div className="sticky top-20 z-20 mb-6 pt-2">
-            {/* Blue Dot - Adjusted left position for mobile */}
-            <div className="absolute top-1/2 -translate-y-1/2 left-4 md:left-5 -translate-x-1/2 bg-sky-500 h-3 w-3 md:h-4 md:w-4 rounded-full border-2 border-white dark:border-gray-900 z-20 box-content"></div>
+      {/* Timeline content with vertical line */}
+      <div className="relative before:absolute before:inset-0 before:ml-4 md:before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-white/20 before:to-transparent">
 
-            {/* Date Text - Adjusted margin left for mobile */}
-            <h3 className="ml-12 md:ml-12 inline-block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm relative z-30">
-              {dateStr === todayStr ? "Today" : dateStr}
-            </h3>
-          </div>
+        {Object.entries(groups).map(([dateStr, txns]) => (
+          <div key={dateStr} className="relative">
+            {/* Date Header */}
+            <div className="sticky top-20 z-20 mb-6 pt-2">
+              {/* Dot */}
+              <div className="absolute top-1/2 -translate-y-1/2 left-4 md:left-5 -translate-x-1/2 h-3 w-3 md:h-4 md:w-4 rounded-full border-2 border-white/20 z-20 box-content" style={{ backgroundColor: 'var(--primary)' }}></div>
 
-          {/* Transactions List - Adjusted margin left for mobile */}
-          <div className="ml-12 md:ml-12 space-y-4">
-            {txns.map(txn => {
-              const isReturn = txn.isReturn;
-              const isRefund = txn.amount < 0;
-              const isIncome = txn.type === 'income';
+              {/* Date Text */}
+              <h3 className="ml-12 md:ml-12 inline-block text-xs sm:text-sm font-bold text-gray-100 bg-white/10 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 shadow-sm relative z-30">
+                {dateStr === todayStr ? "Today" : dateStr}
+              </h3>
+            </div>
 
-              let sign = '-';
-              let colorClass = 'text-gray-800 dark:text-gray-200';
-              let amountVal = Math.abs(txn.amount / 100);
+            {/* Transactions List */}
+            <div className="ml-12 md:ml-12 space-y-4">
+              {txns.map(txn => {
+                const isReturn = txn.isReturn;
+                const isRefund = txn.amount < 0;
+                const isIncome = txn.type === 'income';
 
-              if (isRefund || isIncome) {
-                sign = '+';
-                colorClass = 'text-green-600';
-              } else if (isReturn) {
-                if (txn.payer === 'me') { sign = '-'; colorClass = 'text-red-600'; }
-                else { sign = '+'; colorClass = 'text-green-600'; }
-              }
+                let sign = '-';
+                let colorClass = 'text-gray-200';
+                let amountVal = Math.abs(txn.amount / 100);
 
-              const myShare = txn.splits?.me ? (txn.splits.me / 100) : 0;
-              const shareText = isRefund ? `+₹${Math.abs(myShare).toFixed(2)}` : `₹${myShare.toFixed(2)}`;
+                if (isRefund || isIncome) {
+                  sign = '+';
+                  colorClass = 'text-green-500';
+                } else if (isReturn) {
+                  if (txn.payer === 'me') { sign = '-'; colorClass = 'text-red-500'; }
+                  else { sign = '+'; colorClass = 'text-green-500'; }
+                }
 
-              return (
-                <div key={txn.id} className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex justify-between items-center transition hover:shadow-md relative z-10">
-                  <div className="min-w-0 pr-2">
-                    <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm sm:text-base truncate">{txn.expenseName}</p>
-                    <p className="text-xs text-gray-500 truncate">
-                      {txn.category || 'Uncategorized'} • {txn.modeOfPayment || 'Cash'}
-                      {txn.place && ` • ${txn.place}`}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className={`font-bold text-sm sm:text-base ${colorClass}`}>{sign}₹{formatCurrency(amountVal * 100).replace('₹', '')}</p>
-                    {myShare !== 0 && !isReturn && !isIncome && (
-                      <p className={`text-[10px] sm:text-xs ${isRefund ? 'text-green-600' : 'text-gray-400'}`}>
-                        My Share: {shareText}
+                const myShare = txn.splits?.me ? (txn.splits.me / 100) : 0;
+                const shareText = isRefund ? `+₹${Math.abs(myShare).toFixed(2)}` : `₹${myShare.toFixed(2)}`;
+
+                return (
+                  <div key={txn.id} className="glass-card p-3 sm:p-4 flex justify-between items-center relative z-10">
+                    <div className="min-w-0 pr-2">
+                      <p className="font-semibold text-gray-100 text-sm sm:text-base truncate">{txn.expenseName}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {txn.category || 'Uncategorized'} • {txn.modeOfPayment || 'Cash'}
+                        {txn.place && ` • ${txn.place}`}
                       </p>
-                    )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`font-bold text-sm sm:text-base ${colorClass}`}>{sign}₹{formatCurrency(amountVal * 100).replace('₹', '')}</p>
+                      {myShare !== 0 && !isReturn && !isIncome && (
+                        <p className={`text-[10px] sm:text-xs ${isRefund ? 'text-green-500' : 'text-gray-400'}`}>
+                          My Share: {shareText}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 };

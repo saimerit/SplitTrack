@@ -9,7 +9,7 @@ const SearchPalette = ({ onClose }) => {
   const { transactions } = useAppStore();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  
+
   // FIX: Removed 'results' state and 'useEffect'.
   // Derived state should be calculated during render.
 
@@ -35,32 +35,32 @@ const SearchPalette = ({ onClose }) => {
 
   return (
     <div className="fixed inset-0 z-100 flex items-start justify-center pt-20 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-lg bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
-        <div className="flex items-center border-b border-gray-200 dark:border-gray-700 p-4">
+      <div className="w-full max-w-lg rounded-xl shadow-2xl overflow-hidden border border-white/10" style={{ backgroundColor: 'var(--bg-surface)' }}>
+        <div className="flex items-center border-b border-white/10 p-4">
           <Search className="text-gray-400 mr-3" />
           <input
             autoFocus
-            className="flex-1 bg-transparent outline-none text-lg text-gray-800 dark:text-gray-200 placeholder-gray-400"
+            className="flex-1 bg-transparent outline-none text-lg text-gray-200 placeholder-gray-400"
             placeholder="Search transactions..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X /></button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-200"><X /></button>
         </div>
-        
+
         <div className="max-h-96 overflow-y-auto">
           {results.map(txn => (
-            <div 
-              key={txn.id} 
+            <div
+              key={txn.id}
               onClick={() => handleSelect(txn)}
-              className="p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-sky-50 dark:hover:bg-gray-700 cursor-pointer flex justify-between items-center"
+              className="p-4 border-b border-white/5 hover:bg-white/5 cursor-pointer flex justify-between items-center"
             >
               <div>
-                <p className="font-medium text-gray-800 dark:text-gray-200">{txn.expenseName}</p>
+                <p className="font-medium text-gray-200">{txn.expenseName}</p>
                 <p className="text-xs text-gray-500">{formatDate(txn.timestamp)} • {txn.category}</p>
               </div>
               <div className="flex items-center gap-3">
-                <span className="font-bold text-gray-700 dark:text-gray-300">{formatCurrency(txn.amount)}</span>
+                <span className="font-bold text-gray-300">{formatCurrency(txn.amount)}</span>
                 <ChevronRight size={16} className="text-gray-400" />
               </div>
             </div>

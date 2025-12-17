@@ -127,8 +127,8 @@ const RecurringManager = () => {
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Form */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
-                <h3 className="text-lg font-semibold mb-4 dark:text-gray-200">
+            <div className="glass-card p-6">
+                <h3 className="text-lg font-semibold mb-4 text-gray-200">
                     {isEditing ? 'Edit Recurring Rule' : 'Add Recurring Rule'}
                 </h3>
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -203,22 +203,22 @@ const RecurringManager = () => {
             </div>
 
             {/* List */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow border dark:border-gray-700 overflow-hidden">
-                <h3 className="p-4 border-b dark:border-gray-700 font-semibold dark:text-gray-200 flex items-center gap-2">
+            <div className="glass-card overflow-hidden">
+                <h3 className="p-4 border-b border-white/5 font-semibold text-gray-200 flex items-center gap-2">
                     <Repeat size={18} /> Active Subscriptions
                 </h3>
-                <div className="divide-y dark:divide-gray-700 max-h-96 overflow-y-auto">
+                <div className="divide-y divide-white/5 max-h-96 overflow-y-auto">
                     {items.map(item => (
-                        <div key={item.id} className="p-4 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <div key={item.id} className="p-4 flex justify-between items-center hover:bg-white/5">
                             <div className="min-w-0 flex-1 pr-4">
                                 <div className="flex items-center gap-2">
-                                    <span className="font-bold text-gray-800 dark:text-gray-200">{item.name}</span>
-                                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 capitalize">
+                                    <span className="font-bold text-gray-200">{item.name}</span>
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 capitalize" style={{ color: 'var(--primary)' }}>
                                         {item.frequency}
                                     </span>
                                 </div>
                                 <div className="text-sm text-gray-500 mt-1 flex items-center gap-4">
-                                    <span className="font-mono text-gray-700 dark:text-gray-300">{formatCurrency(item.amount)}</span>
+                                    <span className="font-mono text-gray-300">{formatCurrency(item.amount)}</span>
                                     <span className="flex items-center gap-1 text-xs">
                                         <Calendar size={12} />
                                         {item.nextDueDate?.toDate ? item.nextDueDate.toDate().toLocaleDateString() : 'Invalid Date'}
@@ -227,10 +227,10 @@ const RecurringManager = () => {
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">
-                                <button onClick={() => handleEdit(item)} className="p-2 text-gray-400 hover:text-sky-500 rounded-full hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-colors">
+                                <button onClick={() => handleEdit(item)} className="p-2 text-gray-400 hover:text-sky-500 rounded-full hover:bg-white/5 transition-colors">
                                     <Edit2 size={16} />
                                 </button>
-                                <button onClick={() => setDeleteId(item.id)} className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                                <button onClick={() => setDeleteId(item.id)} className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-white/5 transition-colors">
                                     <Trash2 size={16} />
                                 </button>
                             </div>

@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import Button from '../common/Button';
 
-const ConfirmModal = ({ 
-  isOpen, 
-  title, 
-  message, 
-  onConfirm, 
-  onCancel, 
-  confirmText = "Confirm", 
-  confirmInputRequired = null 
+const ConfirmModal = ({
+  isOpen,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+  confirmText = "Confirm",
+  confirmInputRequired = null
 }) => {
   const [inputValue, setInputValue] = useState('');
 
@@ -22,7 +22,7 @@ const ConfirmModal = ({
 
   // Wrapper to clear input when cancelling
   const handleCancel = () => {
-    setInputValue(''); 
+    setInputValue('');
     onCancel();
   };
 
@@ -34,35 +34,36 @@ const ConfirmModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center items-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-96 border dark:border-gray-700 animate-scale-in">
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
-        
-        <div 
-          className="text-sm text-gray-600 dark:text-gray-400 mt-2 mb-4" 
+      <div className="p-6 rounded-lg shadow-xl w-96 border border-white/10 animate-scale-in" style={{ backgroundColor: 'var(--bg-surface)' }}>
+        <h3 className="text-xl font-semibold text-gray-100">{title}</h3>
+
+        <div
+          className="text-sm text-gray-400 mt-2 mb-4"
           dangerouslySetInnerHTML={{ __html: message }}
         ></div>
-        
+
         {/* Logic to use confirmInputRequired */}
         {confirmInputRequired && (
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Type <span className="font-bold text-red-600">{confirmInputRequired}</span> to confirm:
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Type <span className="font-bold text-red-500">{confirmInputRequired}</span> to confirm:
             </label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              className="block w-full px-3 py-2 border border-white/10 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 text-white"
+              style={{ backgroundColor: 'var(--bg-main)' }}
               placeholder={confirmInputRequired}
               autoFocus
             />
           </div>
         )}
-        
+
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
-          <Button 
-            variant="danger" 
+          <Button
+            variant="danger"
             onClick={handleConfirm}
             disabled={isButtonDisabled}
             className={isButtonDisabled ? "opacity-50 cursor-not-allowed" : ""}

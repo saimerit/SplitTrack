@@ -46,11 +46,10 @@ const MobileNav = () => {
             {/* Drawer Panel */}
             <div className={`
         fixed bottom-16 left-0 z-40 w-full 
-        bg-white dark:bg-gray-900 
-        rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)] border-t border-gray-100 dark:border-gray-800
+        rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)] border-t border-white/10
         transition-transform duration-300 cubic-bezier(0.32, 0.72, 0, 1) md:hidden
         ${isMenuOpen ? 'translate-y-0' : 'translate-y-[110%]'}
-      `}>
+      `} style={{ backgroundColor: 'var(--bg-surface)' }}>
                 {/* Drawer Handle */}
                 <div className="w-full flex justify-center pt-3 pb-1" onClick={closeMenu}>
                     <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full"></div>
@@ -130,7 +129,7 @@ const MobileNav = () => {
             </div>
 
             {/* --- BOTTOM NAVIGATION BAR --- */}
-            <div className="fixed bottom-0 left-0 z-50 w-full h-16 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 md:hidden pb-safe">
+            <div className="fixed bottom-0 left-0 z-50 w-full h-16 border-t border-white/10 md:hidden pb-safe" style={{ backgroundColor: 'var(--bg-surface)' }}>
                 <div className="grid h-full grid-cols-4 mx-auto max-w-lg">
 
                     <NavLink to="/" className={navClass} onClick={closeMenu}>

@@ -8,8 +8,8 @@ export const PALETTE_PRESETS = [
     name: 'Default Sky',
     type: 'light',
     colors: {
-      light: { bgMain: '#f9fafb', bgSurface: '#ffffff', primary: '#0284c7', textMain: '#111827' },
-      dark: { bgMain: '#111827', bgSurface: '#1f2937', primary: '#38bdf8', textMain: '#f9fafb' }
+      light: { bgMain: '#f9fafb', bgSurface: '#ffffff', primary: '#0284c7', primaryText: '#ffffff', textMain: '#111827' },
+      dark: { bgMain: '#111827', bgSurface: '#1f2937', primary: '#38bdf8', primaryText: '#0f172a', textMain: '#f9fafb' }
     }
   },
   {
@@ -17,11 +17,11 @@ export const PALETTE_PRESETS = [
     name: 'Full Blackout (AMOLED)',
     type: 'dark',
     colors: {
-      // Both modes use pure black
       light: {
         bgMain: '#000000',
         bgSurface: '#0a0a0a',
         primary: '#ffffff',
+        primaryText: '#000000',
         textMain: '#ffffff',
         border: '#1a1a1a'
       },
@@ -29,6 +29,7 @@ export const PALETTE_PRESETS = [
         bgMain: '#000000',
         bgSurface: '#0a0a0a',
         primary: '#ffffff',
+        primaryText: '#000000',
         textMain: '#ffffff',
         border: '#1a1a1a'
       }
@@ -39,8 +40,8 @@ export const PALETTE_PRESETS = [
     name: 'Professional Gray',
     type: 'dark',
     colors: {
-      light: { bgMain: '#f3f4f6', bgSurface: '#ffffff', primary: '#4b5563', textMain: '#1f2937' },
-      dark: { bgMain: '#18181b', bgSurface: '#27272a', primary: '#a1a1aa', textMain: '#f4f4f5', border: '#3f3f46' }
+      light: { bgMain: '#f3f4f6', bgSurface: '#ffffff', primary: '#4b5563', primaryText: '#ffffff', textMain: '#1f2937' },
+      dark: { bgMain: '#18181b', bgSurface: '#27272a', primary: '#a1a1aa', primaryText: '#18181b', textMain: '#f4f4f5', border: '#3f3f46' }
     }
   },
   {
@@ -48,8 +49,8 @@ export const PALETTE_PRESETS = [
     name: 'Midnight Blue',
     type: 'dark',
     colors: {
-      light: { bgMain: '#eff6ff', bgSurface: '#ffffff', primary: '#1e40af', textMain: '#1e3a8a' },
-      dark: { bgMain: '#0f172a', bgSurface: '#1e293b', primary: '#60a5fa', textMain: '#f1f5f9' }
+      light: { bgMain: '#eff6ff', bgSurface: '#ffffff', primary: '#1e40af', primaryText: '#ffffff', textMain: '#1e3a8a' },
+      dark: { bgMain: '#0f172a', bgSurface: '#1e293b', primary: '#60a5fa', primaryText: '#0f172a', textMain: '#f1f5f9' }
     }
   }
 ];

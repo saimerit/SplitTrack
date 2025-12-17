@@ -145,7 +145,8 @@ const Dashboard = () => {
               <button
                 key={t.id}
                 onClick={() => handleQuickAdd(t)}
-                className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full shadow-sm hover:shadow-md hover:border-sky-500 transition-all text-sm font-medium text-gray-700 dark:text-gray-300"
+                className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-full shadow-sm hover:shadow-md hover:border-sky-500 transition-all text-sm font-medium text-gray-300"
+                style={{ backgroundColor: 'var(--bg-surface)' }}
               >
                 <span>⚡</span>
                 <span>{t.expenseName || t.description}</span>
@@ -163,12 +164,14 @@ const Dashboard = () => {
           subtitle={stats.netPosition > 0 ? "You are owed money" : "You owe money"}
           colorTheme="dynamic"
           className="lg:col-span-1"
+          delay={0}
         />
 
         <StatCard
           title="Income (This Month)"
           value={stats.monthlyIncome * 100}
           colorTheme="emerald"
+          delay={100}
         />
 
         <StatCard
@@ -176,24 +179,27 @@ const Dashboard = () => {
           value={stats.myTotalExpenditure}
           subtitle="Total payments - Repayments"
           colorTheme="blue"
+          delay={200}
         />
 
         <StatCard
           title="My Total Share"
           value={stats.myTotalShare}
           colorTheme="purple"
+          delay={300}
         />
 
         <StatCard
           title="Paid By Others"
           value={stats.paidByOthers}
           colorTheme="orange"
+          delay={400}
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700 md:col-span-2">
+        <div className="glass-card p-6 md:col-span-2">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">Detailed Breakdown</h3>
           <div className="space-y-3 max-h-64 overflow-y-auto no-scrollbar">
             {Object.entries(stats.myPersonalBalances).filter(([, val]) => Math.abs(val) > 1).length === 0 ? (
@@ -206,7 +212,7 @@ const Dashboard = () => {
 
                 return (
                   /* REFACTORED: Stack vertically on mobile, row on tablet/desktop */
-                  <div key={uid} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg gap-2">
+                  <div key={uid} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-3 bg-white/5 rounded-lg gap-2">
                     <span className="font-medium text-gray-700 dark:text-gray-300 wrap-break-word text-lg sm:text-base">
                       {name}
                     </span>
@@ -235,7 +241,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700 md:col-span-1">
+        <div className="glass-card p-6 md:col-span-1">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">My Share by Category</h3>
           <div className="h-48 md:h-64 relative">
             {stats.chartData.length > 0 ? (

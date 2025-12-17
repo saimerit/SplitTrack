@@ -1,12 +1,12 @@
 const Skeleton = ({ className }) => (
-    <div className={`animate-pulse bg-gray-200 dark:bg-gray-700 rounded ${className}`}></div>
+    <div className={`animate-pulse bg-white/10 rounded ${className}`}></div>
 );
 
 export const DashboardSkeleton = () => (
     <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-32 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col justify-between">
+                <div key={i} className="h-32 glass-card p-6 flex flex-col justify-between">
                     <Skeleton className="h-4 w-24 mb-4" />
                     <Skeleton className="h-8 w-32" />
                 </div>

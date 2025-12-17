@@ -6,7 +6,7 @@ export const useTheme = () => {
 
   useEffect(() => {
     const root = window.document.documentElement;
-    
+
     // 1. Force Apply CSS Class FIRST
     if (themeMode === 'dark') {
       root.classList.add('dark');
@@ -17,36 +17,47 @@ export const useTheme = () => {
       root.setAttribute('data-theme', 'light');
     }
 
+    // Set Palette ID for CSS targeting
+    root.setAttribute('data-palette', activePaletteId);
+
     // 2. Apply Palette Colors with higher priority
     const allPalettes = [...PALETTE_PRESETS, ...(customPalettes || [])];
     const activePalette = allPalettes.find(p => p.id === activePaletteId) || PALETTE_PRESETS[0];
-    
+
     // Get colors for current mode
     const modeColors = activePalette.colors[themeMode] || activePalette.colors.light;
 
     // 3. Inject CSS Variables with !important flag via style attribute
     if (modeColors) {
-        root.style.setProperty('--bg-main', modeColors.bgMain, 'important');
-        root.style.setProperty('--bg-surface', modeColors.bgSurface, 'important');
-        root.style.setProperty('--primary', modeColors.primary, 'important');
-        root.style.setProperty('--text-main', modeColors.textMain, 'important');
-        
-        if(modeColors.border) {
-            root.style.setProperty('--border', modeColors.border, 'important');
-        } else {
-            root.style.removeProperty('--border');
-        }
-        
-        // Also force body background immediately
-        document.body.style.backgroundColor = modeColors.bgMain;
-        document.body.style.color = modeColors.textMain;
+      root.style.setProperty('--bg-main', modeColors.bgMain, 'important');
+      root.style.setProperty('--bg-surface', modeColors.bgSurface, 'important');
+      root.style.setProperty('--primary', modeColors.primary, 'important');
+      root.style.setProperty('--primary-text', modeColors.primaryText || '#ffffff', 'important');
+      root.style.setProperty('--text-main', modeColors.textMain, 'important');
+
+      if (modeColors.border) {
+        root.style.setProperty('--border', modeColors.border, 'important');
+      } else {
+        root.style.removeProperty('--border');
+      }
+
+      // Force body background immediately with !important
+      document.body.style.setProperty('background-color', modeColors.bgMain, 'important');
+      document.body.style.setProperty('color', modeColors.textMain, 'important');
+
+      // Debug: Log the actual computed style
+      const computedBg = window.getComputedStyle(document.body).backgroundColor;
+      console.log('DEBUG: Setting bgMain to:', modeColors.bgMain);
+      console.log('DEBUG: Computed body background-color:', computedBg);
+      console.log('DEBUG: body.style.backgroundColor:', document.body.style.backgroundColor);
     }
 
     // 4. Log for debugging
-    console.log('Theme applied:', {
-        mode: themeMode,
-        palette: activePalette.name,
-        colors: modeColors
+    console.log('useTheme useEffect triggered:', {
+      activePaletteId,
+      themeMode,
+      foundPalette: activePalette?.name,
+      appliedColors: modeColors
     });
 
   }, [themeMode, activePaletteId, customPalettes]);

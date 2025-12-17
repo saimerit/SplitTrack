@@ -107,21 +107,23 @@ const Sandbox = () => {
     };
 
     return (
-        <div className="space-y-8 pb-20 animate-fade-in max-w-6xl mx-auto min-h-screen bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(139,92,246,0.03)_10px,rgba(139,92,246,0.03)_20px)] p-6 rounded-3xl">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
-                        <Sparkles className="text-purple-500" /> Sandbox Mode
-                    </h2>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        Simulate transactions to forecast your net position. These are <strong>not</strong> saved.
-                    </p>
+        <div className="space-y-8 pb-20 animate-fade-in max-w-6xl mx-auto">
+            <div className="glass-card p-6 md:p-8">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 flex items-center gap-2">
+                            <Sparkles className="text-purple-400" /> Sandbox Mode
+                        </h2>
+                        <p className="text-sm text-gray-400 mt-1">
+                            Simulate transactions to forecast your net position. These are <strong>not</strong> saved.
+                        </p>
+                    </div>
+                    {sandboxTxns.length > 0 && (
+                        <Button variant="secondary" onClick={resetSandbox} className="bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 gap-2">
+                            <RotateCcw size={14} /> Reset Simulation
+                        </Button>
+                    )}
                 </div>
-                {sandboxTxns.length > 0 && (
-                    <Button variant="secondary" onClick={resetSandbox} className="text-xs">
-                        <RotateCcw size={14} className="mr-1" /> Reset Simulation
-                    </Button>
-                )}
             </div>
 
             {/* Comparison Cards using StatCard */}
@@ -153,21 +155,21 @@ const Sandbox = () => {
 
                 {/* Simulator Form */}
                 <div className="lg:col-span-1">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-purple-100 dark:border-gray-700 sticky top-24">
-                        <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200 mb-4">Add Simulation</h3>
+                    <div className="glass-card p-6 sticky top-24">
+                        <h3 className="text-lg font-bold text-gray-200 mb-4">Add Simulation</h3>
                         <form onSubmit={handleAdd} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 dark:bg-gray-700 rounded-lg mb-4">
+                            <div className="grid grid-cols-2 gap-2 p-1 bg-white/5 rounded-lg mb-4">
                                 <button
                                     type="button"
                                     onClick={() => setFormData({ ...formData, type: 'expense' })}
-                                    className={`py-2 text-sm font-medium rounded-md transition-all ${formData.type === 'expense' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}
+                                    className={`py-2 text-sm font-medium rounded-md transition-all ${formData.type === 'expense' ? 'bg-white/10 shadow text-white' : 'text-gray-400'}`}
                                 >
                                     Expense
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setFormData({ ...formData, type: 'income' })}
-                                    className={`py-2 text-sm font-medium rounded-md transition-all ${formData.type === 'income' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}
+                                    className={`py-2 text-sm font-medium rounded-md transition-all ${formData.type === 'income' ? 'bg-white/10 shadow text-white' : 'text-gray-400'}`}
                                 >
                                     Income
                                 </button>
@@ -274,28 +276,28 @@ const Sandbox = () => {
 
                 {/* Simulator List */}
                 <div className="lg:col-span-2">
-                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-white dark:bg-gray-800">
-                            <h3 className="font-bold text-gray-700 dark:text-gray-300">Sandbox Transactions</h3>
-                            <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 px-2 py-1 rounded-full">
+                    <div className="glass-card overflow-hidden">
+                        <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                            <h3 className="font-bold text-gray-300">Sandbox Transactions</h3>
+                            <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full">
                                 {sandboxTxns.length} Items
                             </span>
                         </div>
 
                         {sandboxTxns.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-16 text-center">
-                                <div className="bg-purple-50 dark:bg-purple-900/20 p-6 rounded-full mb-4 animate-bounce-slow">
+                                <div className="bg-purple-500/10 p-6 rounded-full mb-4">
                                     <Sparkles size={48} className="text-purple-400" />
                                 </div>
-                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Start Simulating</h3>
+                                <h3 className="text-lg font-semibold text-white">Start Simulating</h3>
                                 <p className="text-gray-500 max-w-sm mt-1 mb-6">
                                     Add theoretical expenses or incomes to see how they impact your financial future.
                                 </p>
                             </div>
                         ) : (
-                            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                            <div className="divide-y divide-white/5">
                                 {sandboxTxns.map((t) => (
-                                    <div key={t.id} className="p-4 flex justify-between items-center bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/80 transition-colors animate-slide-in-right gap-3">
+                                    <div key={t.id} className="p-4 flex justify-between items-center hover:bg-white/5 transition-colors animate-slide-in-right gap-3">
                                         <div className="flex items-center gap-3 min-w-0 flex-1">
                                             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${t.type === 'income' ? 'bg-green-500' : 'bg-red-500'}`}></div>
                                             <div className="min-w-0">

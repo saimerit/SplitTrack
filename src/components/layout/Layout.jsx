@@ -17,7 +17,7 @@ const Layout = () => {
 
   return (
     // min-h-screen to allow full height, w-full to fill width. removed overflow-x-hidden to avoid clipping.
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 w-full">
+    <div className="flex min-h-screen text-gray-900 dark:text-gray-100 w-full" style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-main)' }}>
 
       {/* Sidebar Component */}
       <Sidebar
@@ -31,7 +31,7 @@ const Layout = () => {
       <div className="flex-1 flex flex-col min-w-0 transition-all duration-300">
 
         {/* Header / Toggle Area */}
-        <header className="sticky top-0 z-30 flex items-center p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0">
+        <header className="sticky top-0 z-30 flex items-center p-4 border-b border-white/10 shrink-0" style={{ backgroundColor: 'var(--bg-surface)' }}>
 
           {/* Toggle Button */}
           <button

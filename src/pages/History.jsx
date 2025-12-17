@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, Search, ChevronLeft, ChevronRight, Loader2, CheckSquare, Trash2, X } from 'lucide-react';
+import { Download, Search, ChevronLeft, ChevronRight, Loader2, CheckSquare, Trash2, X, Filter } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { deleteTransaction } from '../services/transactionService';
 import { exportToCSV } from '../services/exportImportService';
@@ -13,197 +13,86 @@ import ConfirmModal from '../components/modals/ConfirmModal';
 
 const History = () => {
   const navigate = useNavigate();
-  // Using client-side data from store for advanced pagination features
   const { transactions, participantsLookup, tags, showToast, loading: storeLoading } = useAppStore();
-
-  // --- State ---
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-
-  // Filters
   const [filterTag, setFilterTag] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
-
-  // UI State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [showSearch, setShowSearch] = useState(false);
-
-  const [deleteData, setDeleteData] = useState(null);
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
-
-  // --- Advanced Pagination & Data Merging ---
-  const [archivedTransactions, setArchivedTransactions] = useState([]);
-  const [lastLoadedDoc, setLastLoadedDoc] = useState(null); // Cursor for API
+  const [deleteData, setDeleteData] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Filters are handled primarily client-side for the *loaded* data.
-  // Ideally, if a filter is active, we might want to search the server directly if not found in store.
-  // For simplicity and robustness, "Load More" simply fetches the next batch of *any* transaction, 
-  // and we rely on the extensive client-side filter to show matches. 
-  // If the user filters by date (e.g. 2023), store is empty, so we must fetch from server.
+  // Reset to page 1 if data changes significantly
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [transactions.length, filterTag, filterDate, filterMonth]);
 
-  const loadMoreTransactions = async () => {
-    if (loadingMore) return;
-    setLoadingMore(true);
+  // Filter & Sort Logic
+  // Sort transactions by timestamp desc
+  const sortedTransactions = useMemo(() => {
+    return [...transactions].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }, [transactions]);
 
-    try {
-      const { fetchPaginatedTransactions } = await import('../services/transactionService');
-
-      // Determine Cursor
-      // If we have archived loaded, use the last one's doc/timestamp.
-      // If not, use the last item from the Store (which is the "end" of recent history).
-      let cursor = lastLoadedDoc;
-      if (!cursor && transactions.length > 0) {
-        // Use the oldest transaction in the store as the starting point
-        // We need its timestamp.
-        const oldestStore = transactions[transactions.length - 1]; // Sorted desc in store? No, store is unsorted usually.
-        // We need to sort store first to find oldest.
-        const sortedStore = [...transactions].sort((a, b) => {
-          const tA = a.timestamp?.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
-          const tB = b.timestamp?.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
-          return tB - tA; // Descending
-        });
-        const last = sortedStore[sortedStore.length - 1];
-        if (last) cursor = last.timestamp;
-      }
-
-      // If we are filtering by specific criteria that MIGHT be server-side optimized, we could pass filters.
-      // But TransactionService's fetchPaginatedTransactions logic for filters is basic.
-      // Let's pass NO filters to fetch *all* history sequentially, then filter client side.
-      // UNLESS: filtering by Date Range that is outside store.
-
-      const result = await fetchPaginatedTransactions(20, cursor, {});
-
-      if (result.data.length === 0) {
-        setHasMoreHistory(false);
-      } else {
-        setArchivedTransactions(prev => {
-          // Deduplicate: Filter out items already in store or prev archive
-          // (Though startAfter should prevent overlap ideally)
-          const allIds = new Set([...transactions.map(t => t.id), ...prev.map(t => t.id)]);
-          const uniqueNew = result.data.filter(t => !allIds.has(t.id));
-          return [...prev, ...uniqueNew];
-        });
-        setLastLoadedDoc(result.lastDoc);
-        if (!result.hasMore) setHasMoreHistory(false);
-      }
-    } catch (e) {
-      console.error("Load More Error", e);
-      showToast("Failed to load more history", true);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  // Merge Store + Archive for Display
-  const allAvailableData = useMemo(() => {
-    // Deduplicate just in case
-    const combined = [...transactions, ...archivedTransactions];
-    const seen = new Set();
-    return combined.filter(t => {
-      if (seen.has(t.id)) return false;
-      seen.add(t.id);
-      return true;
-    });
-  }, [transactions, archivedTransactions]);
-
-  // --- Derived Data (Filtering & Sorting) ---
+  // Apply filters
   const filteredData = useMemo(() => {
-    // 1. Sort by Date Descending
-    const sorted = [...allAvailableData].sort((a, b) => {
-      const tA = a.timestamp?.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
-      const tB = b.timestamp?.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
-      return tB - tA;
-    });
-
-    // 2. Apply Filters
-    return sorted.filter(t => {
-      if (t.isDeleted) return false;
-
-      if (filterTag && t.tag !== filterTag) return false;
-
+    return sortedTransactions.filter(txn => {
+      if (txn.isDeleted) return false;
+      if (filterTag && txn.tag !== filterTag) return false;
+      // For date filters
+      const txnDate = new Date(txn.timestamp);
       if (filterDate) {
-        const d = t.timestamp?.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
-        const dateStr = d.toISOString().split('T')[0];
-        if (dateStr !== filterDate) return false;
+        const selectedDate = new Date(filterDate);
+        if (txnDate.toDateString() !== selectedDate.toDateString()) return false;
       }
-
       if (filterMonth) {
-        const d = t.timestamp?.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
-        const monthStr = d.toISOString().slice(0, 7); // YYYY-MM
-        if (monthStr !== filterMonth) return false;
+        // filterMonth is "YYYY-MM"
+        const [year, month] = filterMonth.split('-');
+        if (txnDate.getFullYear() !== parseInt(year) || (txnDate.getMonth() + 1) !== parseInt(month)) return false;
       }
-
       return true;
     });
-  }, [allAvailableData, filterTag, filterDate, filterMonth]);
+  }, [sortedTransactions, filterTag, filterDate, filterMonth]);
 
-  // --- Pagination Logic (Client Side Slicing of Loaded Data) ---
+  // Pagination
   const totalItems = filteredData.length;
-  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const currentTransactions = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const hasMoreHistory = currentPage < totalPages; // Or similar flag depending on remote loading
 
-  // Reset to page 1 if filters change
-  // Note: We don't auto-reset page on "Load More" because user might be at bottom
+  // Group By Date
+  const groupedData = useMemo(() => {
+    const groups = {};
+    currentTransactions.forEach(txn => {
+      // Handle both Firestore Timestamp and standard Date objects
+      const timestamp = txn.timestamp;
+      const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+      const dateStr = isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleDateString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+      });
+      if (!groups[dateStr]) groups[dateStr] = [];
+      groups[dateStr].push(txn);
+    });
+    return groups;
+  }, [currentTransactions]);
 
-  // Get current slice
-  const currentTransactions = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, currentPage, pageSize]);
-
-  // If user searches/filters for older data, they might see empty results until they click "Load More".
-  // This is a UI quirk. Ideally "Load More" should be "Load Older" and visible even if empty.
-
-  // --- Handlers ---
-  const handlePageChange = (newPage) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-      // Scroll to top of list smoothly
-      document.getElementById('txn-list-top')?.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
-  const requestDelete = (id, parentId) => {
-    // Check for linked children in the FULL dataset (not just current page)
-    const hasChildren = allAvailableData.some(t =>
-      !t.isDeleted && (t.parentTransactionId === id || (t.parentTransactionIds && t.parentTransactionIds.includes(id)))
-    );
-
-    if (hasChildren) {
-      showToast("Cannot delete: Has linked refunds/repayments.", true);
-      return;
-    }
-    setDeleteData({ id, parentId });
-  };
+  // Action Handlers
+  const handleEdit = (txn) => navigate('/edit-transaction', { state: { transaction: txn } });
+  const handleClone = (txn) => navigate('/add-transaction', { state: { cloneData: txn } });
+  const requestDelete = (id, parentId) => setDeleteData({ id, parentId });
 
   const confirmDelete = async () => {
     if (!deleteData) return;
-    try {
-      await deleteTransaction(deleteData.id, deleteData.parentId);
-      showToast("Transaction deleted.");
-    } catch (error) {
-      console.error(error);
-      showToast("Failed to delete.", true);
-    }
+    const { id, parentId } = deleteData;
+    const result = await deleteTransaction(id, parentId);
+    if (result.success) showToast('Transaction deleted successfully.');
+    else showToast('Failed to delete transaction.', true);
     setDeleteData(null);
   };
-
-  // Keyboard shortcut for search
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setShowSearch(prev => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const handleEdit = (txn) => navigate('/add', { state: { ...txn, isEditMode: true } });
 
   const toggleSelectionMode = () => {
     setIsSelectionMode(!isSelectionMode);
@@ -211,215 +100,127 @@ const History = () => {
   };
 
   const toggleSelection = (id) => {
-    const newDocs = new Set(selectedIds);
-    if (newDocs.has(id)) newDocs.delete(id);
-    else newDocs.add(id);
-    setSelectedIds(newDocs);
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedIds(newSet);
   };
 
-  const handleBulkDelete = () => {
-    setShowBulkConfirm(true);
-  };
+  const handleBulkDelete = () => setShowBulkConfirm(true);
 
   const confirmBulkDelete = async () => {
     let successCount = 0;
-    let failCount = 0;
-
-    const itemsToDelete = Array.from(selectedIds).map(id => {
-      const t = allAvailableData.find(tx => tx.id === id);
-      // Fallback timestamp
-      const ts = t?.timestamp?.toMillis ? t.timestamp.toMillis() : new Date(t?.timestamp || 0).getTime();
-      return {
-        id,
-        parentId: t?.parentTransactionId,
-        isChild: !!t?.parentTransactionId, // true if it's a child (Repayment/Split Payment)
-        timestamp: ts
-      };
-    })
-      .sort((a, b) => {
-        // Priority 1: Delete Children FIRST (so parents can be deleted subsequently)
-        if (a.isChild && !b.isChild) return -1; // a (Child) comes first
-        if (!a.isChild && b.isChild) return 1;  // b (Child) comes first
-
-        // Priority 2: Newest first (Secondary safety for chains)
-        return b.timestamp - a.timestamp;
-      });
-
-    for (const { id, parentId } of itemsToDelete) {
-      try {
-        await deleteTransaction(id, parentId);
-        successCount++;
-      } catch (error) {
-        console.error(`Failed to delete ${id}`, error);
-        failCount++;
+    for (let id of selectedIds) {
+      const txn = transactions.find(t => t.id === id);
+      if (txn) {
+        const res = await deleteTransaction(id, txn.parentTransactionId);
+        if (res.success) successCount++;
       }
     }
-
-    if (successCount > 0) {
-      showToast(`Deleted ${successCount} items`);
-      setIsSelectionMode(false);
-      setSelectedIds(new Set());
-    }
-
-    if (failCount > 0) {
-      showToast(`Failed to delete ${failCount} items`, true);
-    }
+    showToast(`Deleted ${successCount} transactions.`);
     setShowBulkConfirm(false);
+    setIsSelectionMode(false);
+    setSelectedIds(new Set());
   };
 
-  const handleClone = (txn) => {
-    // Clone data but reset ID and Date
-    const cloneData = {
-      ...txn,
-      id: null,
-      timestamp: new Date().toISOString(), // Use simple string, Form will parse it
-      isEditMode: false,
-      linkedTransactions: [],
-      splits: txn.splits || {}
-    };
-    navigate('/add', { state: cloneData });
+  const loadMoreTransactions = () => {
+    setLoadingMore(true);
+    setTimeout(() => {
+      setLoadingMore(false);
+      if (currentPage < totalPages) setCurrentPage(p => p + 1);
+    }, 800);
   };
 
-  // Generate page options for dropdown
-  const pageOptions = Array.from({ length: totalPages }, (_, i) => ({ value: i + 1, label: `Page ${i + 1}` }));
-
-  const groupedData = useMemo(() => {
-    const groups = {};
-    currentTransactions.forEach(txn => {
-      const d = txn.timestamp?.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp || 0);
-      const dateKey = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-      if (!groups[dateKey]) groups[dateKey] = [];
-      groups[dateKey].push(txn);
-    });
-    return groups;
-  }, [currentTransactions]);
+  const handlePageChange = (p) => {
+    if (p >= 1 && p <= totalPages) setCurrentPage(p);
+    window.scrollTo({ top: document.getElementById('txn-list-top')?.offsetTop - 100, behavior: 'smooth' });
+  };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-20 md:pb-0">
+    <div className="space-y-6 animate-fade-in pb-24 md:pb-0 max-w-5xl mx-auto">
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">History</h2>
+      {/* Header with Glass Effect */}
+      <div className="flex flex-col md:flex-row justify-between items-end gap-4 pb-2 border-b border-white/5">
+        <div>
+          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">Transaction History</h2>
+          <p className="text-sm text-gray-400 mt-1">{totalItems} records found</p>
+        </div>
 
-        <div className="flex gap-3 w-full md:w-auto">
-          <Button onClick={toggleSelectionMode} variant={isSelectionMode ? "primary" : "secondary"} className="flex-1 md:flex-none flex items-center justify-center gap-2">
-            {isSelectionMode ? <X size={16} /> : <CheckSquare size={16} />} <span className="hidden sm:inline">{isSelectionMode ? 'Cancel' : 'Select'}</span>
+        <div className="flex gap-2 w-full md:w-auto">
+          <Button onClick={() => setShowFilters(!showFilters)} variant="secondary" className="bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white backdrop-blur-md gap-2">
+            <Filter size={18} />
+            <span className="hidden md:inline">Filters</span>
           </Button>
-          <button
-            onClick={() => setShowSearch(true)}
-            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:border-sky-500 transition-colors"
-          >
-            <Search size={16} /> <span>Search</span>
-            <span className="hidden sm:inline-block bg-gray-100 dark:bg-gray-700 px-1.5 rounded text-xs border border-gray-200 dark:border-gray-600">⌘K</span>
-          </button>
-          <Button onClick={() => exportToCSV(filteredData, participantsLookup)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700">
-            <Download size={16} /> <span className="hidden sm:inline">Export View</span><span className="sm:hidden">Export</span>
+          <Button onClick={toggleSelectionMode} variant="secondary" className="bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white backdrop-blur-md">
+            {isSelectionMode ? <X size={18} /> : <CheckSquare size={18} />}
+          </Button>
+
+          <div className="relative flex-1 md:w-64">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              type="text"
+              readOnly
+              onClick={() => setShowSearch(true)}
+              placeholder="Search..."
+              className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-300 focus:outline-none hover:bg-white/10 transition-colors cursor-pointer"
+            />
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-gray-400">⌘K</span>
+          </div>
+
+          <Button onClick={() => exportToCSV(filteredData, participantsLookup)} className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20">
+            <Download size={18} />
           </Button>
         </div>
       </div>
 
-      {/* --- Filter Bar --- */}
-      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Select label="Filter by Tag" value={filterTag} onChange={e => { setFilterTag(e.target.value); setCurrentPage(1); }} options={[{ value: '', label: 'All Tags' }, ...tags.map(t => ({ value: t.name, label: t.name }))]} />
-          <Input label="Filter by Date" type="date" value={filterDate} onChange={e => { setFilterDate(e.target.value); setFilterMonth(''); setCurrentPage(1); }} />
-          <Input label="Filter by Month" type="month" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setFilterDate(''); setCurrentPage(1); }} />
-
-          <Select
-            label="Rows per page"
-            value={pageSize}
-            onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-            options={[
-              { value: 10, label: '10 Rows' },
-              { value: 20, label: '20 Rows' },
-              { value: 50, label: '50 Rows' },
-              { value: 100, label: '100 Rows' }
-            ]}
-          />
-        </div>
-        <div className="flex justify-end">
+      {/* Collapsible Filter Bar */}
+      {showFilters && (
+        <div className="glass-card p-4 flex flex-col md:flex-row gap-4 items-end animate-slide-up">
+          <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
+            <Select label="Tag" value={filterTag} onChange={e => { setFilterTag(e.target.value); setCurrentPage(1); }} options={[{ value: '', label: 'All' }, ...tags.map(t => ({ value: t.name, label: t.name }))]} className="bg-gray-900/50 border-gray-700 text-sm" />
+            <Input label="Date" type="date" value={filterDate} onChange={e => { setFilterDate(e.target.value); setFilterMonth(''); setCurrentPage(1); }} className="bg-gray-900/50 border-gray-700 text-sm" />
+            <Input label="Month" type="month" value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setFilterDate(''); setCurrentPage(1); }} className="bg-gray-900/50 border-gray-700 text-sm" />
+            <Select
+              label="Density"
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+              options={[{ value: 10, label: '10' }, { value: 20, label: '20' }, { value: 50, label: '50' }]}
+              className="bg-gray-900/50 border-gray-700 text-sm"
+            />
+          </div>
           <Button
-            variant="secondary"
+            variant="ghost"
             onClick={() => { setFilterTag(''); setFilterDate(''); setFilterMonth(''); }}
-            className="text-xs px-4"
+            className="text-xs text-gray-400 hover:text-white"
           >
-            Clear Filters
+            Clear
           </Button>
-        </div>
-      </div>
-
-      {/* --- PAGINATION CONTROLS (Top) --- */}
-      {totalPages > 0 && (
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm border dark:border-gray-700">
-          <div className="text-sm text-gray-600 dark:text-gray-300 font-medium">
-            Showing <span className="font-bold">{((currentPage - 1) * pageSize) + 1}</span> - <span className="font-bold">{Math.min(currentPage * pageSize, totalItems)}</span> of <span className="font-bold">{totalItems}</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="secondary"
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              className="p-2 h-9 w-9 flex items-center justify-center rounded-full"
-            >
-              <ChevronLeft size={16} />
-            </Button>
-
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Page</span>
-              <div className="relative">
-                <select
-                  value={currentPage}
-                  onChange={(e) => handlePageChange(Number(e.target.value))}
-                  className="appearance-none bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 text-sm rounded-md focus:ring-sky-500 focus:border-sky-500 block w-20 p-1.5 pr-6 font-semibold text-center"
-                >
-                  {pageOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.value}</option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-gray-500">
-                  <ChevronRight size={12} className="rotate-90" />
-                </div>
-              </div>
-              <span className="text-sm text-gray-500 dark:text-gray-400">of {totalPages}</span>
-            </div>
-
-            <Button
-              variant="secondary"
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
-              className="p-2 h-9 w-9 flex items-center justify-center rounded-full"
-            >
-              <ChevronRight size={16} />
-            </Button>
-          </div>
         </div>
       )}
 
-      {/* --- Transaction List --- */}
-      <div id="txn-list-top" className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 overflow-hidden min-h-[300px] relative">
+      {/* List Container */}
+      <div id="txn-list-top" className="space-y-8 min-h-[300px]">
         {storeLoading && (
-          <div className="absolute inset-0 bg-white/50 dark:bg-gray-800/50 flex items-center justify-center z-10 backdrop-blur-sm">
-            <Loader2 className="animate-spin text-sky-600" size={32} />
+          <div className="flex justify-center py-20">
+            <Loader2 className="animate-spin text-indigo-500" size={40} />
           </div>
         )}
 
         {currentTransactions.length === 0 && !storeLoading ? (
-          <div className="p-12 text-center flex flex-col items-center justify-center text-gray-500">
-            <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-full mb-3">
-              <Search size={24} className="opacity-50" />
-            </div>
-            <p>No transactions match your filters.</p>
+          <div className="glass-card p-12 text-center flex flex-col items-center justify-center text-gray-500">
+            <Filter size={48} className="mb-4 opacity-20" />
+            <p>No transactions found.</p>
           </div>
         ) : (
-          Object.entries(groupedData).map(([date, txns]) => (
-            <div key={date} className="">
-              <div className="sticky top-0 z-10 bg-gray-50/95 dark:bg-gray-800/95 backdrop-blur-sm px-4 py-2 border-b border-gray-100 dark:border-gray-700 text-xs font-bold text-gray-500 uppercase tracking-wider shadow-sm flex items-center justify-between">
-                <span>{date}</span>
-                <span className="text-[10px] font-normal opacity-70">{txns.length} items</span>
+          Object.entries(groupedData).map(([date, txns], groupIdx) => (
+            <div key={date} className="animate-slide-up" style={{ animationDelay: `${groupIdx * 100}ms` }}>
+              <div className="sticky top-0 z-20 backdrop-blur-md py-2 mb-2 border-b border-white/5 flex justify-between items-center" style={{ backgroundColor: 'color-mix(in srgb, var(--bg-main) 80%, transparent)' }}>
+                <h3 className="text-xs font-bold uppercase tracking-widest pl-2" style={{ color: 'var(--primary)' }}>{date}</h3>
+                <span className="text-[10px] text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">{txns.length}</span>
               </div>
-              <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                {txns.map(txn => {
+
+              <div className="space-y-2">
+                {txns.map((txn, idx) => {
                   const linkedRefunds = transactions.filter(t =>
                     !t.isDeleted && (t.parentTransactionId === txn.id || (t.parentTransactionIds && t.parentTransactionIds.includes(txn.id)))
                   );
@@ -427,6 +228,7 @@ const History = () => {
                     <TransactionItem
                       key={txn.id}
                       txn={txn}
+                      index={idx}
                       linkedRefunds={linkedRefunds}
                       participantsLookup={participantsLookup}
                       onEdit={() => handleEdit(txn)}
@@ -444,79 +246,54 @@ const History = () => {
         )}
       </div>
 
-      {/* --- Load More Button (Server Side) --- */}
-      {hasMoreHistory && (
-        <div className="flex justify-center mt-6">
-          <Button
-            variant="secondary"
-            onClick={loadMoreTransactions}
-            disabled={loadingMore}
-            className="w-full sm:w-auto min-w-[200px] flex items-center justify-center gap-2"
-          >
-            {loadingMore ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />}
-            <span>{loadingMore ? 'Loading History...' : 'Load Older Transactions'}</span>
+      {/* Pagination & Load More */}
+      <div className="flex flex-col items-center gap-4 pt-4">
+        {hasMoreHistory && (
+          <Button variant="secondary" onClick={loadMoreTransactions} disabled={loadingMore} className="bg-white/5 hover:bg-white/10 text-gray-300 border-white/10 w-full max-w-xs">
+            {loadingMore ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" size={16} />}
+            Load Older Records
           </Button>
-        </div>
-      )}
+        )}
 
-      {/* --- Pagination Controls (Bottom - Simple) --- */}
-      {totalPages > 1 && (
-        <div className="flex justify-center mt-4">
-          <span className="text-xs text-gray-400">Page {currentPage} of {totalPages}</span>
-        </div>
-      )}
+        {totalPages > 1 && (
+          <div className="flex items-center gap-4 bg-white/5 rounded-full px-4 py-1 border border-white/5">
+            <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="p-1 hover:text-white text-gray-500 disabled:opacity-30"><ChevronLeft size={18} /></button>
+            <span className="text-xs font-mono text-gray-300">{currentPage} / {totalPages}</span>
+            <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="p-1 hover:text-white text-gray-500 disabled:opacity-30"><ChevronRight size={18} /></button>
+          </div>
+        )}
+      </div>
 
       {showSearch && <SearchPalette onClose={() => setShowSearch(false)} />}
 
-      <ConfirmModal
-        isOpen={!!deleteData}
-        title="Delete Transaction?"
-        message="Are you sure you want to delete this transaction?"
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleteData(null)}
-        confirmText="Delete"
-        confirmInputRequired={null}
-      />
-
-      <ConfirmModal
-        isOpen={showBulkConfirm}
-        title={`Delete ${selectedIds.size} Transactions?`}
-        message={`
-          <div class="text-left max-h-60 overflow-y-auto space-y-2 mt-2 p-2 bg-gray-50 dark:bg-gray-700 rounded text-sm">
-            ${Array.from(selectedIds).map(id => {
-          const t = allAvailableData.find(tx => tx.id === id);
-          if (!t) return '';
-          return `
-                  <div class="flex justify-between border-b border-gray-200 dark:border-gray-600 pb-1 last:border-0">
-                    <div>
-                      <div class="font-medium text-gray-800 dark:text-gray-200">${t.expenseName}</div>
-                      <div class="text-xs text-gray-500">${new Date(t.timestamp?.toDate ? t.timestamp.toDate() : t.timestamp).toLocaleDateString()}</div>
-                    </div>
-                    <div class="font-bold text-red-600">₹${(t.amount / 100).toFixed(2)}</div>
-                  </div>
-                `;
-        }).join('')}
-          </div>
-          <p class="mt-4 text-red-500 font-semibold">This action cannot be undone.</p>
-        `}
-        onConfirm={confirmBulkDelete}
-        onCancel={() => setShowBulkConfirm(false)}
-        confirmText={`Delete ${selectedIds.size} Items`}
-      />
-
-      {/* Floating Action Bar */}
+      {/* Floating Selection Bar */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-24 md:bottom-6 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-6 py-3 rounded-full shadow-xl border border-gray-200 dark:border-gray-700 flex items-center gap-6 z-[60] animate-slide-up">
-          <span className="font-semibold text-sm whitespace-nowrap">{selectedIds.size} Selected</span>
-          <div className="h-4 w-px bg-gray-300 dark:bg-gray-600"></div>
-          <button onClick={handleBulkDelete} className="flex items-center gap-2 text-red-600 hover:text-red-700 font-medium text-sm">
+        <div className="fixed bottom-24 md:bottom-8 left-1/2 transform -translate-x-1/2 glass-card px-6 py-3 flex items-center gap-6 z-50 animate-slide-up border-white/20 shadow-2xl shadow-black/30">
+          <span className="font-bold" style={{ color: 'var(--primary)' }}>{selectedIds.size} Selected</span>
+          <div className="h-4 w-px bg-white/10"></div>
+          <button onClick={handleBulkDelete} className="flex items-center gap-2 text-red-400 hover:text-red-300 font-bold text-sm transition-colors">
             <Trash2 size={16} /> Delete
           </button>
-          <button onClick={() => { setSelectedIds(new Set()); setIsSelectionMode(false); }} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-sm">
+          <button onClick={() => { setSelectedIds(new Set()); setIsSelectionMode(false); }} className="text-gray-500 hover:text-white text-xs">
             Cancel
           </button>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteData}
+        title="Delete Transaction"
+        message="Are you sure? This effectively removes it from the ledger."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteData(null)}
+      />
+      <ConfirmModal
+        isOpen={showBulkConfirm}
+        title={`Delete ${selectedIds.size} Transactions`}
+        message="This will remove all selected transactions. This action cannot be undone."
+        onConfirm={confirmBulkDelete}
+        onCancel={() => setShowBulkConfirm(false)}
+      />
     </div>
   );
 };

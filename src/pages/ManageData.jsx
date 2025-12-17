@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Trash2, Archive, RefreshCw, Layers, Edit2 } from 'lucide-react';
+import { Trash2, Archive, RefreshCw, Layers, Edit2, Repeat } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { addDoc, collection, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
 import ConfirmModal from '../components/modals/ConfirmModal';
+import RecurringManager from '../components/recurring/RecurringManager';
 
 const LEDGER_ID = 'main-ledger';
 
@@ -27,20 +28,20 @@ const SimpleManager = ({ title, data, collectionName, onDelete }) => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
-        <h3 className="text-lg font-semibold mb-4 dark:text-gray-200">Add New {title}</h3>
+      <div className="glass-card p-6">
+        <h3 className="text-lg font-semibold mb-4 text-gray-200">Add New {title}</h3>
         <form onSubmit={handleAdd} className="space-y-4">
           <Input value={newItem} onChange={e => setNewItem(e.target.value)} placeholder={`Enter ${title} name`} />
           <Button type="submit" className="w-full">Add {title}</Button>
         </form>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow border dark:border-gray-700 overflow-hidden">
-        <h3 className="p-4 border-b dark:border-gray-700 font-semibold dark:text-gray-200">Current {title}s</h3>
-        <div className="divide-y dark:divide-gray-700 max-h-96 overflow-y-auto">
+      <div className="glass-card overflow-hidden">
+        <h3 className="p-4 border-b border-white/5 font-semibold text-gray-200">Current {title}s</h3>
+        <div className="divide-y divide-white/5 max-h-96 overflow-y-auto">
           {data.map(item => (
-            <div key={item.id} className="p-4 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700">
-              <span className="dark:text-gray-300 truncate pr-4 min-w-0 flex-1" title={item.name}>{item.name}</span>
+            <div key={item.id} className="p-4 flex justify-between items-center hover:bg-white/5">
+              <span className="text-gray-300 truncate pr-4 min-w-0 flex-1" title={item.name}>{item.name}</span>
               <button onClick={() => onDelete(item.id, collectionName, item.name)} className="text-gray-400 hover:text-red-500 shrink-0">
                 <Trash2 size={18} />
               </button>
@@ -104,8 +105,8 @@ const CategoryManager = ({ data, onDelete }) => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
-        <h3 className="text-lg font-semibold mb-4 dark:text-gray-200">{isEditing ? 'Edit Category' : 'Add New Category'}</h3>
+      <div className="glass-card p-6">
+        <h3 className="text-lg font-semibold mb-4 text-gray-200">{isEditing ? 'Edit Category' : 'Add New Category'}</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input value={name} onChange={e => setName(e.target.value)} placeholder="Category Name (e.g., Food)" required />
           <Input value={budget} onChange={e => setBudget(e.target.value)} type="number" placeholder="Monthly Budget Limit (Optional)" />
@@ -116,14 +117,14 @@ const CategoryManager = ({ data, onDelete }) => {
         </form>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow border dark:border-gray-700 overflow-hidden">
-        <h3 className="p-4 border-b dark:border-gray-700 font-semibold dark:text-gray-200">Current Categories</h3>
-        <div className="divide-y dark:divide-gray-700 max-h-96 overflow-y-auto">
+      <div className="glass-card overflow-hidden">
+        <h3 className="p-4 border-b border-white/5 font-semibold text-gray-200">Current Categories</h3>
+        <div className="divide-y divide-white/5 max-h-96 overflow-y-auto">
           {data.map(item => (
-            <div key={item.id} className="p-4 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700">
+            <div key={item.id} className="p-4 flex justify-between items-center hover:bg-white/5">
               <div className="min-w-0 flex-1 pr-4">
-                <span className="dark:text-gray-300 block font-medium truncate" title={item.name}>{item.name}</span>
-                {item.budget > 0 && <span className="text-xs text-gray-500 dark:text-gray-400">Budget: ₹{item.budget}</span>}
+                <span className="text-gray-300 block font-medium truncate" title={item.name}>{item.name}</span>
+                {item.budget > 0 && <span className="text-xs text-gray-500">Budget: ₹{item.budget}</span>}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button onClick={() => startEdit(item)} className="text-gray-400 hover:text-blue-500">
@@ -225,21 +226,25 @@ const ManageData = () => {
     { id: 'places', label: 'Places' },
     { id: 'tags', label: 'Tags' },
     { id: 'modes', label: 'Modes' },
+    { id: 'recurring', label: 'Recurring', icon: <Repeat size={16} /> },
   ];
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">Manage Data</h2>
+    <div className="space-y-6 max-w-5xl mx-auto pb-24">
+      <div className="glass-card p-6 md:p-8">
+        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">Manage Data</h2>
+        <p className="text-gray-400 mt-1">Configure your categories, participants, and other data</p>
+      </div>
 
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-4 overflow-x-auto no-scrollbar">
+      <div className="glass-card p-4 md:p-6">
+        <nav className="flex space-x-2 overflow-x-auto no-scrollbar pb-2">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors flex items-center gap-2 ${activeTab === tab.id
-                ? 'border-sky-600 text-sky-600 dark:border-sky-500 dark:text-sky-500'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              className={`whitespace-nowrap py-2 px-4 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${activeTab === tab.id
+                ? 'bg-white/10 text-white'
+                : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
                 }`}
             >
               {tab.icon} {tab.label}
@@ -248,12 +253,11 @@ const ManageData = () => {
         </nav>
       </div>
 
-      <div className="pt-4">
+      <div className="pt-2">
         {activeTab === 'participants' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow border dark:border-gray-700">
-              <h3 className="text-lg font-semibold mb-4 dark:text-gray-200">Add New Participant</h3>
-              {/* CHANGE: Updated text to indicate global nature */}
+            <div className="glass-card p-6">
+              <h3 className="text-lg font-semibold mb-4 text-gray-200">Add New Participant</h3>
               <p className="text-xs text-gray-500 mb-4">Participants are available in all spaces.</p>
               <form onSubmit={handleAddParticipant} className="space-y-4">
                 <Input name="name" placeholder="Enter Name" required />
@@ -261,13 +265,13 @@ const ManageData = () => {
               </form>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow border dark:border-gray-700 overflow-hidden">
-              <h3 className="p-4 border-b dark:border-gray-700 font-semibold dark:text-gray-200">Current Participants</h3>
-              <div className="divide-y dark:divide-gray-700 max-h-96 overflow-y-auto">
+            <div className="glass-card overflow-hidden">
+              <h3 className="p-4 border-b border-white/5 font-semibold text-gray-200">Current Participants</h3>
+              <div className="divide-y divide-white/5 max-h-96 overflow-y-auto">
                 {participants.map(p => (
-                  <div key={p.uniqueId} className={`p-4 flex justify-between items-center ${p.isArchived ? 'bg-gray-50 dark:bg-gray-700/50' : ''}`}>
+                  <div key={p.uniqueId} className={`p-4 flex justify-between items-center ${p.isArchived ? 'opacity-50' : ''}`}>
                     <div>
-                      <p className={`font-medium ${p.isArchived ? 'text-gray-400' : 'dark:text-gray-200'}`}>{p.name}</p>
+                      <p className={`font-medium ${p.isArchived ? 'text-gray-500' : 'text-gray-200'}`}>{p.name}</p>
                       <p className="text-xs text-gray-500">{p.uniqueId}</p>
                     </div>
                     <button onClick={() => toggleArchive(p)} className="text-gray-400 hover:text-sky-500" title={p.isArchived ? "Unarchive" : "Archive"}>
@@ -285,6 +289,7 @@ const ManageData = () => {
         {activeTab === 'places' && <SimpleManager title="Place" data={places} collectionName="places" onDelete={handleDelete} />}
         {activeTab === 'tags' && <SimpleManager title="Tag" data={tags} collectionName="tags" onDelete={handleDelete} />}
         {activeTab === 'modes' && <SimpleManager title="Mode" data={modesOfPayment} collectionName="modesOfPayment" onDelete={handleDelete} />}
+        {activeTab === 'recurring' && <RecurringManager />}
       </div>
 
       <ConfirmModal

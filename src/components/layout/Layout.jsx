@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Menu, X, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
@@ -12,8 +12,12 @@ const Layout = () => {
   // Default: Closed on Mobile, Open on Desktop
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+  // Hide FAB on console page
+  const isConsolePage = location.pathname === '/console';
 
   return (
     // min-h-screen to allow full height, w-full to fill width. removed overflow-x-hidden to avoid clipping.
@@ -57,14 +61,17 @@ const Layout = () => {
 
       {/* Mobile Bottom Nav */}
       <MobileNav />
-      {/* Mobile FAB */}
-      <button
-        onClick={() => navigate('/add')}
-        className="md:hidden fixed bottom-24 right-5 h-14 w-14 bg-sky-600 hover:bg-sky-700 text-white rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-95 z-50 focus:outline-none focus:ring-4 focus:ring-sky-300"
-        aria-label="Add Transaction"
-      >
-        <Plus size={28} />
-      </button>
+
+      {/* Mobile FAB - Hidden on Console page */}
+      {!isConsolePage && (
+        <button
+          onClick={() => navigate('/add')}
+          className="md:hidden fixed bottom-24 right-5 h-14 w-14 bg-sky-600 hover:bg-sky-700 text-white rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-95 z-50 focus:outline-none focus:ring-4 focus:ring-sky-300"
+          aria-label="Add Transaction"
+        >
+          <Plus size={28} />
+        </button>
+      )}
     </div>
   );
 };

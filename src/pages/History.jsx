@@ -158,9 +158,9 @@ const History = () => {
     <div className="space-y-6 animate-fade-in pb-24 md:pb-0 max-w-5xl mx-auto">
 
       {/* Header with Glass Effect */}
-      <div className="flex flex-col md:flex-row justify-between items-end gap-4 pb-2 border-b border-white/5">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-2 border-b border-white/5">
         <div>
-          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-white to-gray-400">Transaction History</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-white to-gray-400">Transaction History</h2>
           <p className="text-sm text-gray-400 mt-1">{totalItems} records found</p>
         </div>
 
@@ -284,17 +284,19 @@ const History = () => {
 
       {showSearch && <SearchPalette onClose={() => setShowSearch(false)} />}
 
-      {/* Floating Selection Bar */}
+      {/* Floating Selection Bar - positioned above FAB and mobile nav */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-24 md:bottom-8 left-1/2 transform -translate-x-1/2 glass-card px-6 py-3 flex items-center gap-6 z-50 animate-slide-up border-white/20 shadow-2xl shadow-black/30">
-          <span className="font-bold" style={{ color: 'var(--primary)' }}>{selectedIds.size} Selected</span>
-          <div className="h-4 w-px bg-white/10"></div>
-          <button onClick={handleBulkDelete} className="flex items-center gap-2 text-red-400 hover:text-red-300 font-bold text-sm transition-colors">
-            <Trash2 size={16} /> Delete
-          </button>
-          <button onClick={() => { setSelectedIds(new Set()); setIsSelectionMode(false); }} className="text-gray-500 hover:text-white text-xs">
-            Cancel
-          </button>
+        <div className="fixed bottom-36 md:bottom-8 left-4 right-4 md:left-1/2 md:right-auto md:-translate-x-1/2 glass-card px-4 md:px-6 py-3 flex items-center justify-between md:justify-start gap-4 md:gap-6 z-60 animate-slide-up border-white/20 shadow-2xl shadow-black/30">
+          <span className="font-bold text-sm" style={{ color: 'var(--primary)' }}>{selectedIds.size} Selected</span>
+          <div className="h-4 w-px bg-white/10 hidden md:block"></div>
+          <div className="flex items-center gap-4">
+            <button onClick={handleBulkDelete} className="flex items-center gap-2 text-red-400 hover:text-red-300 font-bold text-sm transition-colors">
+              <Trash2 size={16} /> Delete
+            </button>
+            <button onClick={() => { setSelectedIds(new Set()); setIsSelectionMode(false); }} className="text-gray-500 hover:text-white text-xs">
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

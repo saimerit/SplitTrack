@@ -4,72 +4,89 @@ import { fileURLToPath } from 'url';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 
-// 1. ROBUST PATH RESOLUTION
-// Get the absolute path of THIS script file
+// Import Shared Parser (Ensure path is correct relative to scripts folder)
+import { parseCommandString } from '../src/utils/commandParser.js';
+
+// --- SETUP ---
 const __filename = fileURLToPath(import.meta.url);
-// Get the directory of this script (the 'scripts' folder)
 const __dirname = path.dirname(__filename);
-// Look for the JSON file one level up (in the root)
 const serviceAccountPath = path.join(__dirname, '../service-account.json');
 
-// Debugging: Print where it is looking (Optional, remove later)
-// console.log("Looking for key at:", serviceAccountPath);
-
 if (!fs.existsSync(serviceAccountPath)) {
-    console.error("❌ Error: 'service-account.json' not found at:");
-    console.error(serviceAccountPath);
-    console.error("Make sure the file is in your PROJECT ROOT folder.");
+    console.error("❌ Error: 'service-account.json' not found in root.");
     process.exit(1);
 }
 
 const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
-
-// Initialize
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
-const LEDGER_ID = 'main-ledger'; 
+
+// CONFIG: Set your Ledger/User ID here to fetch settings
+const LEDGER_ID = 'main-ledger';
+const SETTINGS_DOC_PATH = `ledgers/${LEDGER_ID}/settings/user_preferences`;
 
 const run = async () => {
-    const args = process.argv.slice(2);
-    const cmd = args[0]?.toLowerCase();
-    const rest = args.slice(1);
+    const inputString = process.argv.slice(2).join(' ');
 
-    if (!cmd) {
-        console.log("Usage: splittrack <exp|split> ...");
+    if (!inputString.trim()) {
+        console.log("Usage: splittrack amt:100 cat:Food ...");
         process.exit(1);
     }
 
     try {
-        if (cmd === 'exp' || cmd === 'add' || cmd === 'a') {
-            const amount = parseFloat(rest[0]);
-            const name = rest[1]?.replace(/_/g, ' ') || 'Unknown';
-            
-            if (isNaN(amount)) throw new Error("Invalid Amount");
-
-            const docData = {
-                amount: Math.round(amount * 100),
-                expenseName: name,
-                category: 'Terminal',
-                type: 'expense',
-                dateString: new Date().toISOString().split('T')[0],
-                timestamp: Timestamp.now(),
-                payer: 'me',
-                splits: { 'me': Math.round(amount * 100) },
-                participants: [],
-                groupId: 'personal',
-                isDeleted: false,
-                source: 'local-terminal'
-            };
-
-            await db.collection(`ledgers/${LEDGER_ID}/transactions`).add(docData);
-            console.log(`✅ [SUCCESS] Added "${name}" for ${amount}`);
-        } 
-        else {
-            console.log(`❌ Unknown command: ${cmd}`);
+        // 1. FETCH DEFAULTS FROM FIRESTORE
+        // We try to fetch the settings document to apply your preferences
+        let defaults = {};
+        try {
+            const settingsSnap = await db.doc(SETTINGS_DOC_PATH).get();
+            if (settingsSnap.exists) {
+                defaults = settingsSnap.data();
+            }
+        } catch (e) {
+            // Silently fail default fetch if doc doesn't exist
         }
+
+        // 2. PARSE COMMAND
+        const rawData = parseCommandString(inputString, defaults);
+
+        if (rawData.amount <= 0) {
+            console.log("⚠️  Invalid Amount.");
+            return;
+        }
+
+        // 3. PREPARE DATA
+        const txnData = {
+            amount: Math.round(rawData.amount * 100),
+            expenseName: rawData.expenseName,
+            category: rawData.category,
+            type: rawData.type,
+            dateString: rawData.date.toISOString().split('T')[0],
+            timestamp: Timestamp.fromDate(rawData.date),
+            payer: 'me',
+            splits: { 'me': Math.round(rawData.amount * 100) },
+            participants: [],
+            groupId: rawData.group || 'personal',
+
+            // New Fields
+            tag: rawData.tag,
+            place: rawData.place,
+            mode: rawData.mode,
+
+            isDeleted: false,
+            source: 'local-terminal'
+        };
+
+        // 4. UPLOAD
+        await db.collection(`ledgers/${LEDGER_ID}/transactions`).add(txnData);
+
+        console.log(`✅ [SUCCESS]`);
+        console.log(`   📝 ${txnData.expenseName}`);
+        console.log(`   💰 ${rawData.amount}`);
+        console.log(`   📂 ${txnData.category} | 🏷️ ${txnData.tag || '-'}`);
+        console.log(`   📍 ${txnData.place || '-'} | 💳 ${txnData.mode || '-'}`);
+
     } catch (error) {
         console.error(`❌ Error: ${error.message}`);
-        process.exit(1);
     }
 };
 

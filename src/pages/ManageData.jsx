@@ -234,7 +234,7 @@ const ManageData = () => {
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-24">
       <div className="glass-card p-6 md:p-8">
-        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-cyan-400 to-blue-400">Manage Data</h2>
+        <h2 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-cyan-400 to-blue-400">Manage Data</h2>
         <p className="text-gray-400 mt-1">Configure your categories, participants, and other data</p>
       </div>
 

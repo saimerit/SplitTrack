@@ -50,7 +50,7 @@ const Templates = () => {
       <div className="glass-card p-6 md:p-8">
         <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
           <div>
-            <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-amber-400 to-orange-400">Transaction Templates</h2>
+            <h2 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-amber-400 to-orange-400">Transaction Templates</h2>
             <p className="text-gray-400 mt-1">Quick-add frequently used transactions</p>
           </div>
           <Button onClick={() => navigate('/add')} className="gap-2">

@@ -87,7 +87,7 @@ const Goals = () => {
     <div className="space-y-6 max-w-5xl mx-auto pb-24">
       <div className="glass-card p-6 md:p-8 flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-green-400 to-emerald-400">Savings Goals</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-green-400 to-emerald-400">Savings Goals</h2>
           <p className="text-gray-400 mt-1">Track your progress towards financial goals</p>
         </div>
         <Button onClick={startAddGoal} className="gap-2">

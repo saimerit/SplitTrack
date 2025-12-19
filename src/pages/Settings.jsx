@@ -213,7 +213,7 @@ const Settings = () => {
 
       {/* Header */}
       <div className="glass-card p-8">
-        <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-indigo-400 to-cyan-400 mb-2">
+        <h1 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-indigo-400 to-cyan-400 mb-2">
           Settings & Preferences
         </h1>
         <p className="text-gray-400">Customize your workspace and manage your data.</p>

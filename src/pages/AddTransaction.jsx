@@ -12,13 +12,13 @@ const AddTransaction = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4">
-      <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-6">
+      <h2 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-200 mb-6">
         {isEditMode ? 'Edit Transaction' : 'Add New Transaction'}
       </h2>
-      <TransactionForm 
-        key={formKey} 
-        initialData={initialData} 
-        isEditMode={isEditMode} 
+      <TransactionForm
+        key={formKey}
+        initialData={initialData}
+        isEditMode={isEditMode}
       />
     </div>
   );

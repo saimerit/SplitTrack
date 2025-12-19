@@ -34,7 +34,7 @@ const TagsAnalysis = () => {
   return (
     <div className="space-y-6 pb-20 max-w-6xl mx-auto">
       <div className="glass-card p-6 md:p-8">
-        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-violet-400 to-purple-400">Tags Analysis</h2>
+        <h2 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-violet-400 to-purple-400">Tags Analysis</h2>
         <p className="text-gray-400 mt-1">Track spending by custom tags</p>
       </div>
 

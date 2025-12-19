@@ -111,7 +111,7 @@ const Sandbox = () => {
             <div className="glass-card p-6 md:p-8">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
-                        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-purple-400 to-pink-400 flex items-center gap-2">
+                        <h2 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-purple-400 to-pink-400 flex items-center gap-2">
                             <Sparkles className="text-purple-400" /> Sandbox Mode
                         </h2>
                         <p className="text-sm text-gray-400 mt-1">

@@ -1,0 +1,121 @@
+================================================================================
+                    SPLITTRACK CONSOLE - COMMAND REFERENCE
+================================================================================
+
+This document provides a complete reference for all commands available in the
+SplitTrack Console (web) and Terminal (local CLI).
+
+================================================================================
+                              QUICK START
+================================================================================
+
+LEGACY FORMAT (Simple):
+  exp <amount> <name> [category]
+  split <amount> <@who> <name>
+
+KEY:VALUE FORMAT (Advanced):
+  amt:100 expn:Lunch c:Food
+  amt:200 expn:Dinner c:Food p:Restaurant m:UPI
+
+================================================================================
+                         ATTRIBUTE REFERENCE
+================================================================================
+
+┌─────────────┬─────────────────────┬────────────────────────────────────────┐
+│ ATTRIBUTE   │ ALIASES             │ DESCRIPTION                            │
+├─────────────┼─────────────────────┼────────────────────────────────────────┤
+│ amount      │ a, amt              │ Transaction amount (required)          │
+│ expenseName │ expn, name, n, for  │ Name of the expense                    │
+│ description │ d, desc, note       │ Additional notes/description           │
+│ category    │ c, cat              │ Expense category (Food, Travel, etc.)  │
+│ place       │ p, plc              │ Location/venue of expense              │
+│ mode        │ m, mode, pay, mop   │ Payment mode (Cash, UPI, Card, etc.)   │
+│ group       │ g, grp              │ Space/group for the transaction        │
+│ date        │ dt, date            │ Date of transaction                    │
+│ tag         │ tag                 │ Custom tag for filtering               │
+│ type        │ t, type             │ Transaction type (expense/income)      │
+│ splitMethod │ sm, split           │ Split method (equal, custom)           │
+└─────────────┴─────────────────────┴────────────────────────────────────────┘
+
+================================================================================
+                              EXAMPLES
+================================================================================
+
+BASIC EXPENSE:
+  amt:100 expn:Lunch c:Food
+  → Logs ₹100 expense named "Lunch" in "Food" category
+
+WITH DESCRIPTION:
+  amt:250 expn:Dinner desc:"Team dinner at Italian restaurant" c:Food
+  → Logs ₹250 with expense name "Dinner" and a description
+
+WITH PAYMENT MODE:
+  amt:500 expn:Groceries c:Shopping m:UPI p:BigBazaar
+  → Logs ₹500 at BigBazaar, paid via UPI
+
+WITH DATE:
+  amt:150 expn:Coffee dt:yesterday c:Beverages
+  → Logs ₹150 expense dated yesterday
+
+  amt:200 expn:Snacks dt:2024-12-15 c:Food
+  → Logs ₹200 expense on specific date
+
+WITH TAG:
+  amt:80 expn:Chai c:Beverages tag:Office
+  → Logs ₹80 with "Office" tag for filtering
+
+LEGACY FORMAT:
+  exp 100 Lunch Food
+  → Quick add: ₹100, name "Lunch", category "Food"
+
+  split 200 @roommate Groceries
+  → Split ₹200 with participant "roommate"
+
+================================================================================
+                           SPECIAL COMMANDS
+================================================================================
+
+help    - Display help information in console
+clear   - Clear console output
+
+NAVIGATION:
+  ↑ (Up Arrow)   - Browse previous commands in history
+  ↓ (Down Arrow) - Browse newer commands in history
+
+================================================================================
+                          SMART DATE VALUES
+================================================================================
+
+The 'date' attribute supports smart values:
+
+  dt:today      - Current date
+  dt:yesterday  - Previous day
+  dt:2024-12-25 - Specific date (YYYY-MM-DD format)
+
+================================================================================
+                              NOTES
+================================================================================
+
+1. Values with spaces must be quoted:
+   desc:"This is a long description"
+
+2. Amount is required - command will fail without it
+
+3. Defaults from Settings:
+   - Category, Place, Mode, Tag can have defaults set in Settings
+   - If not specified in command, defaults are used
+
+4. Case insensitive:
+   amt:100 and AMT:100 work the same
+
+================================================================================
+                         LOCAL TERMINAL USAGE
+================================================================================
+
+Windows PowerShell:
+  node scripts/terminal.js amt:100 expn:Lunch c:Food
+
+After setting up alias (splittrack):
+  splittrack amt:100 expn:Lunch c:Food
+
+================================================================================

@@ -30,7 +30,7 @@ const Timeline = () => {
     <div className="max-w-3xl mx-auto space-y-8 pb-20">
       {/* Header - Full width, no margin */}
       <div className="glass-card p-6 md:p-8">
-        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-sky-400 to-blue-400">Timeline</h2>
+        <h2 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-sky-400 to-blue-400">Timeline</h2>
         <p className="text-gray-400 mt-1">A chronological view of your transactions</p>
       </div>
 

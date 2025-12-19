@@ -21,6 +21,7 @@ export const useFirestoreSync = () => {
     setGoals,
     setGroups, // New Action
     setUserSettings,
+    setDeletedTransactions, // For Trash feature
     setLoading
   } = useAppStore();
 
@@ -56,7 +57,10 @@ export const useFirestoreSync = () => {
       onSnapshot(refs.transactions, s => {
         const allTxns = s.docs.map(d => ({ id: d.id, ...d.data() }));
         const activeTxns = allTxns.filter(t => !t.isDeleted);
+        const deletedTxns = allTxns.filter(t => t.isDeleted); // For Trash feature
+
         setTransactions(activeTxns); // Store will handle group filtering
+        setDeletedTransactions(deletedTxns); // Store deleted for Trash
 
         // Integrity Checks
         setTimeout(() => {
@@ -94,6 +98,7 @@ export const useFirestoreSync = () => {
     setGoals,
     setGroups,
     setUserSettings,
+    setDeletedTransactions,
     setLoading
   ]);
 };

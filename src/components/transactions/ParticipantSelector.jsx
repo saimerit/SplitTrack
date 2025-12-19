@@ -1,12 +1,16 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Users, ChevronDown } from 'lucide-react';
 import useAppStore from '../../store/useAppStore';
 import { normalize } from '../../utils/formatters';
 
-const ParticipantSelector = ({ selectedIds, onAdd, onRemove }) => {
-  const { participants } = useAppStore();
+const ParticipantSelector = ({ selectedIds, onAdd, onRemove, onGroupAdd }) => {
+  const { participants, userSettings } = useAppStore();
   const [search, setSearch] = useState('');
   const [showResults, setShowResults] = useState(false);
+  const [showGroups, setShowGroups] = useState(false);
+
+  // Safely access saved groups from settings
+  const savedGroups = userSettings?.participantGroups || [];
 
   // Filter logic: Must match search AND not already be selected
   const results = participants.filter(p => {
@@ -20,6 +24,11 @@ const ParticipantSelector = ({ selectedIds, onAdd, onRemove }) => {
     setShowResults(false);
   };
 
+  const handleGroupSelect = (members) => {
+    if (onGroupAdd) onGroupAdd(members);
+    setShowGroups(false);
+  };
+
   // Helpers to look up names for the chips
   const getParticipantName = (uid) => {
     const p = participants.find(part => part.uniqueId === uid);
@@ -28,34 +37,65 @@ const ParticipantSelector = ({ selectedIds, onAdd, onRemove }) => {
 
   return (
     <div className="space-y-4">
-      <div className="relative group">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Participants (excluding you)
         </label>
+
+        {/* Group Selector Toggle */}
+        {savedGroups.length > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowGroups(!showGroups)}
+              className="flex items-center gap-1 text-xs font-bold text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 transition-colors"
+            >
+              <Users size={14} />
+              <span>Add Group</span>
+              <ChevronDown size={12} className={`transition-transform ${showGroups ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Group Dropdown */}
+            {showGroups && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowGroups(false)} />
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-20 overflow-hidden py-1">
+                  {savedGroups.map(group => (
+                    <button
+                      key={group.id || group.name}
+                      type="button"
+                      onClick={() => handleGroupSelect(group.members)}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      <div className="font-medium">{group.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{group.members.length} members</div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="relative group">
         <input
           type="text"
           placeholder="Search name or ID..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setShowResults(true); }}
           onFocus={() => setShowResults(true)}
-          onBlur={() => {
-            // Small delay to allow click to register if onMouseDown doesn't catch it
-            setTimeout(() => setShowResults(false), 200);
-          }}
+          onBlur={() => setTimeout(() => setShowResults(false), 200)}
           className="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
         />
-        
+
         {/* Search Dropdown */}
         {showResults && search && (
           <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
             {results.length > 0 ? results.map(p => (
-              <div 
+              <div
                 key={p.uniqueId}
-                // FIX: Use onMouseDown to prevent input blur from hiding list before click registers
-                onMouseDown={(e) => {
-                  e.preventDefault(); 
-                  handleSelect(p.uniqueId);
-                }}
+                onMouseDown={(e) => { e.preventDefault(); handleSelect(p.uniqueId); }}
                 className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer text-gray-800 dark:text-gray-200"
               >
                 <div className="font-medium">{p.name}</div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Archive, RefreshCw, Layers, Edit2, Repeat } from 'lucide-react';
+import { Trash2, Archive, RefreshCw, Layers, Edit2, Repeat, UsersRound } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { addDoc, collection, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -7,6 +7,7 @@ import Input from '../components/common/Input';
 import Button from '../components/common/Button';
 import ConfirmModal from '../components/modals/ConfirmModal';
 import RecurringManager from '../components/recurring/RecurringManager';
+import ParticipantGroupsManager from '../components/participants/ParticipantGroupsManager';
 
 const LEDGER_ID = 'main-ledger';
 
@@ -221,6 +222,7 @@ const ManageData = () => {
 
   const tabs = [
     { id: 'participants', label: 'Participants', icon: <Archive size={16} /> },
+    { id: 'participantGroups', label: 'Groups', icon: <UsersRound size={16} /> },
     { id: 'groups', label: 'Spaces', icon: <Layers size={16} /> },
     { id: 'categories', label: 'Categories' },
     { id: 'places', label: 'Places' },
@@ -232,7 +234,7 @@ const ManageData = () => {
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-24">
       <div className="glass-card p-6 md:p-8">
-        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">Manage Data</h2>
+        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-cyan-400 to-blue-400">Manage Data</h2>
         <p className="text-gray-400 mt-1">Configure your categories, participants, and other data</p>
       </div>
 
@@ -284,6 +286,7 @@ const ManageData = () => {
           </div>
         )}
 
+        {activeTab === 'participantGroups' && <ParticipantGroupsManager />}
         {activeTab === 'groups' && <SimpleManager title="Space" data={groups} collectionName="groups" onDelete={handleDelete} />}
         {activeTab === 'categories' && <CategoryManager data={categories} onDelete={handleDelete} />}
         {activeTab === 'places' && <SimpleManager title="Place" data={places} collectionName="places" onDelete={handleDelete} />}

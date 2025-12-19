@@ -516,6 +516,29 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     const handleParticipantAdd = (uid) => setSelectedParticipants([...selectedParticipants, uid]);
     const handleParticipantRemove = (uid) => setSelectedParticipants(selectedParticipants.filter(x => x !== uid));
 
+    // --- FEATURE: Add Group of Participants ---
+    const handleGroupAdd = (groupIds) => {
+        const unique = new Set(selectedParticipants);
+        let addedCount = 0;
+
+        groupIds.forEach(id => {
+            // Ensure ID exists in current context and isn't 'me'
+            if (id !== 'me' && participantsLookup.has(id)) {
+                if (!unique.has(id)) {
+                    unique.add(id);
+                    addedCount++;
+                }
+            }
+        });
+
+        if (addedCount > 0) {
+            setSelectedParticipants(Array.from(unique));
+            showToast(`Added ${addedCount} participants from group.`);
+        } else {
+            showToast("All group members are already selected or invalid.", true);
+        }
+    };
+
     const splitAllocatorParticipants = useMemo(() => [
         ...(includeMe ? [{ uniqueId: 'me', name: 'You' }] : []),
         ...(payer !== 'me' && !selectedParticipants.includes(payer) && includePayer ? [{ uniqueId: payer, name: getName(payer) }] : []),
@@ -701,7 +724,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         // 6. High Level Actions
         actions: {
             handlePayerChange, handleRecipientChange,
-            handleParticipantAdd, handleParticipantRemove,
+            handleParticipantAdd, handleParticipantRemove, handleGroupAdd,
             handleQuickAddRequest, handlePromptConfirm,
             handleTemplateSaveRequest, handleManualSwap, applySuggestion,
             handleSubmit, forceSubmit, resetForm,

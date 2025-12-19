@@ -76,6 +76,7 @@ const useAppStore = create(
       goals: [],
       recurring: [],
       groups: [],
+      deletedTransactions: [], // Soft-deleted transactions for Trash
 
       // --- State & Settings ---
       activeGroupId: 'personal',
@@ -120,6 +121,7 @@ const useAppStore = create(
       setTemplates: (data) => set({ templates: data }),
       setGoals: (data) => set({ goals: data }),
       setRecurring: (data) => set({ recurring: data }),
+      setDeletedTransactions: (data) => set({ deletedTransactions: data }),
       setUserSettings: (data) => set({ userSettings: data || {} }),
       setCurrentUser: (user) => set({ currentUser: user }),
       setLoading: (isLoading) => set({ loading: isLoading }),

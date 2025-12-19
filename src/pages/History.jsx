@@ -81,17 +81,28 @@ const History = () => {
   }, [currentTransactions]);
 
   // Action Handlers
-  const handleEdit = (txn) => navigate('/edit-transaction', { state: { transaction: txn } });
-  const handleClone = (txn) => navigate('/add-transaction', { state: { cloneData: txn } });
+  const handleEdit = (txn) => navigate('/add', { state: { ...txn, isEditMode: true } });
+  const handleClone = (txn) => {
+    // Clone: remove id so it creates new, and reset timestamp to today
+    const { id, ...cloneData } = txn;
+    navigate('/add', { state: { ...cloneData, isEditMode: false } });
+  };
   const requestDelete = (id, parentId) => setDeleteData({ id, parentId });
 
   const confirmDelete = async () => {
     if (!deleteData) return;
     const { id, parentId } = deleteData;
-    const result = await deleteTransaction(id, parentId);
-    if (result.success) showToast('Transaction deleted successfully.');
-    else showToast('Failed to delete transaction.', true);
+
+    // Close modal immediately to prevent stuck state
     setDeleteData(null);
+
+    try {
+      await deleteTransaction(id, parentId);
+      showToast('Transaction deleted successfully!');
+    } catch (err) {
+      console.error('Delete error:', err);
+      // Error toast is already shown by deleteTransaction
+    }
   };
 
   const toggleSelectionMode = () => {
@@ -109,18 +120,25 @@ const History = () => {
   const handleBulkDelete = () => setShowBulkConfirm(true);
 
   const confirmBulkDelete = async () => {
-    let successCount = 0;
-    for (let id of selectedIds) {
-      const txn = transactions.find(t => t.id === id);
-      if (txn) {
-        const res = await deleteTransaction(id, txn.parentTransactionId);
-        if (res.success) successCount++;
-      }
-    }
-    showToast(`Deleted ${successCount} transactions.`);
+    // Close modal and reset selection immediately
+    const idsToDelete = [...selectedIds];
     setShowBulkConfirm(false);
     setIsSelectionMode(false);
     setSelectedIds(new Set());
+
+    let successCount = 0;
+    for (const id of idsToDelete) {
+      const txn = transactions.find(t => t.id === id);
+      if (txn) {
+        try {
+          await deleteTransaction(id, txn.parentTransactionId);
+          successCount++;
+        } catch (err) {
+          console.error('Bulk delete error for:', id, err);
+        }
+      }
+    }
+    showToast(`Deleted ${successCount} of ${idsToDelete.length} transactions.`);
   };
 
   const loadMoreTransactions = () => {
@@ -142,7 +160,7 @@ const History = () => {
       {/* Header with Glass Effect */}
       <div className="flex flex-col md:flex-row justify-between items-end gap-4 pb-2 border-b border-white/5">
         <div>
-          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">Transaction History</h2>
+          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-white to-gray-400">Transaction History</h2>
           <p className="text-sm text-gray-400 mt-1">{totalItems} records found</p>
         </div>
 

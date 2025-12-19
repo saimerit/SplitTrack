@@ -192,7 +192,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                 {!ui.isIncome && !ui.isSettlement && (
                     <>
                         <div className="col-span-1 md:col-span-2 space-y-4 border-t pt-4 border-gray-200 dark:border-gray-700">
-                            <ParticipantSelector selectedIds={formData.selectedParticipants} onAdd={actions.handleParticipantAdd} onRemove={actions.handleParticipantRemove} />
+                            <ParticipantSelector selectedIds={formData.selectedParticipants} onAdd={actions.handleParticipantAdd} onRemove={actions.handleParticipantRemove} onGroupAdd={actions.handleGroupAdd} />
                         </div>
                         <div className="col-span-1 md:col-span-2 space-y-4">
                             <Select label="Split Method" value={formData.splitMethod} onChange={(e) => setters.setSplitMethod(e.target.value)} options={[{ value: 'equal', label: '1. Equal Split' }, { value: 'percentage', label: '2. Percentage Split' }, { value: 'dynamic', label: '3. Dynamic (Manual) Split' }]} />

@@ -4,7 +4,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../hooks/useAuth';
 import {
   Moon, Sun, Palette, Check, Trash2, Wrench,
-  LogOut, ShieldCheck, AlertTriangle, CheckCircle, Database, Download, Monitor, Upload, FileJson, FileSpreadsheet, Activity
+  LogOut, ShieldCheck, AlertTriangle, CheckCircle, Database, Download, Monitor, Upload, FileJson, FileSpreadsheet, Activity, RotateCcw, Trash, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { doc, updateDoc, setDoc, collection, writeBatch, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -75,7 +75,7 @@ const SectionHeader = ({ icon: Icon, title }) => (
 );
 
 const Settings = () => {
-  const { userSettings, categories, places, tags, modesOfPayment, setUserSettings, showToast, transactions, participants, activePaletteId, setActivePalette, customPalettes, addCustomPalette, deleteCustomPalette } = useAppStore();
+  const { userSettings, categories, places, tags, modesOfPayment, setUserSettings, showToast, transactions, participants, activePaletteId, setActivePalette, customPalettes, addCustomPalette, deleteCustomPalette, deletedTransactions } = useAppStore();
   const { user, logout } = useAuth();
   const { theme, toggleTheme, setTheme } = useTheme();
 
@@ -87,6 +87,7 @@ const Settings = () => {
   const [newColors, setNewColors] = useState({ bgMain: '#ffffff', bgSurface: '#f3f4f6', primary: '#3b82f6', textMain: '#000000' });
   const [healthReport, setHealthReport] = useState(null);
   const [csvFile, setCsvFile] = useState(null);
+  const [showTrash, setShowTrash] = useState(false);
   const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', confirmInput: '', confirmText: 'Confirm', onConfirm: () => { } });
 
   const closeModal = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
@@ -212,7 +213,7 @@ const Settings = () => {
 
       {/* Header */}
       <div className="glass-card p-8">
-        <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 mb-2">
+        <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-indigo-400 to-cyan-400 mb-2">
           Settings & Preferences
         </h1>
         <p className="text-gray-400">Customize your workspace and manage your data.</p>
@@ -399,6 +400,134 @@ const Settings = () => {
             <Activity size={32} className="mb-2 opacity-20" />
             <p className="text-xs">System ready.</p>
           </div>
+        )}
+      </div>
+
+      {/* Trash - Deleted Transactions */}
+      <div className="glass-card p-6 md:p-8">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
+              <Trash size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-100 tracking-wide">Trash</h2>
+              <p className="text-xs text-gray-500">
+                {deletedTransactions.length} deleted item{deletedTransactions.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {deletedTransactions.length > 0 && (
+              <Button
+                onClick={() => {
+                  setModalConfig({
+                    isOpen: true,
+                    title: 'Empty Trash',
+                    message: `Are you sure you want to permanently delete all ${deletedTransactions.length} item(s)? This cannot be undone.`,
+                    confirmInput: 'EMPTY',
+                    confirmText: 'Empty Trash',
+                    onConfirm: async () => {
+                      setLoading(true);
+                      try {
+                        for (const txn of deletedTransactions) {
+                          await permanentDeleteTransaction(txn.id);
+                        }
+                        showToast(`Permanently deleted ${deletedTransactions.length} transactions.`);
+                      } catch (err) {
+                        console.error(err);
+                        showToast('Failed to empty trash.', true);
+                      } finally {
+                        setLoading(false);
+                        closeModal();
+                      }
+                    }
+                  });
+                }}
+                variant="secondary"
+                size="sm"
+                className="text-xs text-red-400 border-red-500/20 hover:bg-red-500/10"
+              >
+                <Trash2 size={14} className="mr-1" /> Empty Trash
+              </Button>
+            )}
+            <button
+              onClick={() => setShowTrash(!showTrash)}
+              className="p-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+            >
+              {showTrash ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            </button>
+          </div>
+        </div>
+
+        {showTrash && (
+          <>
+            {deletedTransactions.length > 0 ? (
+              <div className="space-y-2 max-h-80 overflow-y-auto animate-slide-up">
+                {deletedTransactions.slice(0, 20).map(txn => {
+                  const date = txn.timestamp?.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp);
+                  const formattedDate = isNaN(date.getTime()) ? 'Unknown Date' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+                  return (
+                    <div key={txn.id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5 group hover:bg-white/10 transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-gray-300 truncate">{txn.expenseName || 'Unnamed Transaction'}</p>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span>{formattedDate}</span>
+                          <span>•</span>
+                          <span className={txn.amount < 0 ? 'text-emerald-400' : 'text-red-400'}>
+                            {formatCurrency(Math.abs(txn.amount))}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 ml-3 shrink-0">
+                        <button
+                          onClick={async () => {
+                            try {
+                              await restoreTransaction(txn.id);
+                              showToast('Transaction restored!');
+                            } catch (err) {
+                              console.error(err);
+                              showToast('Failed to restore transaction.', true);
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-emerald-400 transition-colors rounded hover:bg-white/5"
+                          title="Restore"
+                        >
+                          <RotateCcw size={16} />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (window.confirm('Permanently delete this transaction? This cannot be undone.')) {
+                              try {
+                                await permanentDeleteTransaction(txn.id);
+                                showToast('Transaction permanently deleted.');
+                              } catch (err) {
+                                console.error(err);
+                                showToast('Failed to delete transaction.', true);
+                              }
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-400 transition-colors rounded hover:bg-white/5"
+                          title="Delete Permanently"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {deletedTransactions.length > 20 && (
+                  <p className="text-xs text-gray-500 text-center py-2">Showing 20 of {deletedTransactions.length} deleted items</p>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+                <Trash size={32} className="mb-2 opacity-20" />
+                <p className="text-xs">Trash is empty</p>
+              </div>
+            )}
+          </>
         )}
       </div>
 

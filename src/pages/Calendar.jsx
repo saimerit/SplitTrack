@@ -106,7 +106,7 @@ const Calendar = () => {
       <div className="glass-card p-6 md:p-8 animate-fade-in">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-400">Cash Flow</h2>
+            <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-orange-400 to-red-400">Cash Flow</h2>
             <p className="text-gray-400 mt-1">Daily spending heatmap</p>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">

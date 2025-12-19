@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, PlusCircle, History, Database,
   BarChart2, Calendar, Activity, Tag, Target, FileText,
-  Settings, List, ChevronDown, Layers, Sparkles
+  Settings, List, ChevronDown, Layers, Sparkles, Terminal
 } from 'lucide-react';
 import useAppStore from '../../store/useAppStore';
 import OfflineBanner from './OfflineBanner';
@@ -106,6 +106,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           <NavLink to="/goals" onClick={onClose} className={navClass}><Target size={20} /> Goals</NavLink>
           <NavLink to="/templates" onClick={onClose} className={navClass}><FileText size={20} /> Templates</NavLink>
           <NavLink to="/sandbox" onClick={onClose} className={navClass}><Sparkles size={20} /> Sandbox</NavLink>
+          <NavLink to="/console" onClick={onClose} className={navClass}><Terminal size={20} /> Console</NavLink>
           <NavLink to="/settings" onClick={onClose} className={navClass}><Settings size={20} /> Settings</NavLink>
         </div>
       </nav>

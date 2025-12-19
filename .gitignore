@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 
 src/config/firebase.js
+
+service-account.json

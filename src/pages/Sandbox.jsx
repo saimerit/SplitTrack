@@ -111,7 +111,7 @@ const Sandbox = () => {
             <div className="glass-card p-6 md:p-8">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
-                        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 flex items-center gap-2">
+                        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-r from-purple-400 to-pink-400 flex items-center gap-2">
                             <Sparkles className="text-purple-400" /> Sandbox Mode
                         </h2>
                         <p className="text-sm text-gray-400 mt-1">
@@ -299,7 +299,7 @@ const Sandbox = () => {
                                 {sandboxTxns.map((t) => (
                                     <div key={t.id} className="p-4 flex justify-between items-center hover:bg-white/5 transition-colors animate-slide-in-right gap-3">
                                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${t.type === 'income' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                            <div className={`w-2 h-2 rounded-full shrink-0 ${t.type === 'income' ? 'bg-green-500' : 'bg-red-500'}`}></div>
                                             <div className="min-w-0">
                                                 <p className="font-bold text-gray-800 dark:text-gray-200 truncate">{t.expenseName}</p>
                                                 <p className="text-xs text-gray-500 truncate">
@@ -308,7 +308,7 @@ const Sandbox = () => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+                                        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
                                             <span className={`font-mono font-medium text-sm sm:text-base ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                                                 {t.type === 'income' ? '+' : '-'} {formatCurrency(t.amount)}
                                             </span>

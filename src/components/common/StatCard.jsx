@@ -54,7 +54,7 @@ const StatCard = ({
             style={{ animationDelay: `${delay}ms` }}
         >
             {/* Background Glow Blob */}
-            <div className={`absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br ${activeTheme} opacity-40 blur-2xl group-hover:opacity-60 transition-opacity duration-500 pointer-events-none`} />
+            <div className={`absolute -right-6 -top-6 h-24 w-24 rounded-full bg-linear-to-br ${activeTheme} opacity-40 blur-2xl group-hover:opacity-60 transition-opacity duration-500 pointer-events-none`} />
 
             <div className="relative z-10 flex flex-col h-full justify-between">
                 <div className="flex justify-between items-start mb-4">

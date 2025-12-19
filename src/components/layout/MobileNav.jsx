@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
     LayoutDashboard, History, Sparkles, Menu, X,
     Database, BarChart2, Calendar, Activity, Tag, Target, FileText, Settings, List,
-    ChevronDown, PlusCircle
+    ChevronDown, PlusCircle, Terminal
 } from 'lucide-react';
 import useAppStore from '../../store/useAppStore';
 
@@ -121,6 +121,9 @@ const MobileNav = () => {
                     </NavLink>
                     <NavLink to="/templates" onClick={closeMenu} className={menuLinkClass}>
                         <FileText size={24} className="mb-2" /> Templates
+                    </NavLink>
+                    <NavLink to="/console" onClick={closeMenu} className={menuLinkClass}>
+                        <Terminal size={24} className="mb-2" /> Console
                     </NavLink>
                     <NavLink to="/settings" onClick={closeMenu} className={menuLinkClass}>
                         <Settings size={24} className="mb-2" /> Settings

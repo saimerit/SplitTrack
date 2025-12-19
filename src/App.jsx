@@ -26,6 +26,7 @@ import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Timeline from './pages/Timeline';
 import Sandbox from './pages/Sandbox';
+import Console from './pages/Console';
 
 // --- NEW: Theme Initializer Component ---
 const ThemeInit = () => {
@@ -73,6 +74,7 @@ const App = () => {
             <Route path="/templates" element={<Templates />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/sandbox" element={<Sandbox />} />
+            <Route path="/console" element={<Console />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

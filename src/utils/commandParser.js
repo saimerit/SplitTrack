@@ -11,7 +11,11 @@ export const parseCommandString = (input, defaults = {}) => {
         modeOfPayment: defaults.defaultMode || '',
         tag: defaults.defaultTag || '',
         date: new Date(),
-        payer: 'me',
+
+        // NEW: Defaults for Payer and IncludeMe
+        payer: defaults.defaultPayer || 'me',
+        includeMe: defaults.defaultIncludeMe !== undefined ? defaults.defaultIncludeMe : true,
+
         group: 'personal',
         splitMethod: 'equal',
         participants: []
@@ -32,7 +36,11 @@ export const parseCommandString = (input, defaults = {}) => {
         'g': 'group', 'grp': 'group',
         'dt': 'date', 'date': 'date',
         'tag': 'tag',
-        'sm': 'splitMethod', 'split': 'splitMethod'
+        'sm': 'splitMethod', 'split': 'splitMethod',
+
+        // NEW: Aliases for Payer and IncludeMe
+        'by': 'payer', 'paid': 'payer', 'payer': 'payer',
+        'inc': 'includeMe', 'include': 'includeMe', 'me': 'includeMe', 'with': 'includeMe'
     };
 
     // 3. Parse "key:value" or "key:'value with spaces'"
@@ -57,8 +65,43 @@ export const parseCommandString = (input, defaults = {}) => {
                 } else if (value.toLowerCase() === 'today') {
                     config.date = new Date();
                 } else {
-                    config.date = new Date(value);
+                    // Try multiple date formats
+                    let parsedDate = null;
+
+                    // Check for dd/mm/yyyy or dd-mm-yyyy format
+                    const dmyMatch = value.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+                    if (dmyMatch) {
+                        const day = parseInt(dmyMatch[1], 10);
+                        const month = parseInt(dmyMatch[2], 10) - 1; // Month is 0-indexed
+                        let year = parseInt(dmyMatch[3], 10);
+                        if (year < 100) year += 2000; // Handle 2-digit years
+                        parsedDate = new Date(year, month, day);
+                    }
+
+                    // Check for yyyy-mm-dd (ISO format)
+                    if (!parsedDate) {
+                        const isoMatch = value.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+                        if (isoMatch) {
+                            parsedDate = new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+                        }
+                    }
+
+                    // Fallback to native parsing
+                    if (!parsedDate) {
+                        parsedDate = new Date(value);
+                    }
+
+                    // Validate the date
+                    if (isNaN(parsedDate.getTime())) {
+                        throw new Error(`Invalid date: "${value}". Use format: dd/mm/yyyy, dd-mm-yyyy, or yyyy-mm-dd`);
+                    }
+
+                    config.date = parsedDate;
                 }
+            } else if (field === 'includeMe') {
+                // Handle Boolean Logic (inc:false, inc:no, inc:0)
+                const lower = String(value).toLowerCase();
+                config.includeMe = !['false', 'no', '0', 'n'].includes(lower);
             } else {
                 config[field] = value;
             }
@@ -74,12 +117,11 @@ export const parseCommandString = (input, defaults = {}) => {
             config.type = 'expense';
             if (parts[1]) config.amount = parseFloat(parts[1]);
             if (parts[2]) config.expenseName = parts[2].replace(/_/g, ' ');
-            // Note: We don't overwrite category here to let the Default stick unless explicitly provided
         }
         else if (['split', 's'].includes(cmd)) {
             // split <amount> <@who> <name>
             if (parts[1]) config.amount = parseFloat(parts[1]);
-            if (parts[2]) config.group = parts[2]; // Will be resolved later
+            if (parts[2]) config.group = parts[2];
             if (parts[3]) config.expenseName = parts[3].replace(/_/g, ' ');
             config.splitMethod = 'equal';
         }

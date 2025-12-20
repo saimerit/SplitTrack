@@ -4,7 +4,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../hooks/useAuth';
 import {
   Moon, Sun, Palette, Check, Trash2, Wrench,
-  LogOut, ShieldCheck, AlertTriangle, CheckCircle, Database, Download, Monitor, Upload, FileJson, FileSpreadsheet, Activity, RotateCcw, Trash, ChevronDown, ChevronUp
+  LogOut, ShieldCheck, AlertTriangle, CheckCircle, Database, Download, Monitor, Upload, FileJson, FileSpreadsheet, Activity, RotateCcw, Trash, ChevronDown, ChevronUp, Terminal
 } from 'lucide-react';
 import { doc, updateDoc, setDoc, collection, writeBatch, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -81,7 +81,14 @@ const Settings = () => {
 
   const [loading, setLoading] = useState(false);
   const [newMember, setNewMember] = useState('');
-  const [defaults, setDefaults] = useState({ defaultCategory: userSettings.defaultCategory || '', defaultPlace: userSettings.defaultPlace || '', defaultTag: userSettings.defaultTag || '', defaultMode: userSettings.defaultMode || '' });
+  const [defaults, setDefaults] = useState({
+    defaultCategory: userSettings.defaultCategory || '',
+    defaultPlace: userSettings.defaultPlace || '',
+    defaultTag: userSettings.defaultTag || '',
+    defaultMode: userSettings.defaultMode || '',
+    defaultPayer: userSettings.defaultPayer || 'me',
+    defaultIncludeMe: userSettings.defaultIncludeMe !== undefined ? userSettings.defaultIncludeMe : true
+  });
   const [showCreator, setShowCreator] = useState(false);
   const [newPaletteName, setNewPaletteName] = useState('');
   const [newColors, setNewColors] = useState({ bgMain: '#ffffff', bgSurface: '#f3f4f6', primary: '#3b82f6', textMain: '#000000' });
@@ -287,16 +294,66 @@ const Settings = () => {
         </div>
       </div>
 
-      {/* Defaults Section */}
+      {/* Transaction Form Defaults Section */}
       <div className="glass-card p-6 md:p-8">
-        <SectionHeader icon={Monitor} title="Smart Defaults" />
+        <SectionHeader icon={Monitor} title="Transaction Form Defaults" />
+        <p className="text-xs text-gray-500 -mt-4 mb-6">Pre-fill these values when adding transactions via the form.</p>
         <form onSubmit={handleSaveDefaults} className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Select label="Default Category" value={defaults.defaultCategory} onChange={e => setDefaults({ ...defaults, defaultCategory: e.target.value })} options={mapOpts(categories)} />
           <Select label="Default Place" value={defaults.defaultPlace} onChange={e => setDefaults({ ...defaults, defaultPlace: e.target.value })} options={mapOpts(places)} />
           <Select label="Default Tag" value={defaults.defaultTag} onChange={e => setDefaults({ ...defaults, defaultTag: e.target.value })} options={mapOpts(tags)} />
-          <Select label="Default Mode" value={defaults.defaultMode} onChange={e => setDefaults({ ...defaults, defaultMode: e.target.value })} options={mapOpts(modesOfPayment)} />
+          <Select label="Default Payment Mode" value={defaults.defaultMode} onChange={e => setDefaults({ ...defaults, defaultMode: e.target.value })} options={mapOpts(modesOfPayment)} />
           <div className="md:col-span-2 pt-2">
-            <Button type="submit" className="w-full bg-white/10 hover:bg-white/20 text-white border-none">Save Defaults</Button>
+            <Button type="submit" className="w-full bg-white/10 hover:bg-white/20 text-white border-none">Save Form Defaults</Button>
+          </div>
+        </form>
+      </div>
+
+      {/* Command Line Defaults Section */}
+      <div className="glass-card p-6 md:p-8">
+        <SectionHeader icon={Terminal} title="Console Command Defaults" />
+        <p className="text-xs text-gray-500 -mt-4 mb-6">These defaults are used when attributes are not specified in console commands.</p>
+        <form onSubmit={handleSaveDefaults} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Select label="Default Category" value={defaults.defaultCategory} onChange={e => setDefaults({ ...defaults, defaultCategory: e.target.value })} options={mapOpts(categories)} />
+          <Select label="Default Place" value={defaults.defaultPlace} onChange={e => setDefaults({ ...defaults, defaultPlace: e.target.value })} options={mapOpts(places)} />
+          <Select label="Default Tag" value={defaults.defaultTag} onChange={e => setDefaults({ ...defaults, defaultTag: e.target.value })} options={mapOpts(tags)} />
+          <Select label="Default Payment Mode" value={defaults.defaultMode} onChange={e => setDefaults({ ...defaults, defaultMode: e.target.value })} options={mapOpts(modesOfPayment)} />
+          {/* Default Payer Selector */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Default Payer</label>
+            <select
+              value={defaults.defaultPayer}
+              onChange={e => setDefaults({ ...defaults, defaultPayer: e.target.value })}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-indigo-500 transition-colors"
+            >
+              <option value="me">Me (You)</option>
+              {participants.map(p => (
+                <option key={p.uniqueId} value={p.uniqueId}>{p.name}</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-gray-500">Override with 'by:Name' in commands</p>
+          </div>
+
+          {/* Default Include Me Toggle */}
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Splitting Preference</label>
+            <div
+              onClick={() => setDefaults({ ...defaults, defaultIncludeMe: !defaults.defaultIncludeMe })}
+              className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${defaults.defaultIncludeMe
+                ? 'bg-indigo-500/10 border-indigo-500/50 text-indigo-300'
+                : 'bg-gray-900 border-gray-700 text-gray-400'
+                }`}
+            >
+              <span className="font-medium text-sm">Always Include Me in Splits</span>
+              <div className={`w-10 h-5 rounded-full relative transition-colors ${defaults.defaultIncludeMe ? 'bg-indigo-500' : 'bg-gray-700'}`}>
+                <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${defaults.defaultIncludeMe ? 'left-6' : 'left-1'}`}></div>
+              </div>
+            </div>
+            <p className="text-[10px] text-gray-500">Override with 'inc:yes' or 'inc:no' in commands</p>
+          </div>
+
+          <div className="md:col-span-2 pt-2">
+            <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white border-none">Save CLI Preferences</Button>
           </div>
         </form>
       </div>

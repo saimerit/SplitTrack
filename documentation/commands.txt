@@ -34,7 +34,9 @@ KEY:VALUE FORMAT (Advanced):
 │ date        │ dt, date            │ Date of transaction                    │
 │ tag         │ tag                 │ Custom tag for filtering               │
 │ type        │ t, type             │ Transaction type (expense/income)      │
-│ splitMethod │ sm, split           │ Split method (equal, custom)           │
+│ splitMethod │ sm, split           │ Split method (equal, dynamic, %)       │
+│ payer       │ by, paid, payer     │ Who paid (by:John or by:me)            │
+│ includeMe   │ inc, include, me    │ Include self in split (inc:yes/no)     │
 └─────────────┴─────────────────────┴────────────────────────────────────────┘
 
 ================================================================================
@@ -64,6 +66,28 @@ WITH TAG:
   amt:80 expn:Chai c:Beverages tag:Office
   → Logs ₹80 with "Office" tag for filtering
 
+SPECIFYING PAYER:
+  amt:500 expn:Dinner c:Food by:John
+  → John paid for this expense (not me)
+
+  amt:300 expn:Movie g:friends by:me
+  → I paid for this split expense with friends
+
+EXCLUDE SELF FROM SPLIT:
+  amt:300 expn:Supplies g:roommates inc:no
+  → Split among roommates, excludes me from the split
+
+  amt:600 expn:Uber g:work inc:false
+  → I paid but won't be part of the split calculation
+
+DYNAMIC SPLIT (Interactive):
+  amt:500 expn:Party g:friends split:dynamic
+  → Opens interactive mode - enter each person's share in ₹
+
+PERCENTAGE SPLIT (Interactive):
+  amt:1000 expn:Trip g:friends split:percentage
+  → Opens interactive mode - enter each person's % share
+
 LEGACY FORMAT:
   exp 100 Lunch Food
   → Quick add: ₹100, name "Lunch", category "Food"
@@ -86,11 +110,14 @@ NAVIGATION:
                           SMART DATE VALUES
 ================================================================================
 
-The 'date' attribute supports smart values:
+The 'date' attribute supports multiple formats:
 
-  dt:today      - Current date
-  dt:yesterday  - Previous day
-  dt:2024-12-25 - Specific date (YYYY-MM-DD format)
+  dt:today       - Current date
+  dt:yesterday   - Previous day
+  dt:19/12/2024  - DD/MM/YYYY format (recommended)
+  dt:19-12-2024  - DD-MM-YYYY format
+  dt:2024-12-19  - YYYY-MM-DD (ISO format)
+  dt:19/12/24    - DD/MM/YY (2-digit year)
 
 ================================================================================
                               NOTES
@@ -102,11 +129,17 @@ The 'date' attribute supports smart values:
 2. Amount is required - command will fail without it
 
 3. Defaults from Settings:
-   - Category, Place, Mode, Tag can have defaults set in Settings
+   - Category, Place, Mode, Tag, Payer, IncludeMe can have defaults
    - If not specified in command, defaults are used
+   - Configure in Settings → Command Line Defaults
 
 4. Case insensitive:
    amt:100 and AMT:100 work the same
+
+5. Include Me Logic:
+   - inc:yes, inc:true, inc:1 → Include self in split
+   - inc:no, inc:false, inc:0 → Exclude self from split
+   - Default is set in Settings (usually true)
 
 ================================================================================
                          LOCAL TERMINAL USAGE
@@ -119,3 +152,4 @@ After setting up alias (splittrack):
   splittrack amt:100 expn:Lunch c:Food
 
 ================================================================================
+

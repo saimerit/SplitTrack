@@ -96,20 +96,21 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
       shareText = `${payerName} repaid you`;
       shareColor = 'text-green-600 font-medium';
     }
-  } else if (myShare > 0) {
-    if (txn.payer === 'me') {
-      const amountIPaidForOthers = amount - myShare;
-      if (amountIPaidForOthers > 1) {
-        shareText = `You lent ${formatCurrency(amountIPaidForOthers)}`;
-        shareColor = 'text-green-600 font-medium';
-      } else {
-        shareText = `You paid ${formatCurrency(myShare)}`;
-        shareColor = 'text-gray-500 dark:text-gray-400';
-      }
-    } else {
-      shareText = `You owe ${formatCurrency(myShare)}`;
-      shareColor = 'text-red-600 font-medium';
+  } else if (txn.payer === 'me') {
+    // I paid - check if I have a share or lent the full amount
+    const myConsumption = myShare; // What I consumed (0 if not in splits)
+    const amountIPaidForOthers = amount - myConsumption;
+    if (amountIPaidForOthers > 1) {
+      shareText = `You lent ${formatCurrency(amountIPaidForOthers)}`;
+      shareColor = 'text-green-600 font-medium';
+    } else if (myConsumption > 0) {
+      shareText = `You paid ${formatCurrency(myConsumption)}`;
+      shareColor = 'text-gray-500 dark:text-gray-400';
     }
+  } else if (myShare > 0) {
+    // Someone else paid and I have a share
+    shareText = `You owe ${formatCurrency(myShare)}`;
+    shareColor = 'text-red-600 font-medium';
   }
 
   return (

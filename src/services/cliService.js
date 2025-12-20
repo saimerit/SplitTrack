@@ -14,7 +14,6 @@ const resolveGroup = (inputName, groups) => {
 };
 
 const resolveCategory = (input, categories) => {
-    // Input is already defaulted by parser, but we check if it matches a known category ID/Name
     if (!input) return 'General';
     const match = categories.find(c => normalize(c.name) === normalize(input));
     return match ? match.name : input;
@@ -35,33 +34,64 @@ const resolveParticipants = (groupInput, allGroups, participants) => {
     return foundPerson ? [foundPerson.uniqueId] : [];
 };
 
+// NEW Helper: Resolve payer from input name
+const resolvePayer = (inputName, participants) => {
+    if (!inputName || inputName === 'me') return 'me';
+    const clean = inputName.replace('@', '');
+    const found = participants.find(p =>
+        normalize(p.name) === normalize(clean) || normalize(p.uniqueId) === normalize(clean)
+    );
+    return found ? found.uniqueId : 'me';
+};
+
 // --- MAIN EXECUTOR ---
-export const executeCommand = async (commandString) => {
+export const executeCommand = async (commandString, interactiveData = null) => {
     const state = useAppStore.getState();
     const { currentUser, categories, participants, userSettings, groups } = state;
 
     if (!currentUser) return { success: false, message: "⛔ Unauthorized: Please log in." };
 
     try {
-        // 1. PARSE with DEFAULTS from Store
+        // --- CASE 1: RESUMING INTERACTIVE SESSION ---
+        if (interactiveData) {
+            const id = await addTransaction(interactiveData);
+            return {
+                success: true,
+                message: `✅ Logged: ${interactiveData.expenseName} (₹${interactiveData.amount / 100})`,
+                data: { id }
+            };
+        }
+
+        // --- CASE 2: NORMAL PARSING ---
         const rawData = parseCommandString(commandString, userSettings || {});
 
         if (rawData.amount <= 0) throw new Error("Amount must be greater than 0");
 
-        // 2. Resolve IDs and Data
+        // Resolve Entities
         const participantGroups = userSettings?.participantGroups || [];
         const allGroups = [...(groups || []), ...participantGroups];
 
         const finalCategory = resolveCategory(rawData.category, categories);
         const finalGroupId = resolveGroup(rawData.group, groups);
+        const finalPayer = resolvePayer(rawData.payer, participants);
 
-        // Resolve Participants (for splits)
-        let finalParticipants = [];
+        // Resolve Group Members
+        let baseParticipants = [];
         if (rawData.group !== 'personal') {
-            finalParticipants = resolveParticipants(rawData.group, allGroups, participants);
+            baseParticipants = resolveParticipants(rawData.group, allGroups, participants);
         }
 
-        // 3. Construct Transaction
+        // --- CALCULATE SPLIT PARTICIPANTS ---
+        let splitIds = [...baseParticipants];
+
+        // Add 'me' if includeMe is true
+        if (rawData.includeMe) splitIds.push('me');
+
+        // Ensure unique and remove 'me' if includeMe is false
+        splitIds = [...new Set(splitIds)];
+        if (!rawData.includeMe) splitIds = splitIds.filter(id => id !== 'me');
+
+        // Construct Transaction Data
         const txnData = {
             amount: Math.round(rawData.amount * 100), // To Paise
             expenseName: rawData.expenseName,
@@ -71,40 +101,53 @@ export const executeCommand = async (commandString) => {
             dateString: rawData.date.toISOString().split('T')[0],
             timestamp: Timestamp.fromDate(rawData.date),
 
-            payer: rawData.payer,
-            splits: { 'me': Math.round(rawData.amount * 100) },
+            payer: finalPayer,
+            splits: {},
 
-            participants: finalParticipants,
+            participants: baseParticipants,
             groupId: finalGroupId,
-
-            // New Fields from Defaults
             tag: rawData.tag,
             place: rawData.place,
             modeOfPayment: rawData.mode,
-
             isDeleted: false,
             source: 'web-console',
             createdBy: currentUser.uid
         };
 
-        // 4. Handle Splits Logic
-        if (finalParticipants.length > 0 && rawData.splitMethod === 'equal') {
-            const totalPeople = finalParticipants.length + 1;
-            const share = Math.floor(txnData.amount / totalPeople);
-            txnData.splits = { 'me': share };
-            finalParticipants.forEach(uid => txnData.splits[uid] = share);
-
-            const remainder = txnData.amount - (share * totalPeople);
-            if (remainder > 0) txnData.splits['me'] += remainder;
-
-            txnData.splitMethod = 'equal';
+        // --- INTERACTIVE SPLIT TRIGGER ---
+        if (splitIds.length > 0 && (rawData.splitMethod === 'dynamic' || rawData.splitMethod === 'percentage')) {
+            return {
+                success: true,
+                requiresInteraction: true,
+                method: rawData.splitMethod,
+                draftTxn: txnData,
+                peopleToAsk: splitIds
+            };
         }
 
-        // 5. Commit
+        // --- EQUAL SPLIT LOGIC ---
+        if (splitIds.length > 0) {
+            const share = Math.floor(txnData.amount / splitIds.length);
+
+            splitIds.forEach(uid => txnData.splits[uid] = share);
+
+            // Give remainder to Payer or first person
+            const remainder = txnData.amount - (share * splitIds.length);
+            if (remainder > 0) {
+                const recipient = splitIds.includes(finalPayer) ? finalPayer : splitIds[0];
+                if (recipient) txnData.splits[recipient] = (txnData.splits[recipient] || 0) + remainder;
+            }
+            txnData.splitMethod = 'equal';
+        } else {
+            // Fallback: Expense assigned fully to Payer
+            txnData.splits = { [finalPayer]: txnData.amount };
+        }
+
+        // Commit
         const id = await addTransaction(txnData);
         return {
             success: true,
-            message: `Logged: ${txnData.expenseName} (₹${rawData.amount}) [${txnData.category}]`,
+            message: `✅ Logged: ${txnData.expenseName} (₹${rawData.amount}) [${txnData.category}]${finalPayer !== 'me' ? ` [Paid by: ${finalPayer}]` : ''}`,
             data: { id }
         };
 
@@ -112,3 +155,4 @@ export const executeCommand = async (commandString) => {
         return { success: false, message: error.message };
     }
 };
+

@@ -1,8 +1,8 @@
 // src/services/cliService.js
 import useAppStore from '../store/useAppStore';
-import { addTransaction } from './transactionService';
+import { addTransaction, deleteTransaction } from './transactionService';
 import { Timestamp } from 'firebase/firestore';
-import { normalize } from '../utils/formatters';
+import { normalize, formatCurrency } from '../utils/formatters';
 import { parseCommandString } from '../utils/commandParser';
 
 // --- HELPERS ---
@@ -34,7 +34,6 @@ const resolveParticipants = (groupInput, allGroups, participants) => {
     return foundPerson ? [foundPerson.uniqueId] : [];
 };
 
-// NEW Helper: Resolve payer from input name
 const resolvePayer = (inputName, participants) => {
     if (!inputName || inputName === 'me') return 'me';
     const clean = inputName.replace('@', '');
@@ -44,25 +43,113 @@ const resolvePayer = (inputName, participants) => {
     return found ? found.uniqueId : 'me';
 };
 
+// --- COMMAND HANDLERS ---
+
+// 1. HISTORY (ls)
+const handleHistory = (args, transactions) => {
+    const limit = parseInt(args[0]) || 5;
+
+    const sorted = [...transactions].sort((a, b) => {
+        const tA = a.timestamp?.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp).getTime();
+        const tB = b.timestamp?.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp).getTime();
+        return tB - tA;
+    });
+
+    const recent = sorted.slice(0, limit);
+    if (recent.length === 0) return { success: true, message: "No transactions found." };
+
+    const lines = recent.map(t => {
+        const amt = formatCurrency(t.amount);
+        return `• ${t.dateString}: ${amt} - ${t.expenseName} [${t.category}]`;
+    });
+
+    return {
+        success: true,
+        message: `Last ${limit} Transactions:\n${lines.join('\n')}`
+    };
+};
+
+// 2. UNDO (undo)
+const handleUndo = async (currentUser, transactions) => {
+    const myTxns = transactions.filter(t => t.createdBy === currentUser?.uid && !t.isDeleted);
+    if (myTxns.length === 0) return { success: false, message: "Nothing to undo." };
+
+    myTxns.sort((a, b) => {
+        const tA = a.timestamp?.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp).getTime();
+        const tB = b.timestamp?.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp).getTime();
+        return tB - tA;
+    });
+
+    const lastTxn = myTxns[0];
+
+    try {
+        await deleteTransaction(lastTxn.id);
+        return {
+            success: true,
+            message: `Undo: Deleted '${lastTxn.expenseName}' (${formatCurrency(lastTxn.amount)})`
+        };
+    } catch (error) {
+        return { success: false, message: "Undo failed: " + error.message };
+    }
+};
+
+// 3. STATS (stats)
+const handleStats = (transactions) => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const thisMonthTxns = transactions.filter(t => {
+        const d = new Date(t.dateString);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear && !t.isDeleted;
+    });
+
+    const totalSpent = thisMonthTxns.reduce((sum, t) => sum + t.amount, 0);
+    const count = thisMonthTxns.length;
+
+    return {
+        success: true,
+        message: `MONTHLY SNAPSHOT (${now.toLocaleString('default', { month: 'long' })})\n` +
+            `   Total Spent: ${formatCurrency(totalSpent)}\n` +
+            `   Transactions: ${count}`
+    };
+};
+
 // --- MAIN EXECUTOR ---
 export const executeCommand = async (commandString, interactiveData = null) => {
     const state = useAppStore.getState();
-    const { currentUser, categories, participants, userSettings, groups } = state;
+    const { currentUser, categories, participants, userSettings, groups, transactions } = state;
 
-    if (!currentUser) return { success: false, message: "⛔ Unauthorized: Please log in." };
+    if (!currentUser) return { success: false, message: "Unauthorized: Please log in." };
+
+    // 1. Resume Interactive Session
+    if (interactiveData) {
+        const id = await addTransaction(interactiveData);
+        return {
+            success: true,
+            message: `Logged: ${interactiveData.expenseName} (${formatCurrency(interactiveData.amount)})`,
+            data: { id }
+        };
+    }
 
     try {
-        // --- CASE 1: RESUMING INTERACTIVE SESSION ---
-        if (interactiveData) {
-            const id = await addTransaction(interactiveData);
-            return {
-                success: true,
-                message: `✅ Logged: ${interactiveData.expenseName} (₹${interactiveData.amount / 100})`,
-                data: { id }
-            };
+        const parts = commandString.trim().split(/\s+/);
+        const cmd = parts[0].toLowerCase();
+
+        // 2. Intercept Special Commands
+        if (['ls', 'list', 'history'].includes(cmd)) {
+            return handleHistory(parts.slice(1), transactions);
         }
 
-        // --- CASE 2: NORMAL PARSING ---
+        if (cmd === 'undo') {
+            return await handleUndo(currentUser, transactions);
+        }
+
+        if (['stats', 'status', 'report'].includes(cmd)) {
+            return handleStats(transactions);
+        }
+
+        // 3. Standard Transaction Parsing
         const rawData = parseCommandString(commandString, userSettings || {});
 
         if (rawData.amount <= 0) throw new Error("Amount must be greater than 0");
@@ -81,29 +168,23 @@ export const executeCommand = async (commandString, interactiveData = null) => {
             baseParticipants = resolveParticipants(rawData.group, allGroups, participants);
         }
 
-        // --- CALCULATE SPLIT PARTICIPANTS ---
+        // Calculate Split Participants
         let splitIds = [...baseParticipants];
-
-        // Add 'me' if includeMe is true
         if (rawData.includeMe) splitIds.push('me');
-
-        // Ensure unique and remove 'me' if includeMe is false
         splitIds = [...new Set(splitIds)];
         if (!rawData.includeMe) splitIds = splitIds.filter(id => id !== 'me');
 
         // Construct Transaction Data
         const txnData = {
-            amount: Math.round(rawData.amount * 100), // To Paise
+            amount: Math.round(rawData.amount * 100),
             expenseName: rawData.expenseName,
             description: rawData.description || '',
             category: finalCategory,
             type: rawData.type,
             dateString: rawData.date.toISOString().split('T')[0],
             timestamp: Timestamp.fromDate(rawData.date),
-
             payer: finalPayer,
             splits: {},
-
             participants: baseParticipants,
             groupId: finalGroupId,
             tag: rawData.tag,
@@ -114,7 +195,7 @@ export const executeCommand = async (commandString, interactiveData = null) => {
             createdBy: currentUser.uid
         };
 
-        // --- INTERACTIVE SPLIT TRIGGER ---
+        // Interactive Split Trigger
         if (splitIds.length > 0 && (rawData.splitMethod === 'dynamic' || rawData.splitMethod === 'percentage')) {
             return {
                 success: true,
@@ -125,13 +206,11 @@ export const executeCommand = async (commandString, interactiveData = null) => {
             };
         }
 
-        // --- EQUAL SPLIT LOGIC ---
+        // Equal Split Logic
         if (splitIds.length > 0) {
             const share = Math.floor(txnData.amount / splitIds.length);
-
             splitIds.forEach(uid => txnData.splits[uid] = share);
 
-            // Give remainder to Payer or first person
             const remainder = txnData.amount - (share * splitIds.length);
             if (remainder > 0) {
                 const recipient = splitIds.includes(finalPayer) ? finalPayer : splitIds[0];
@@ -139,7 +218,6 @@ export const executeCommand = async (commandString, interactiveData = null) => {
             }
             txnData.splitMethod = 'equal';
         } else {
-            // Fallback: Expense assigned fully to Payer
             txnData.splits = { [finalPayer]: txnData.amount };
         }
 
@@ -147,7 +225,7 @@ export const executeCommand = async (commandString, interactiveData = null) => {
         const id = await addTransaction(txnData);
         return {
             success: true,
-            message: `✅ Logged: ${txnData.expenseName} (₹${rawData.amount}) [${txnData.category}]${finalPayer !== 'me' ? ` [Paid by: ${finalPayer}]` : ''}`,
+            message: `Logged: ${txnData.expenseName} (${formatCurrency(txnData.amount)}) [${txnData.category}]${finalPayer !== 'me' ? ` [Paid by: ${finalPayer}]` : ''}`,
             data: { id }
         };
 
@@ -155,4 +233,3 @@ export const executeCommand = async (commandString, interactiveData = null) => {
         return { success: false, message: error.message };
     }
 };
-

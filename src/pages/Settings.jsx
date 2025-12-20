@@ -95,6 +95,7 @@ const Settings = () => {
   const [healthReport, setHealthReport] = useState(null);
   const [csvFile, setCsvFile] = useState(null);
   const [showTrash, setShowTrash] = useState(false);
+  const [selectedTrashIds, setSelectedTrashIds] = useState([]);
   const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', confirmInput: '', confirmText: 'Confirm', onConfirm: () => { } });
 
   const closeModal = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
@@ -519,6 +520,79 @@ const Settings = () => {
 
         {showTrash && (
           <>
+            {/* Bulk Actions Bar */}
+            {deletedTransactions.length > 0 && (
+              <div className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg mb-3 border border-gray-700">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedTrashIds.length === deletedTransactions.slice(0, 20).length && deletedTransactions.length > 0}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedTrashIds(deletedTransactions.slice(0, 20).map(t => t.id));
+                      } else {
+                        setSelectedTrashIds([]);
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <span className="text-sm text-gray-400">
+                    {selectedTrashIds.length > 0 ? `${selectedTrashIds.length} selected` : 'Select all'}
+                  </span>
+                </div>
+                {selectedTrashIds.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={async () => {
+                        try {
+                          for (const id of selectedTrashIds) {
+                            await restoreTransaction(id);
+                          }
+                          showToast(`Restored ${selectedTrashIds.length} transactions.`);
+                          setSelectedTrashIds([]);
+                        } catch (err) {
+                          console.error(err);
+                          showToast('Failed to restore some transactions.', true);
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors flex items-center gap-1"
+                    >
+                      <RotateCcw size={14} /> Restore
+                    </button>
+                    <button
+                      onClick={() => {
+                        setModalConfig({
+                          isOpen: true,
+                          title: 'Delete Selected',
+                          message: `Permanently delete ${selectedTrashIds.length} selected item(s)? This cannot be undone.`,
+                          confirmInput: 'DELETE',
+                          confirmText: 'Delete Forever',
+                          onConfirm: async () => {
+                            setLoading(true);
+                            try {
+                              for (const id of selectedTrashIds) {
+                                await permanentDeleteTransaction(id);
+                              }
+                              showToast(`Permanently deleted ${selectedTrashIds.length} transactions.`);
+                              setSelectedTrashIds([]);
+                            } catch (err) {
+                              console.error(err);
+                              showToast('Failed to delete some transactions.', true);
+                            } finally {
+                              setLoading(false);
+                              closeModal();
+                            }
+                          }
+                        });
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium text-red-400 bg-red-500/10 rounded-lg border border-red-500/20 hover:bg-red-500/20 transition-colors flex items-center gap-1"
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             {deletedTransactions.length > 0 ? (
               <div className="space-y-2 max-h-80 overflow-y-auto animate-slide-up">
                 {deletedTransactions.slice(0, 20).map(txn => {
@@ -526,15 +600,29 @@ const Settings = () => {
                   const formattedDate = isNaN(date.getTime()) ? 'Unknown Date' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
                   return (
-                    <div key={txn.id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5 group hover:bg-white/10 transition-colors">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-gray-300 truncate">{txn.expenseName || 'Unnamed Transaction'}</p>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <span>{formattedDate}</span>
-                          <span>•</span>
-                          <span className={txn.amount < 0 ? 'text-emerald-400' : 'text-red-400'}>
-                            {formatCurrency(Math.abs(txn.amount))}
-                          </span>
+                    <div key={txn.id} className={`flex items-center justify-between p-3 bg-white/5 rounded-lg border group hover:bg-white/10 transition-colors ${selectedTrashIds.includes(txn.id) ? 'border-indigo-500/50 bg-indigo-500/5' : 'border-white/5'}`}>
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={selectedTrashIds.includes(txn.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTrashIds([...selectedTrashIds, txn.id]);
+                            } else {
+                              setSelectedTrashIds(selectedTrashIds.filter(id => id !== txn.id));
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-gray-300 truncate">{txn.expenseName || 'Unnamed Transaction'}</p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>{formattedDate}</span>
+                            <span>•</span>
+                            <span className={txn.amount < 0 ? 'text-emerald-400' : 'text-red-400'}>
+                              {formatCurrency(Math.abs(txn.amount))}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 ml-3 shrink-0">

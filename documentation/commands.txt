@@ -99,12 +99,22 @@ LEGACY FORMAT:
                            SPECIAL COMMANDS
 ================================================================================
 
-help    - Display help information in console
-clear   - Clear console output
+MANAGEMENT:
+  ls [n]   - Show last n transactions (default: 5)
+  undo     - Delete your most recent transaction
+  stats    - Show this month's spending summary
+
+UTILITY:
+  help     - Display help information in console
+  clear    - Clear console output
 
 NAVIGATION:
   ↑ (Up Arrow)   - Browse previous commands in history
   ↓ (Down Arrow) - Browse newer commands in history
+
+ALIASES:
+  ls, list, history  - All show transaction history
+  stats, status, report - All show monthly stats
 
 ================================================================================
                           SMART DATE VALUES

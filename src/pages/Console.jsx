@@ -8,31 +8,28 @@ const HELP_TEXT = `
 ╔══════════════════════════════════════════════════════╗
 ║          SplitTrack Console - Commands               ║
 ╠══════════════════════════════════════════════════════╣
-║  QUICK ADD (Legacy):                                 ║
-║    exp <amount> <name> [category]                    ║
-║    split <amount> <@who> <name>                      ║
-║                                                      ║
-║  KEY:VALUE SYNTAX:                                   ║
+║  TRANSACTIONS:                                       ║
 ║    amt:100 expn:Lunch c:Food                         ║
-║    amt:50 expn:Coffee cat:Beverages dt:yesterday     ║
+║    amt:500 split:dynamic g:Trip                      ║
+║                                                      ║
+║  MANAGEMENT:                                         ║
+║    ls [n]   - Show last n transactions               ║
+║    undo     - Delete your last transaction           ║
+║    stats    - Show this month's spending             ║
+║    clear    - Clear screen                           ║
+║    help     - Show this help                         ║
 ║                                                      ║
 ║  ALIASES:                                            ║
-║    a/amt        = amount                             ║
+║    amt/a        = amount                             ║
 ║    expn/name/n  = expense name                       ║
-║    d/desc/note  = description                        ║
 ║    c/cat        = category                           ║
 ║    p/plc        = place                              ║
 ║    m/mode/pay   = payment mode                       ║
 ║    g/grp        = group                              ║
-║    dt/date      = date                               ║
-║    tag          = tag                                ║
-║    by/paid      = payer (by:John / by:me)            ║
-║    inc/include  = include me (inc:yes / inc:no)      ║
-║    split/sm     = split method (equal/dynamic/%)    ║
-║                                                      ║
-║  SPECIAL:                                            ║
-║    help   - Show this help                           ║
-║    clear  - Clear console                            ║
+║    dt/date      = date (dd/mm/yyyy)                  ║
+║    by/paid      = payer (by:John or by:me)           ║
+║    inc          = include me (inc:yes / inc:no)      ║
+║    sm/split     = split method (equal/dynamic/%)     ║
 ║                                                      ║
 ║  NAVIGATION:                                         ║
 ║    ↑/↓     - Browse command history                  ║

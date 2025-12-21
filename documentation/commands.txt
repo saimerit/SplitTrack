@@ -103,6 +103,8 @@ MANAGEMENT:
   ls [n]   - Show last n transactions (default: 5)
   undo     - Delete your most recent transaction
   stats    - Show this month's spending summary
+  quick    - List available templates
+  quick <n> - Add transaction from template #n (e.g., 'quick 1')
 
 UTILITY:
   help     - Display help information in console
@@ -115,6 +117,7 @@ NAVIGATION:
 ALIASES:
   ls, list, history  - All show transaction history
   stats, status, report - All show monthly stats
+  quick, q, template - All access quick add from templates
 
 ================================================================================
                           SMART DATE VALUES

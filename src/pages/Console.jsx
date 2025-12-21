@@ -16,6 +16,7 @@ const HELP_TEXT = `
 ║    ls [n]   - Show last n transactions               ║
 ║    undo     - Delete your last transaction           ║
 ║    stats    - Show this month's spending             ║
+║    quick    - List templates / quick <n> to add      ║
 ║    clear    - Clear screen                           ║
 ║    help     - Show this help                         ║
 ║                                                      ║

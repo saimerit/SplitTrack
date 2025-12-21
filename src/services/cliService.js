@@ -115,10 +115,71 @@ const handleStats = (transactions) => {
     };
 };
 
-// --- MAIN EXECUTOR ---
+// 4. QUICK ADD (quick / q)
+const handleQuick = async (args, templates, currentUser) => {
+    const list = templates || [];
+
+    if (list.length === 0) {
+        return { success: false, message: "No templates found. Go to 'Templates' page to create one." };
+    }
+
+    // CASE 1: User typed "quick" -> List them
+    if (args.length === 0) {
+        const lines = list.map((t, index) => {
+            const amt = formatCurrency(t.amount);
+            const pinIcon = t.isPinned ? "★ " : "";
+            return `[${index + 1}] ${pinIcon}${t.expenseName} (${amt}) - ${t.category}`;
+        });
+        return {
+            success: true,
+            message: `Available Templates:\n${lines.join('\n')}\n\nTo add one, type: quick <number> (e.g., 'quick 1')`
+        };
+    }
+
+    // CASE 2: User typed "quick 1" -> Add it
+    const index = parseInt(args[0]) - 1;
+    if (isNaN(index) || index < 0 || index >= list.length) {
+        return { success: false, message: `Invalid number. Choose between 1 and ${list.length}.` };
+    }
+
+    const template = list[index];
+    const payer = template.payer || 'me';
+
+    // Construct new transaction from template
+    const txnData = {
+        ...template,
+        dateString: new Date().toISOString().split('T')[0],
+        timestamp: Timestamp.now(),
+        createdBy: currentUser.uid,
+        isDeleted: false,
+        source: 'quick-add-cli',
+        payer: payer
+    };
+
+    // Ensure splits is properly set - if no splits or empty, assign full amount to payer
+    if (!txnData.splits || Object.keys(txnData.splits).length === 0) {
+        txnData.splits = { [payer]: txnData.amount };
+    }
+
+    // Remove template-specific fields
+    delete txnData.id;
+    delete txnData.isPinned;
+
+    try {
+        const id = await addTransaction(txnData);
+        return {
+            success: true,
+            message: `Quick Added: ${txnData.expenseName} (${formatCurrency(txnData.amount)})`,
+            data: { id }
+        };
+    } catch (error) {
+        return { success: false, message: "Failed to add: " + error.message };
+    }
+};
+
 export const executeCommand = async (commandString, interactiveData = null) => {
     const state = useAppStore.getState();
-    const { currentUser, categories, participants, userSettings, groups, transactions } = state;
+    const { currentUser, categories, participants, userSettings, groups, transactions, templates } = state;
 
     if (!currentUser) return { success: false, message: "Unauthorized: Please log in." };
 
@@ -147,6 +208,11 @@ export const executeCommand = async (commandString, interactiveData = null) => {
 
         if (['stats', 'status', 'report'].includes(cmd)) {
             return handleStats(transactions);
+        }
+
+        // Quick Add from Templates
+        if (['quick', 'q', 'template'].includes(cmd)) {
+            return await handleQuick(parts.slice(1), templates, currentUser);
         }
 
         // 3. Standard Transaction Parsing

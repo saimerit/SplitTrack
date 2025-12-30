@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Archive, RefreshCw, Layers, Edit2, Repeat, UsersRound } from 'lucide-react';
+import { Trash2, Archive, RefreshCw, Layers, Edit2, Repeat, UsersRound, Sparkles, ShieldCheck } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { addDoc, collection, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -8,6 +8,8 @@ import Button from '../components/common/Button';
 import ConfirmModal from '../components/modals/ConfirmModal';
 import RecurringManager from '../components/recurring/RecurringManager';
 import ParticipantGroupsManager from '../components/participants/ParticipantGroupsManager';
+import SmartRulesManager from '../components/rules/SmartRulesManager';
+import DataHealthCheck from '../components/data/DataHealthCheck';
 
 const LEDGER_ID = 'main-ledger';
 
@@ -229,6 +231,8 @@ const ManageData = () => {
     { id: 'tags', label: 'Tags' },
     { id: 'modes', label: 'Modes' },
     { id: 'recurring', label: 'Recurring', icon: <Repeat size={16} /> },
+    { id: 'smartRules', label: 'Smart Rules', icon: <Sparkles size={16} /> },
+    { id: 'dataHealth', label: 'Data Health', icon: <ShieldCheck size={16} /> },
   ];
 
   return (
@@ -293,6 +297,8 @@ const ManageData = () => {
         {activeTab === 'tags' && <SimpleManager title="Tag" data={tags} collectionName="tags" onDelete={handleDelete} />}
         {activeTab === 'modes' && <SimpleManager title="Mode" data={modesOfPayment} collectionName="modesOfPayment" onDelete={handleDelete} />}
         {activeTab === 'recurring' && <RecurringManager />}
+        {activeTab === 'smartRules' && <SmartRulesManager />}
+        {activeTab === 'dataHealth' && <DataHealthCheck />}
       </div>
 
       <ConfirmModal

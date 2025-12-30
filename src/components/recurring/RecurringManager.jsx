@@ -11,7 +11,7 @@ import { formatCurrency } from '../../utils/formatters';
 import useAppStore from '../../store/useAppStore';
 
 const RecurringManager = () => {
-    const { showToast, modesOfPayment, tags, places } = useAppStore();
+    const { showToast, modesOfPayment, tags, places, categories } = useAppStore();
     const [items, setItems] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
     const [editId, setEditId] = useState(null);
@@ -24,9 +24,10 @@ const RecurringManager = () => {
         frequency: 'monthly',
         nextDueDate: '',
         category: '',
-        paymentMode: '', // New
-        tag: '', // New
-        place: '' // New
+        transactionType: 'expense', // expense, income, or subscription
+        paymentMode: '',
+        tag: '',
+        place: ''
     });
 
     const LEDGER_ID = 'main-ledger';
@@ -63,6 +64,7 @@ const RecurringManager = () => {
                 frequency: formData.frequency,
                 nextDueDate: dateObj,
                 category: formData.category || 'Recurring',
+                transactionType: formData.transactionType || 'expense',
                 paymentMode: formData.paymentMode || 'Online',
                 tag: formData.tag || '',
                 place: formData.place || ''
@@ -103,14 +105,15 @@ const RecurringManager = () => {
             category: item.category || '',
             paymentMode: item.paymentMode || '',
             tag: item.tag || '',
-            place: item.place || ''
+            place: item.place || '',
+            transactionType: item.transactionType || 'expense'
         });
     };
 
     const resetForm = () => {
         setIsEditing(false);
         setEditId(null);
-        setFormData({ name: '', amount: '', frequency: 'monthly', nextDueDate: '', category: '', paymentMode: '', tag: '', place: '' });
+        setFormData({ name: '', amount: '', frequency: 'monthly', nextDueDate: '', category: '', transactionType: 'expense', paymentMode: '', tag: '', place: '' });
     };
 
     const confirmDelete = async () => {
@@ -166,6 +169,26 @@ const RecurringManager = () => {
                         required
                     />
 
+                    {/* Category and Type */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <Select
+                            label="Category"
+                            value={formData.category}
+                            onChange={e => setFormData({ ...formData, category: e.target.value })}
+                            options={mapOptions(categories)}
+                        />
+                        <Select
+                            label="Transaction Type"
+                            value={formData.transactionType}
+                            onChange={e => setFormData({ ...formData, transactionType: e.target.value })}
+                            options={[
+                                { value: 'expense', label: 'Expense' },
+                                { value: 'income', label: 'Income' },
+                                { value: 'subscription', label: 'Subscription' }
+                            ]}
+                        />
+                    </div>
+
                     {/* New Fields */}
                     <div className="grid grid-cols-2 gap-4">
                         <Select
@@ -211,14 +234,23 @@ const RecurringManager = () => {
                     {items.map(item => (
                         <div key={item.id} className="p-4 flex justify-between items-center hover:bg-white/5">
                             <div className="min-w-0 flex-1 pr-4">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-bold text-gray-200">{item.name}</span>
                                     <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 capitalize" style={{ color: 'var(--primary)' }}>
                                         {item.frequency}
                                     </span>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${item.transactionType === 'income' ? 'bg-emerald-500/10 text-emerald-400' :
+                                            item.transactionType === 'subscription' ? 'bg-purple-500/10 text-purple-400' :
+                                                'bg-red-500/10 text-red-400'
+                                        }`}>
+                                        {item.transactionType || 'expense'}
+                                    </span>
                                 </div>
-                                <div className="text-sm text-gray-500 mt-1 flex items-center gap-4">
+                                <div className="text-sm text-gray-500 mt-1 flex items-center gap-4 flex-wrap">
                                     <span className="font-mono text-gray-300">{formatCurrency(item.amount)}</span>
+                                    {item.category && (
+                                        <span className="text-xs bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded">{item.category}</span>
+                                    )}
                                     <span className="flex items-center gap-1 text-xs">
                                         <Calendar size={12} />
                                         {item.nextDueDate?.toDate ? item.nextDueDate.toDate().toLocaleDateString() : 'Invalid Date'}

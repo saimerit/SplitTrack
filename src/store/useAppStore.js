@@ -85,10 +85,15 @@ const useAppStore = create(
       loading: true,
       toast: { show: false, message: '', isError: false },
 
-      // --- PALETTE & THEME STATE (NEW) ---
+      // --- PALETTE & THEME STATE ---
       activePaletteId: 'default',
       themeMode: 'light', // Global Source of Truth
       customPalettes: [],
+
+      // --- PRIVACY & SMART RULES ---
+      isPrivacyEnabled: false, // Ghost Mode toggle
+      smartRules: [], // Auto-tagging rules: { keyword, targetCategory, targetTag, targetMode, targetPlace }
+
 
       // --- Actions ---
       showToast: (message, isError = false) => {
@@ -131,6 +136,12 @@ const useAppStore = create(
       setThemeMode: (mode) => set({ themeMode: mode }), // Triggers the update
       addCustomPalette: (palette) => set((state) => ({ customPalettes: [...state.customPalettes, palette] })),
       deleteCustomPalette: (id) => set((state) => ({ customPalettes: state.customPalettes.filter(p => p.id !== id) })),
+
+      // Privacy & Smart Rules Actions
+      togglePrivacy: () => set((state) => ({ isPrivacyEnabled: !state.isPrivacyEnabled })),
+      setSmartRules: (rules) => set({ smartRules: rules }),
+      addSmartRule: (rule) => set((state) => ({ smartRules: [...state.smartRules, { ...rule, id: `rule_${Date.now()}` }] })),
+      deleteSmartRule: (id) => set((state) => ({ smartRules: state.smartRules.filter(r => r.id !== id) })),
     }),
     {
       name: 'splittrack-storage',
@@ -138,8 +149,10 @@ const useAppStore = create(
         activeGroupId: state.activeGroupId,
         userSettings: state.userSettings,
         activePaletteId: state.activePaletteId,
-        themeMode: state.themeMode, // Persist Theme
-        customPalettes: state.customPalettes
+        themeMode: state.themeMode,
+        customPalettes: state.customPalettes,
+        isPrivacyEnabled: state.isPrivacyEnabled,
+        smartRules: state.smartRules
       }),
     }
   )

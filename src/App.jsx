@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './hooks/useAuth';
 import { useFirestoreSync } from './hooks/useFirestoreSync';
+import { useRecurringProcessor } from './hooks/useRecurringProcessor';
 import { useTheme } from './hooks/useTheme'; // Import Theme Hook
 
 // Components
@@ -36,6 +37,7 @@ const ThemeInit = () => {
 
 const AppDataSyncer = ({ children }) => {
   useFirestoreSync();
+  useRecurringProcessor(); // Auto-process due recurring transactions on app load
   return children;
 };
 

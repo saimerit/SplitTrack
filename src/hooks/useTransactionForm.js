@@ -5,6 +5,7 @@ import { Timestamp, addDoc, collection } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { addTransaction, updateTransaction } from '../services/transactionService';
 import { validateSplits } from '../utils/validators';
+import { applySmartRules } from '../utils/applySmartRules';
 import useAppStore from '../store/useAppStore';
 
 const getTxnTime = (txn) => {
@@ -30,7 +31,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     const {
         categories, places, tags, modesOfPayment,
         rawParticipants, rawTransactions, groups,
-        userSettings, showToast, activeGroupId
+        userSettings, showToast, activeGroupId, smartRules
     } = useAppStore();
 
     const wasMeIncluded = initialData?.splits ? (initialData.splits['me'] !== undefined) : true;
@@ -602,7 +603,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         const linkedTransactionsData = linkedTxns.map(t => ({ id: t.id, amount: Math.round(parseFloat(t.allocated) * 100) * multiplier }));
         const parentIds = linkedTransactionsData.map(t => t.id);
 
-        const txnData = {
+        let txnData = {
             expenseName: name, amount: finalAmount, type: isSettlement ? 'expense' : type,
             category: category.startsWith('add_new') ? '' : category,
             place: place.startsWith('add_new') ? '' : place,
@@ -618,6 +619,11 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             parentTransactionId: parentIds.length > 0 ? parentIds[0] : null, isLinkedRefund: parentIds.length > 0,
             groupId: formGroupId
         };
+
+        // Apply smart tagging rules (auto-fill empty category/tag/mode based on expense name)
+        if (!isEditMode && smartRules && smartRules.length > 0) {
+            txnData = applySmartRules(txnData, smartRules);
+        }
 
         try {
             if (isEditMode) {

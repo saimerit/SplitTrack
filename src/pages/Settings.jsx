@@ -4,7 +4,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../hooks/useAuth';
 import {
   Moon, Sun, Palette, Check, Trash2, Wrench,
-  LogOut, ShieldCheck, AlertTriangle, CheckCircle, Database, Download, Monitor, Upload, FileJson, FileSpreadsheet, Activity, RotateCcw, Trash, ChevronDown, ChevronUp, Terminal
+  LogOut, ShieldCheck, AlertTriangle, CheckCircle, Database, Download, Monitor, Upload, FileJson, FileSpreadsheet, Activity, RotateCcw, Trash, ChevronDown, ChevronUp, Terminal, EyeOff
 } from 'lucide-react';
 import { doc, updateDoc, setDoc, collection, writeBatch, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -75,7 +75,7 @@ const SectionHeader = ({ icon: Icon, title }) => (
 );
 
 const Settings = () => {
-  const { userSettings, categories, places, tags, modesOfPayment, setUserSettings, showToast, transactions, participants, activePaletteId, setActivePalette, customPalettes, addCustomPalette, deleteCustomPalette, deletedTransactions } = useAppStore();
+  const { userSettings, categories, places, tags, modesOfPayment, setUserSettings, showToast, transactions, participants, activePaletteId, setActivePalette, customPalettes, addCustomPalette, deleteCustomPalette, deletedTransactions, isPrivacyEnabled, togglePrivacy } = useAppStore();
   const { user, logout } = useAuth();
   const { theme, toggleTheme, setTheme } = useTheme();
 
@@ -231,7 +231,7 @@ const Settings = () => {
       <div className="glass-card p-6 md:p-8">
         <SectionHeader icon={Palette} title="Appearance" />
 
-        <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 mb-8 hover:bg-white/10 transition-colors">
+        <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 mb-4 hover:bg-white/10 transition-colors">
           <div>
             <span className="block font-medium text-gray-200">Theme Mode</span>
             <span className="text-xs text-gray-500">Toggle between Light and Dark themes</span>
@@ -239,6 +239,25 @@ const Settings = () => {
           <button onClick={toggleTheme} className="flex items-center gap-3 px-4 py-2 bg-gray-900 rounded-lg border border-gray-700 hover:border-gray-500 transition-all">
             {theme === 'dark' ? <Moon size={18} className="text-indigo-400" /> : <Sun size={18} className="text-amber-400" />}
             <span className="text-sm font-bold uppercase text-gray-300">{theme}</span>
+          </button>
+        </div>
+
+        {/* Ghost Mode / Privacy Toggle */}
+        <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 mb-8 hover:bg-white/10 transition-colors">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
+              <EyeOff size={18} />
+            </div>
+            <div>
+              <span className="block font-medium text-gray-200">Ghost Mode</span>
+              <span className="text-xs text-gray-500">Hide all amounts with ₹*** for privacy</span>
+            </div>
+          </div>
+          <button
+            onClick={togglePrivacy}
+            className={`relative w-12 h-6 rounded-full transition-colors ${isPrivacyEnabled ? 'bg-purple-500' : 'bg-gray-700'}`}
+          >
+            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isPrivacyEnabled ? 'left-7' : 'left-1'}`}></div>
           </button>
         </div>
 

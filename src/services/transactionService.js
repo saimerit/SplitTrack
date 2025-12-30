@@ -203,6 +203,23 @@ export const moveTransactionToGroup = async (id, newGroupId) => {
   await batch.commit();
 };
 
+// Bulk update multiple transactions at once (for category/tag/mode changes)
+export const bulkUpdateTransactions = async (ids, updateData) => {
+  if (!ids || ids.length === 0) return;
+
+  const batch = writeBatch(db);
+  ids.forEach(id => {
+    const docRef = doc(db, COLLECTION_PATH, id);
+    batch.update(docRef, {
+      ...updateData,
+      updatedAt: Timestamp.now()
+    });
+  });
+
+  await batch.commit();
+};
+
+
 // --- NEW PAGINATION FEATURE ---
 export const fetchPaginatedTransactions = async (pageSize, lastDoc = null, filters = {}) => {
   try {
@@ -284,15 +301,30 @@ const RECURRING_PATH = `ledgers/${LEDGER_ID}/recurring`;
 export const checkDueRecurring = async () => {
   const now = new Date();
   now.setHours(23, 59, 59, 999); // End of today
+  const nowMillis = now.getTime();
 
-  const q = query(
-    collection(db, RECURRING_PATH),
-    where("nextDueDate", "<=", Timestamp.fromMillis(now.getTime())),
-    where("isActive", "==", true)
-  );
-
+  // Fetch all recurring items (avoid composite index requirement)
+  const q = query(collection(db, RECURRING_PATH));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  // Filter client-side for due items that are active
+  const allItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  return allItems.filter(item => {
+    // Must be active
+    if (!item.isActive) return false;
+
+    // Check if due date is today or earlier
+    if (!item.nextDueDate) return false;
+
+    const dueDateMillis = item.nextDueDate.toMillis
+      ? item.nextDueDate.toMillis()
+      : (item.nextDueDate instanceof Date ? item.nextDueDate.getTime() : null);
+
+    if (!dueDateMillis) return false;
+
+    return dueDateMillis <= nowMillis;
+  });
 };
 
 // 2. Log the transaction and advance the due date
@@ -301,18 +333,27 @@ export const processRecurringTransaction = async (recurringId, recurringData) =>
 
   // A. Create the actual Expense Transaction
   const newTxnRef = doc(collection(db, COLLECTION_PATH));
+
+  // Use the due date as the transaction timestamp (so it appears on correct date in history)
+  const txnTimestamp = recurringData.nextDueDate || Timestamp.now();
+
+  // Determine transaction type (default: expense, can be income or subscription)
+  const txnType = recurringData.transactionType === 'income' ? 'income' : 'expense';
+
   const txnData = {
     amount: recurringData.amount,
     category: recurringData.category || 'Recurring',
     expenseName: recurringData.name,
     payer: 'me',
-    splits: { 'me': recurringData.amount },
-    timestamp: Timestamp.now(),
-    type: 'expense',
+    splits: txnType === 'income' ? {} : { 'me': recurringData.amount },
+    timestamp: txnTimestamp,
+    type: txnType,
     groupId: recurringData.groupId || 'personal',
     isDeleted: false,
     recurringSourceId: recurringId,
-    paymentMode: recurringData.paymentMode || 'Online',
+    isRecurring: true, // Flag to identify recurring transactions
+    recurringType: recurringData.transactionType || 'expense', // expense, income, or subscription
+    modeOfPayment: recurringData.paymentMode || 'Online',
     tag: recurringData.tag || '',
     place: recurringData.place || ''
   };
@@ -358,8 +399,15 @@ export const skipRecurringTransaction = async (recurringId, currentDueDate, freq
 // --- CRUD for Recurring Transactions ---
 export const addRecurringTransaction = async (data) => {
   const ref = collection(db, RECURRING_PATH);
+
+  // Ensure nextDueDate is a Firestore Timestamp
+  const nextDueDate = data.nextDueDate instanceof Date
+    ? Timestamp.fromDate(data.nextDueDate)
+    : data.nextDueDate;
+
   await addDoc(ref, {
     ...data,
+    nextDueDate,
     isActive: true,
     createdAt: Timestamp.now()
   });
@@ -367,7 +415,14 @@ export const addRecurringTransaction = async (data) => {
 
 export const updateRecurringTransaction = async (id, data) => {
   const ref = doc(db, RECURRING_PATH, id);
-  await updateDoc(ref, data);
+
+  // Ensure nextDueDate is a Firestore Timestamp if present
+  const updateData = { ...data };
+  if (updateData.nextDueDate && updateData.nextDueDate instanceof Date) {
+    updateData.nextDueDate = Timestamp.fromDate(updateData.nextDueDate);
+  }
+
+  await updateDoc(ref, updateData);
 };
 
 export const deleteRecurringTransaction = async (id) => {

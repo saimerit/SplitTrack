@@ -1,10 +1,20 @@
-export const formatCurrency = (amountInPaise) => {
+import useAppStore from '../store/useAppStore';
+
+export const formatCurrency = (amountInPaise, forceShow = false) => {
+  // Check if privacy mode is enabled (Ghost Mode)
+  const isPrivacyEnabled = useAppStore.getState().isPrivacyEnabled;
+
+  if (isPrivacyEnabled && !forceShow) {
+    return '₹***';
+  }
+
   const amountInRupees = (amountInPaise || 0) / 100;
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR'
   }).format(amountInRupees);
 };
+
 
 export const formatDate = (timestamp) => {
   if (!timestamp) return 'Invalid date';

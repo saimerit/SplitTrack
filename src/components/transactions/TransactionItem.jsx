@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import {
   Trash2, Edit2, X, RefreshCw, ChevronRight, ChevronDown, Copy, CheckCircle, Circle,
   Utensils, ShoppingCart, Car, Zap, Smartphone, Plane,
-  IceCream, BookOpen, Coffee, Package, HandCoins, Calendar, MapPin, Tag, Cookie
+  IceCream, BookOpen, Coffee, Package, HandCoins, Calendar, MapPin, Tag, Cookie,
+  Film, Music, Gamepad2
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 
@@ -56,6 +57,10 @@ const getCategoryIcon = (category) => {
   // Travel -> Plane
   if (cat.includes('travel') || cat.includes('trip'))
     return <Plane size={20} className="text-sky-500" />;
+
+  // Entertainment, Movies, Music, Games -> Film
+  if (cat.includes('entertainment') || cat.includes('movie') || cat.includes('netflix') || cat.includes('music') || cat.includes('game') || cat.includes('streaming'))
+    return <Film size={20} className="text-pink-500" />;
 
   // Default
   return <div className="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700" />;

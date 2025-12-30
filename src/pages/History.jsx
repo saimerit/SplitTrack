@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, Search, ChevronLeft, ChevronRight, Loader2, CheckSquare, Trash2, X, Filter } from 'lucide-react';
+import { Download, Search, ChevronLeft, ChevronRight, Loader2, CheckSquare, Trash2, X, Filter, Edit2 } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { deleteTransaction } from '../services/transactionService';
 import { exportToCSV } from '../services/exportImportService';
@@ -10,10 +10,11 @@ import Input from '../components/common/Input';
 import TransactionItem from '../components/transactions/TransactionItem';
 import SearchPalette from '../components/common/SearchPalette';
 import ConfirmModal from '../components/modals/ConfirmModal';
+import BulkEditModal from '../components/modals/BulkEditModal';
 
 const History = () => {
   const navigate = useNavigate();
-  const { transactions, participantsLookup, tags, showToast, loading: storeLoading } = useAppStore();
+  const { transactions, rawTransactions, participantsLookup, tags, showToast, loading: storeLoading } = useAppStore();
   const [filterTag, setFilterTag] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
@@ -21,16 +22,18 @@ const History = () => {
   const [pageSize, setPageSize] = useState(20);
   const [showSearch, setShowSearch] = useState(false);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [deleteData, setDeleteData] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
 
   // Reset to page 1 if data changes significantly
   useEffect(() => {
     setCurrentPage(1);
-  }, [transactions.length, filterTag, filterDate, filterMonth]);
+  }, [transactions.length, filterTag, filterDate, filterMonth, localSearchQuery]);
 
   // Filter & Sort Logic
   // Sort transactions by timestamp desc
@@ -38,11 +41,22 @@ const History = () => {
     return [...transactions].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   }, [transactions]);
 
-  // Apply filters
+  // Apply filters and local search
   const filteredData = useMemo(() => {
     return sortedTransactions.filter(txn => {
       if (txn.isDeleted) return false;
       if (filterTag && txn.tag !== filterTag) return false;
+
+      // Local search filter
+      if (localSearchQuery) {
+        const query = localSearchQuery.toLowerCase();
+        const matchesName = txn.expenseName?.toLowerCase().includes(query);
+        const matchesCategory = txn.category?.toLowerCase().includes(query);
+        const matchesTag = txn.tag?.toLowerCase().includes(query);
+        const matchesPlace = txn.place?.toLowerCase().includes(query);
+        if (!matchesName && !matchesCategory && !matchesTag && !matchesPlace) return false;
+      }
+
       // For date filters
       const txnDate = new Date(txn.timestamp);
       if (filterDate) {
@@ -56,7 +70,7 @@ const History = () => {
       }
       return true;
     });
-  }, [sortedTransactions, filterTag, filterDate, filterMonth]);
+  }, [sortedTransactions, filterTag, filterDate, filterMonth, localSearchQuery]);
 
   // Pagination
   const totalItems = filteredData.length;
@@ -177,12 +191,22 @@ const History = () => {
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               type="text"
-              readOnly
-              onClick={() => setShowSearch(true)}
-              placeholder="Search..."
-              className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-300 focus:outline-none hover:bg-white/10 transition-colors cursor-pointer"
+              value={localSearchQuery}
+              onChange={(e) => setLocalSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Escape' && setLocalSearchQuery('')}
+              placeholder="Search transactions..."
+              className="w-full pl-10 pr-12 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-indigo-500/50 hover:bg-white/10 transition-colors"
             />
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-gray-400">⌘K</span>
+            {localSearchQuery ? (
+              <button
+                onClick={() => setLocalSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-white"
+              >
+                <X size={14} />
+              </button>
+            ) : (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-gray-400">⌘K</span>
+            )}
           </div>
 
           <Button onClick={() => exportToCSV(filteredData, participantsLookup)} className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20">
@@ -290,6 +314,9 @@ const History = () => {
           <span className="font-bold text-sm" style={{ color: 'var(--primary)' }}>{selectedIds.size} Selected</span>
           <div className="h-4 w-px bg-white/10 hidden md:block"></div>
           <div className="flex items-center gap-4">
+            <button onClick={() => setShowBulkEdit(true)} className="flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-bold text-sm transition-colors">
+              <Edit2 size={16} /> Edit
+            </button>
             <button onClick={handleBulkDelete} className="flex items-center gap-2 text-red-400 hover:text-red-300 font-bold text-sm transition-colors">
               <Trash2 size={16} /> Delete
             </button>
@@ -313,6 +340,15 @@ const History = () => {
         message="This will remove all selected transactions. This action cannot be undone."
         onConfirm={confirmBulkDelete}
         onCancel={() => setShowBulkConfirm(false)}
+      />
+      <BulkEditModal
+        isOpen={showBulkEdit}
+        selectedIds={selectedIds}
+        onClose={() => setShowBulkEdit(false)}
+        onSuccess={() => {
+          setSelectedIds(new Set());
+          setIsSelectionMode(false);
+        }}
       />
     </div>
   );

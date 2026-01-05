@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, where, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import useAppStore from '../store/useAppStore';
 import { useAuth } from './useAuth';
@@ -28,15 +28,10 @@ export const useFirestoreSync = () => {
   useEffect(() => {
     if (!isAllowed) return;
 
-    // OPTIMIZED QUERY: Sync Current Year to ensure balance integrity while avoiding full history
-    const startOfYear = new Date(new Date().getFullYear(), 0, 1);
-    const startTimestamp = Timestamp.fromMillis(startOfYear.getTime());
-
     const refs = {
       participants: query(collection(db, `ledgers/${LEDGER_ID}/participants`), orderBy('uniqueId')),
       transactions: query(
         collection(db, `ledgers/${LEDGER_ID}/transactions`),
-        where('timestamp', '>=', startTimestamp),
         orderBy('timestamp', 'desc')
       ),
       categories: query(collection(db, `ledgers/${LEDGER_ID}/categories`), orderBy('name')),

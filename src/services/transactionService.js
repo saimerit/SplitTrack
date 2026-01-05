@@ -1,5 +1,5 @@
 import {
-  addDoc, updateDoc, deleteDoc as firestoreDeleteDoc, doc,
+  addDoc, updateDoc, deleteDoc as firestoreDeleteDoc, doc, setDoc,
   collection, getDocs, query, where, getDoc, runTransaction, Timestamp, writeBatch,
   limit, startAfter, orderBy, increment // Added imports for pagination
 } from 'firebase/firestore';
@@ -9,6 +9,122 @@ import useAppStore from '../store/useAppStore';
 import { LEDGER_ID } from '../config/constants';
 
 const COLLECTION_PATH = `ledgers/${LEDGER_ID}/transactions`;
+const SUMMARY_PATH = `ledgers/${LEDGER_ID}/summaries/dashboard`;
+
+/**
+ * RECTIFY ALL STATS:
+ * Fetches every non-deleted transaction and recalculates the summary document.
+ * This function replicates the exact logic from useBalances.js.
+ */
+export const rectifyAllStats = async (participants = []) => {
+  const colRef = collection(db, COLLECTION_PATH);
+  const q = query(colRef, where("isDeleted", "==", false));
+  const snap = await getDocs(q);
+  const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  // Initialize variables - matches useBalances.js exactly
+  let myPersonalBalances = {};
+  let netPosition = 0;
+  let totalPaymentsMadeByMe = 0;
+  let totalRepaymentsMadeToMe = 0;
+  let myTotalExpenseShare = 0;
+  let totalPaidByOthersForMe = 0;
+  let monthlyIncome = 0;
+  let categorySums = {};
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  // Initialize balances for all participants
+  participants.forEach(p => {
+    if (p.uniqueId !== 'me') myPersonalBalances[p.uniqueId] = 0;
+  });
+
+  transactions.forEach(txn => {
+    const payer = txn.payer || 'me';
+    const splits = txn.splits || {};
+    const amount = parseFloat(txn.amount) || 0;
+
+    // Income Logic
+    if (txn.type === 'income') {
+      let d;
+      if (txn.timestamp?.toDate) d = txn.timestamp.toDate();
+      else if (txn.timestamp instanceof Date) d = txn.timestamp;
+      else d = new Date(txn.timestamp || Date.now());
+
+      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+        monthlyIncome += (amount / 100);
+      }
+      return;
+    }
+
+    if (txn.isReturn) {
+      const recipient = txn.participants?.[0];
+      if (!recipient) return;
+
+      if (payer === 'me') {
+        if (recipient !== 'me') {
+          myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;
+          totalPaymentsMadeByMe += amount;
+        }
+      } else {
+        if (recipient === 'me') {
+          myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
+          totalRepaymentsMadeToMe += amount;
+        }
+      }
+    } else {
+      // Expense Logic
+      if (payer === 'me') {
+        totalPaymentsMadeByMe += amount;
+        Object.entries(splits).forEach(([uid, share]) => {
+          if (uid === 'me') {
+            myTotalExpenseShare += share;
+            const cat = txn.category || 'Uncategorized';
+            categorySums[cat] = (categorySums[cat] || 0) + share;
+          } else {
+            myPersonalBalances[uid] = (myPersonalBalances[uid] || 0) + share;
+          }
+        });
+      } else {
+        const myShare = splits['me'] || 0;
+        if (myShare > 0) {
+          myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - myShare;
+          myTotalExpenseShare += myShare;
+          totalPaidByOthersForMe += myShare;
+          const cat = txn.category || 'Uncategorized';
+          categorySums[cat] = (categorySums[cat] || 0) + myShare;
+        }
+      }
+    }
+  });
+
+  netPosition = Object.values(myPersonalBalances).reduce((sum, val) => sum + val, 0);
+
+  const chartData = Object.entries(categorySums)
+    .map(([label, val]) => ({ label, value: val / 100 }))
+    .sort((a, b) => b.value - a.value);
+
+  const summaryData = {
+    netPosition,
+    myPersonalBalances,
+    myTotalExpenditure: totalPaymentsMadeByMe - totalRepaymentsMadeToMe,
+    myTotalShare: myTotalExpenseShare,
+    paidByOthers: totalPaidByOthersForMe,
+    monthlyIncome,
+    chartData,
+    lastUpdated: Timestamp.now()
+  };
+
+  // Write the "Truth" back to Firebase
+  await setDoc(doc(db, SUMMARY_PATH), summaryData);
+
+  // Also update the local store directly for immediate UI update
+  useAppStore.getState().setDashboardStats(summaryData);
+
+  return summaryData;
+};
 
 // Use this for simple updates
 export const fastUpdateParentStats = async (parentId, changeInAmount) => {
@@ -113,6 +229,10 @@ export const addTransaction = async (txnData) => {
     await updateParentStats(txnData.parentTransactionId);
   }
 
+  // Trigger background rectification to update dashboard stats
+  const participants = useAppStore.getState().rawParticipants;
+  rectifyAllStats(participants).catch(err => console.error('Background rectify failed:', err));
+
   return docRef.id;
 };
 
@@ -131,6 +251,10 @@ export const updateTransaction = async (id, txnData, oldParentId) => {
       await updateParentStats(oldParentId);
     }
   }
+
+  // Trigger background rectification to update dashboard stats
+  const participants = useAppStore.getState().rawParticipants;
+  rectifyAllStats(participants).catch(err => console.error('Background rectify failed:', err));
 };
 
 // Fix 3 & Feature 8: Atomic Soft Delete
@@ -169,6 +293,10 @@ export const deleteTransaction = async (id, parentId) => {
     if (parentId) {
       await updateParentStats(parentId);
     }
+
+    // Trigger background rectification to update dashboard stats
+    const participants = useAppStore.getState().rawParticipants;
+    rectifyAllStats(participants).catch(err => console.error('Background rectify failed:', err));
   } catch (e) {
     console.error("Delete failed:", e);
     useAppStore.getState().showToast(

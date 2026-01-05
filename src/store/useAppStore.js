@@ -94,6 +94,18 @@ const useAppStore = create(
       isPrivacyEnabled: false, // Ghost Mode toggle
       smartRules: [], // Auto-tagging rules: { keyword, targetCategory, targetTag, targetMode, targetPlace }
 
+      // --- PRE-COMPUTED DASHBOARD STATS (Materialized View) ---
+      dashboardStats: {
+        netPosition: 0,
+        myPersonalBalances: {},
+        myTotalExpenditure: 0,
+        myTotalShare: 0,
+        paidByOthers: 0,
+        monthlyIncome: 0,
+        chartData: [],
+        lastUpdated: null
+      },
+
 
       // --- Actions ---
       showToast: (message, isError = false) => {
@@ -130,6 +142,7 @@ const useAppStore = create(
       setUserSettings: (data) => set({ userSettings: data || {} }),
       setCurrentUser: (user) => set({ currentUser: user }),
       setLoading: (isLoading) => set({ loading: isLoading }),
+      setDashboardStats: (stats) => set({ dashboardStats: stats }),
 
       // Palette & Theme Setters
       setActivePalette: (id) => set({ activePaletteId: id }),
@@ -152,7 +165,8 @@ const useAppStore = create(
         themeMode: state.themeMode,
         customPalettes: state.customPalettes,
         isPrivacyEnabled: state.isPrivacyEnabled,
-        smartRules: state.smartRules
+        smartRules: state.smartRules,
+        dashboardStats: state.dashboardStats // Persist for offline instant-load
       }),
     }
   )

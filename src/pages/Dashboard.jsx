@@ -7,13 +7,17 @@ import Button from '../components/common/Button';
 import StatCard from '../components/common/StatCard';
 import { useNavigate } from 'react-router-dom';
 import ConfirmModal from '../components/modals/ConfirmModal';
-import { checkDueRecurring, processRecurringTransaction, skipRecurringTransaction, addTransaction } from '../services/transactionService';
+import { checkDueRecurring, processRecurringTransaction, skipRecurringTransaction, addTransaction, rectifyAllStats } from '../services/transactionService';
 import { Timestamp } from 'firebase/firestore';
+import { RefreshCcw } from 'lucide-react';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { transactions, participants, loading, templates, showToast } = useAppStore();
   const [showSummary, setShowSummary] = useState(false);
+
+  // --- NEW STATE: Rectify Stats ---
+  const [isRectifying, setIsRectifying] = useState(false);
 
   // --- NEW STATE: Recurring Logic ---
   const [dueRecurringItem, setDueRecurringItem] = useState(null);
@@ -92,8 +96,22 @@ const Dashboard = () => {
     }
   };
 
-  // --- Core Balance Logic ---
+  // --- Core Balance Logic (useBalances for live data) ---
   const stats = useBalances(transactions, participants);
+
+  // --- Handle Rectify Stats ---
+  const handleRectify = async () => {
+    setIsRectifying(true);
+    try {
+      await rectifyAllStats(participants);
+      showToast('Stats recalculated successfully!', false);
+    } catch (err) {
+      console.error('Rectify failed:', err);
+      showToast('Failed to rectify stats', true);
+    } finally {
+      setIsRectifying(false);
+    }
+  };
 
   const handleSettleUp = (uid, amount) => {
     navigate('/add', {
@@ -131,9 +149,15 @@ const Dashboard = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center mb-2">
         <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-200">Balances</h2>
-        <Button variant="primary" onClick={() => setShowSummary(true)}>
-          Who Owes Whom?
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={handleRectify} disabled={isRectifying}>
+            <RefreshCcw size={16} className={isRectifying ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline ml-1">Rectify</span>
+          </Button>
+          <Button variant="primary" onClick={() => setShowSummary(true)}>
+            Who Owes Whom?
+          </Button>
+        </div>
       </div>
 
       {/* --- INSERT: Quick Add Shortcuts --- */}

@@ -22,7 +22,8 @@ export const useFirestoreSync = () => {
     setGroups, // New Action
     setUserSettings,
     setDeletedTransactions, // For Trash feature
-    setLoading
+    setLoading,
+    setDashboardStats // Pre-computed stats
   } = useAppStore();
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export const useFirestoreSync = () => {
       goals: query(collection(db, `ledgers/${LEDGER_ID}/goals`), orderBy('name')),
       groups: query(collection(db, `ledgers/${LEDGER_ID}/groups`), orderBy('name')), // New Collection
       settings: doc(db, `ledgers/${LEDGER_ID}`),
+      dashboardSummary: doc(db, `ledgers/${LEDGER_ID}/summaries/dashboard`), // Pre-computed stats
     };
 
     const unsubs = [
@@ -77,6 +79,11 @@ export const useFirestoreSync = () => {
       onSnapshot(refs.settings, s => {
         if (s.exists()) setUserSettings(s.data());
         setLoading(false);
+      }),
+
+      // Listen to pre-computed dashboard stats (Materialized View)
+      onSnapshot(refs.dashboardSummary, s => {
+        if (s.exists()) setDashboardStats(s.data());
       })
     ];
 
@@ -94,6 +101,7 @@ export const useFirestoreSync = () => {
     setGroups,
     setUserSettings,
     setDeletedTransactions,
-    setLoading
+    setLoading,
+    setDashboardStats
   ]);
 };

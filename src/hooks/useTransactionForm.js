@@ -77,6 +77,20 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     const [includeMe, setIncludeMe] = useState(wasMeIncluded);
     const [includePayer, setIncludePayer] = useState(false);
 
+    // --- MULTI-MODE PAYMENT STATE ---
+    const [isMultiMode, setIsMultiMode] = useState(() => {
+        return initialData?.modeOfPayment === 'Multi' || (initialData?.paymentBreakdown?.length > 1);
+    });
+    const [paymentBreakdown, setPaymentBreakdown] = useState(() => {
+        if (initialData?.paymentBreakdown?.length > 0) {
+            return initialData.paymentBreakdown.map(p => ({
+                mode: p.mode || '',
+                amount: (p.amount / 100).toFixed(2) // Convert paise to rupees for display
+            }));
+        }
+        return [];
+    });
+
     // UI Triggers
     const [showDupeModal, setShowDupeModal] = useState(false);
     const [dupeTxn, setDupeTxn] = useState(null);
@@ -227,6 +241,17 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         return () => clearTimeout(timer);
     }, [name, isEditMode, groupTransactions, category, place, tag, suggestion]);
 
+    // --- EFFECT: Apply defaults when userSettings loads (for new transactions only) ---
+    useEffect(() => {
+        if (isEditMode || !userSettings) return;
+
+        // Only update if the current values are still empty (not yet set by user)
+        if (!category && userSettings.defaultCategory) setCategory(userSettings.defaultCategory);
+        if (!place && userSettings.defaultPlace) setPlace(userSettings.defaultPlace);
+        if (!tag && userSettings.defaultTag) setTag(userSettings.defaultTag);
+        if (!mode && userSettings.defaultMode) setMode(userSettings.defaultMode);
+    }, [userSettings, isEditMode, category, place, tag, mode]);
+
     // --- ACTIONS ---
 
     // FEATURE: Reset Form
@@ -281,6 +306,11 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         setShowDupeModal(false);
         setDupeTxn(null);
         setSuggestion(null);
+
+        // Reset Multi-Mode state
+        setIsMultiMode(false);
+        setPaymentBreakdown([]);
+
         showToast("Form reset!", false);
     }, [initialData, isEditMode, activeGroupId, userSettings, showToast]);
 
@@ -540,6 +570,39 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         }
     };
 
+    // --- MULTI-MODE PAYMENT HELPERS ---
+    const addPaymentMode = () => {
+        setPaymentBreakdown([...paymentBreakdown, { mode: '', amount: '' }]);
+    };
+
+    const removePaymentMode = (index) => {
+        setPaymentBreakdown(paymentBreakdown.filter((_, i) => i !== index));
+    };
+
+    const updatePaymentMode = (index, field, value) => {
+        setPaymentBreakdown(paymentBreakdown.map((item, i) =>
+            i === index ? { ...item, [field]: value } : item
+        ));
+    };
+
+    // Calculate remaining amount for Multi-Mode
+    const getMultiModeRemaining = () => {
+        const total = parseFloat(amount) || 0;
+        const allocated = paymentBreakdown.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+        return (total - allocated).toFixed(2);
+    };
+
+    // Auto-fill remaining amount for last mode
+    const autoFillLastMode = () => {
+        if (paymentBreakdown.length === 0) return;
+        const remaining = parseFloat(getMultiModeRemaining());
+        if (remaining > 0) {
+            const lastIndex = paymentBreakdown.length - 1;
+            const currentAmount = parseFloat(paymentBreakdown[lastIndex].amount) || 0;
+            updatePaymentMode(lastIndex, 'amount', (currentAmount + remaining).toFixed(2));
+        }
+    };
+
     const splitAllocatorParticipants = useMemo(() => [
         ...(includeMe ? [{ uniqueId: 'me', name: 'You' }] : []),
         ...(payer !== 'me' && !selectedParticipants.includes(payer) && includePayer ? [{ uniqueId: payer, name: getName(payer) }] : []),
@@ -608,7 +671,14 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             category: category.startsWith('add_new') ? '' : category,
             place: place.startsWith('add_new') ? '' : place,
             tag: tag.startsWith('add_new') ? '' : tag,
-            modeOfPayment: mode.startsWith('add_new') ? '' : mode,
+            modeOfPayment: isMultiMode ? 'Multi' : (mode.startsWith('add_new') ? '' : mode),
+            // Multi-Mode Payment Breakdown
+            paymentBreakdown: isMultiMode
+                ? paymentBreakdown.map(p => ({
+                    mode: p.mode,
+                    amount: Math.round(parseFloat(p.amount) * 100) * multiplier
+                }))
+                : [{ mode: mode.startsWith('add_new') ? '' : mode, amount: amountInPaise * multiplier }],
             description, timestamp: Timestamp.fromDate(new Date(date)),
             dateString: date,
             payer: isIncome ? 'me' : payer, isReturn: isSettlement,
@@ -682,7 +752,9 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             formGroupId,
             name, amount, date, category, place, tag, mode, description,
             type, refundSubType, payer, selectedParticipants,
-            splitMethod, splits, includeMe, includePayer, repaymentFilter
+            splitMethod, splits, includeMe, includePayer, repaymentFilter,
+            // Multi-Mode Payment
+            isMultiMode, paymentBreakdown
         },
 
         // 2. Setters (Actions to change data)
@@ -690,7 +762,9 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             setFormGroupId,
             setName, setAmount, setDate, setCategory, setPlace, setTag, setMode, setDescription,
             setPayer, setSelectedParticipants, setSplitMethod, setSplits, setIncludeMe, setIncludePayer,
-            setRepaymentFilter, setType, setRefundSubType
+            setRepaymentFilter, setType, setRefundSubType,
+            // Multi-Mode setters
+            setIsMultiMode, setPaymentBreakdown
         },
 
         // 3. UI State (Modals, Loading, Success)
@@ -735,12 +809,16 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             handleTemplateSaveRequest, handleManualSwap, applySuggestion,
             handleSubmit, forceSubmit, resetForm,
             handleTypeChange, handleRefundSubTypeChange,
-            handleAmountChange
+            handleAmountChange,
+            // Multi-Mode actions
+            addPaymentMode, removePaymentMode, updatePaymentMode, autoFillLastMode
         },
 
         // 7. Utilities
         utils: {
-            getTxnDateStr, getName, validation
+            getTxnDateStr, getName, validation,
+            // Multi-Mode utilities
+            getMultiModeRemaining
         }
     };
 };

@@ -185,6 +185,24 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
                 {txn.tag && <div className="p-3 bg-gray-800/50 rounded-lg col-span-2 flex items-center gap-2"><Tag size={16} className="text-gray-400" /><span className="font-medium text-gray-200">{txn.tag}</span></div>}
               </div>
 
+              {/* Multi-Mode Payment Breakdown */}
+              {txn.modeOfPayment === 'Multi' && txn.paymentBreakdown && txn.paymentBreakdown.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Payment Methods</h4>
+                  <div className="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800">
+                    {txn.paymentBreakdown.map((p, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-3 text-sm">
+                        <span className="text-gray-300 font-medium flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                          {p.mode || 'Unknown'}
+                        </span>
+                        <span className="font-mono text-gray-200">{formatCurrency(p.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {txn.description && <div><h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Description</h4><p className="text-gray-300 text-sm bg-gray-800/30 p-3 rounded-lg border border-gray-800 italic">"{txn.description}"</p></div>}
 
               {txn.splits && (
@@ -240,7 +258,13 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
             <p className="text-sm text-gray-400 truncate">Paid by: <span className="font-medium text-gray-300">{payerName}</span> | {formatDate(txn.timestamp)}</p>
             <p className="text-sm text-gray-400 mt-1 flex flex-wrap items-center gap-2">
               {txn.category}
-              {txn.modeOfPayment && <span className="text-blue-400 text-xs border border-blue-800/50 px-1 rounded">via {txn.modeOfPayment}</span>}
+              {txn.modeOfPayment === 'Multi' && txn.paymentBreakdown && txn.paymentBreakdown.length > 0 ? (
+                <span className="text-purple-400 text-xs border border-purple-800/50 px-2 py-0.5 rounded flex items-center gap-1" title={txn.paymentBreakdown.map(p => `${p.mode}: ${formatCurrency(p.amount)}`).join(', ')}>
+                  Multi ({txn.paymentBreakdown.length} modes)
+                </span>
+              ) : txn.modeOfPayment && (
+                <span className="text-blue-400 text-xs border border-blue-800/50 px-1 rounded">via {txn.modeOfPayment}</span>
+              )}
               {txn.place && ` at ${txn.place}`}
               {txn.tag && <span className="px-2 py-0.5 bg-gray-800 rounded-full text-xs">{txn.tag}</span>}
             </p>
@@ -262,6 +286,17 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
             {isExpanded && (
               <div className="mt-2 text-sm text-gray-400 space-y-1 animate-fade-in">
                 {txn.description && <p className="italic border-l-2 border-gray-600 pl-2 mb-2">"{txn.description}"</p>}
+
+                {/* Multi-Mode Payment Breakdown in expanded view */}
+                {txn.modeOfPayment === 'Multi' && txn.paymentBreakdown && txn.paymentBreakdown.length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-xs font-bold text-purple-400 mb-1">Payment Methods:</p>
+                    {txn.paymentBreakdown.map((p, idx) => (
+                      <p key={idx} className="text-purple-300">• {p.mode}: {formatCurrency(p.amount)}</p>
+                    ))}
+                  </div>
+                )}
+
                 {txn.splits && Object.entries(txn.splits).map(([uid, val]) => {
                   if (val === 0) return null;
                   return <p key={uid}>• {getName(uid)}: {formatCurrency(val)}</p>;

@@ -9,6 +9,7 @@ import Input from '../common/Input';
 import Button from '../common/Button';
 import Select from '../common/Select';
 import SplitAllocator from './SplitAllocator';
+import PaymentModeAllocator from './PaymentModeAllocator';
 import ParticipantSelector from './ParticipantSelector';
 import ConfirmModal from '../modals/ConfirmModal';
 import PromptModal from '../modals/PromptModal';
@@ -169,7 +170,51 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                 <SearchableSelect label="Category" value={formData.category} onChange={e => actions.handleQuickAddRequest(e.target.value, 'categories', 'Category')} options={categoryOptions} />
                 <SearchableSelect label="Place" value={formData.place} onChange={e => actions.handleQuickAddRequest(e.target.value, 'places', 'Place')} options={placeOptions} />
                 <SearchableSelect label="Tag" value={formData.tag} onChange={e => actions.handleQuickAddRequest(e.target.value, 'tags', 'Tag')} options={tagOptions} />
-                <SearchableSelect label="Mode" value={formData.mode} onChange={e => actions.handleQuickAddRequest(e.target.value, 'modesOfPayment', 'Mode')} options={modeOptions} />
+
+                {/* Payment Mode - Single or Multi-Mode */}
+                <div className="col-span-1 lg:col-span-2">
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Payment Mode</label>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (!formData.isMultiMode && formData.paymentBreakdown.length === 0) {
+                                    // Initialize with first row when enabling
+                                    actions.addPaymentMode();
+                                }
+                                setters.setIsMultiMode(!formData.isMultiMode);
+                            }}
+                            className={`text-xs font-medium px-3 py-1 rounded-full transition-colors ${formData.isMultiMode
+                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                                    : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                }`}
+                        >
+                            {formData.isMultiMode ? '✓ Multi-Mode' : 'Multi-Mode'}
+                        </button>
+                    </div>
+
+                    {formData.isMultiMode ? (
+                        <div className="p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-700">
+                            <PaymentModeAllocator
+                                breakdown={formData.paymentBreakdown}
+                                totalAmount={formData.amount}
+                                modeOptions={data.modesOfPayment}
+                                onAdd={actions.addPaymentMode}
+                                onRemove={actions.removePaymentMode}
+                                onUpdate={actions.updatePaymentMode}
+                                onAutoFill={actions.autoFillLastMode}
+                                remaining={utils.getMultiModeRemaining()}
+                            />
+                        </div>
+                    ) : (
+                        <SearchableSelect
+                            value={formData.mode}
+                            onChange={e => actions.handleQuickAddRequest(e.target.value, 'modesOfPayment', 'Mode')}
+                            options={modeOptions}
+                        />
+                    )}
+                </div>
+
                 <Input label="Description" value={formData.description} onChange={e => setters.setDescription(e.target.value)} className="col-span-full" />
 
                 {/* Inclusion Checks */}

@@ -140,20 +140,33 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             if (t.parentTransactionIds && t.parentTransactionIds.includes(parentTxn.id)) return true;
             return false;
         });
+
         related.forEach(rel => {
             if (rel.isReturn) {
+                // For settlements (isReturn=true), we need to check if this settlement was FOR the specific debtor
+                // A settlement reduces debt when:
+                // 1. The debtor is the payer of the settlement (they paid back), OR
+                // 2. The debtor is the recipient of the settlement (in participants array) - means 'me' paid them back
                 const link = rel.linkedTransactions?.find(l => l.id === parentTxn.id);
+                const debtorIsPayer = rel.payer === debtorId;
+                const debtorIsRecipient = rel.participants?.includes(debtorId);
+
                 if (link) {
-                    if (rel.payer === debtorId) debt -= Math.abs(link.amount);
-                    else if (rel.payer !== debtorId && link.amount < 0) debt -= Math.abs(link.amount);
-                } else if (rel.payer === debtorId && (!rel.linkedTransactions || rel.linkedTransactions.length === 0)) {
+                    // Only subtract if this settlement is for the specific debtor
+                    if (debtorIsPayer || debtorIsRecipient) {
+                        debt -= Math.abs(link.amount);
+                    }
+                } else if (debtorIsPayer && (!rel.linkedTransactions || rel.linkedTransactions.length === 0)) {
+                    // Unlinked settlement where debtor is the payer
                     debt -= Math.abs(rel.amount);
                 }
             } else if (rel.amount < 0) {
+                // Product refund - reduce the debtor's share if they had a split
                 let refundShare = rel.splits?.[debtorId] || 0;
                 debt += refundShare;
             }
         });
+
         return Math.max(0, debt);
     }, [groupTransactions, isEditMode, initialData]);
 
@@ -169,12 +182,29 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
         const debtsIOwe = groupTransactions.filter(t => !t.isReturn && t.payer !== 'me' && t.splits?.['me'] > 0)
             .map(t => ({ ...t, relationType: 'owed_by_me', counterParty: t.payer, outstanding: getOutstandingDebt(t, 'me') }));
-        const debtsTheyOwe = groupTransactions.filter(t => !t.isReturn && t.payer === 'me' && Object.keys(t.splits || {}).some(uid => uid !== 'me' && t.splits[uid] > 0))
-            .flatMap(t => {
-                return Object.keys(t.splits).filter(uid => uid !== 'me' && t.splits[uid] > 0).map(uid => ({
+        // Find transactions where others owe me (I paid, splits show who owes what)
+        const debtsTheyOwe = groupTransactions.filter(t => {
+            if (t.isReturn || t.payer !== 'me') return false;
+            // Check if splits has positive values for non-me participants
+            const hasSplitDebts = Object.keys(t.splits || {}).some(uid => uid !== 'me' && t.splits[uid] > 0);
+            // Fallback: check participants array if splits are empty (handles older transactions or data issues)
+            const hasParticipantDebts = !hasSplitDebts && Array.isArray(t.participants) && t.participants.length > 0 && t.amount > 0;
+            return hasSplitDebts || hasParticipantDebts;
+        }).flatMap(t => {
+            // First try to use splits
+            const splitEntries = Object.keys(t.splits || {}).filter(uid => uid !== 'me' && t.splits[uid] > 0);
+            if (splitEntries.length > 0) {
+                return splitEntries.map(uid => ({
                     ...t, relationType: 'owed_to_me', counterParty: uid, outstanding: getOutstandingDebt(t, uid)
                 }));
+            }
+            // Fallback: use participants with equal split assumption
+            return (t.participants || []).filter(uid => uid !== 'me').map(uid => {
+                const participantCount = (t.participants || []).filter(uid => uid !== 'me').length;
+                const equalShare = participantCount > 0 ? Math.round(t.amount / participantCount) : t.amount;
+                return { ...t, relationType: 'owed_to_me', counterParty: uid, outstanding: equalShare };
             });
+        });
 
         let all = [...debtsIOwe, ...debtsTheyOwe];
         if (repaymentFilter) all = all.filter(t => t.counterParty === repaymentFilter);
@@ -183,7 +213,8 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             if (targetPerson && targetPerson !== 'me') all = all.filter(t => t.counterParty === targetPerson);
         }
 
-        const result = all.filter(t => t.outstanding > 10).filter(t => !linkedTxns.some(l => l.id === t.id)).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+        const result = all.filter(t => t.outstanding > 0).filter(t => !linkedTxns.some(l => l.id === t.id)).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+
         return [...new Map(result.map(item => [item.id, item])).values()];
     }, [groupTransactions, linkedTxns, isSettlement, payer, selectedParticipants, repaymentFilter, getOutstandingDebt]);
 

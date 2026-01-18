@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { doc, updateDoc, setDoc, collection, writeBatch, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { LEDGER_ID } from '../config/constants';
 import { exportToCSV, exportFullBackup, importFromBackup, importFromCSV, nukeCollection, downloadCSVTemplate } from '../services/exportImportService';
 import { runLedgerIntegrityChecks } from '../utils/integrityChecks';
 import { restoreTransaction, permanentDeleteTransaction } from '../services/transactionService';
@@ -138,10 +139,28 @@ const Settings = () => {
     }
   };
 
-  const handleSaveDefaults = (e) => {
+  const handleSaveDefaults = async (e) => {
     e.preventDefault();
-    setUserSettings({ ...userSettings, ...defaults });
-    showToast('Smart defaults updated successfully.');
+    setLoading(true);
+    try {
+      // Persist defaults to Firebase
+      await updateDoc(doc(db, `ledgers/${LEDGER_ID}`), {
+        defaultCategory: defaults.defaultCategory,
+        defaultPlace: defaults.defaultPlace,
+        defaultTag: defaults.defaultTag,
+        defaultMode: defaults.defaultMode,
+        defaultPayer: defaults.defaultPayer,
+        defaultIncludeMe: defaults.defaultIncludeMe
+      });
+      // Update local store
+      setUserSettings({ ...userSettings, ...defaults });
+      showToast('Smart defaults updated successfully.');
+    } catch (err) {
+      console.error('Error saving defaults:', err);
+      showToast('Failed to save defaults.', true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // --- Data Management Handlers ---

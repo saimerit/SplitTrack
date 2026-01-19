@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, Sparkles, Layers, ArrowRightLeft, Ban } from 'lucide-react';
+import { RefreshCw, Sparkles, Layers, ArrowRightLeft, Ban, CreditCard, MapPin, Tag, FileText, Calendar } from 'lucide-react';
 import { useTransactionFormLogic } from '../../hooks/useTransactionForm';
 import useAppStore from '../../store/useAppStore';
 import useBudgetCheck from '../../hooks/useBudgetCheck';
@@ -81,7 +81,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     return (
         <>
             {ui.showSuccess && <SuccessAnimation message={isEditMode ? "Transaction Updated!" : "Transaction Logged!"} />}
-            <form onSubmit={augmentedHandleSubmit} className="max-w-7xl mx-auto bg-white dark:bg-gray-800 p-4 sm:p-6 md:p-8 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <form onSubmit={augmentedHandleSubmit} className="max-w-7xl mx-auto glass-card-elevated p-4 sm:p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-24 sm:pb-8">
 
                 {/* Space Switcher */}
                 <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-sky-50 dark:bg-sky-900/10 p-3 rounded-lg border border-sky-100 dark:border-sky-900 mb-2 flex items-center justify-between">
@@ -100,22 +100,64 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                 {/* Transaction Type Selector (Extracted) */}
                 <TransactionTypeSelector currentType={formData.type} onTypeChange={actions.handleTypeChange} />
 
-                {/* Refund Sub-types */}
+                {/* Refund Sub-types - Segmented Control */}
                 {ui.isRefundTab && (
-                    <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                            <Button type="button" onClick={() => actions.handleRefundSubTypeChange('product')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${ui.isProductRefund ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
-                                <RefreshCw size={18} className="shrink-0" />
-                                <span>Product Refund</span>
-                            </Button>
-                            <Button type="button" onClick={() => actions.handleRefundSubTypeChange('settlement')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${ui.isSettlement ? 'bg-purple-100 border-purple-500 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
-                                <ArrowRightLeft size={18} className="shrink-0" />
-                                <span>Peer Settlement</span>
-                            </Button>
-                            <Button type="button" onClick={() => actions.handleRefundSubTypeChange('forgiveness')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${ui.isForgiveness ? 'bg-orange-100 border-orange-500 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
-                                <Ban size={18} className="shrink-0" />
-                                <span>Forgive Debt</span>
-                            </Button>
+                    <div className="col-span-1 md:col-span-2 lg:col-span-4">
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-[0.15em] mb-3">
+                            Refund Type
+                        </label>
+
+                        {/* Segmented Control Container */}
+                        <div className="relative p-1 bg-white/5 dark:bg-gray-800/50 rounded-2xl border border-white/10 backdrop-blur-sm">
+                            {/* Sliding Background Indicator */}
+                            <div
+                                className={`absolute top-1 bottom-1 transition-all duration-300 ease-out rounded-xl border border-white/10 ${ui.isProductRefund ? 'bg-linear-to-r from-emerald-500/20 to-green-500/20' :
+                                        ui.isSettlement ? 'bg-linear-to-r from-purple-500/20 to-violet-500/20' :
+                                            'bg-linear-to-r from-orange-500/20 to-amber-500/20'
+                                    }`}
+                                style={{
+                                    width: `calc(${100 / 3}% - 4px)`,
+                                    left: ui.isProductRefund ? 'calc(0% + 2px)' :
+                                        ui.isSettlement ? 'calc(33.33% + 2px)' :
+                                            'calc(66.66% + 2px)'
+                                }}
+                            />
+
+                            {/* Buttons */}
+                            <div className="relative flex">
+                                <button
+                                    type="button"
+                                    onClick={() => actions.handleRefundSubTypeChange('product')}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-sm font-semibold transition-all duration-200 haptic-tap ${ui.isProductRefund ? 'text-emerald-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-300'
+                                        }`}
+                                >
+                                    <RefreshCw size={16} />
+                                    <span className="hidden sm:inline">Product</span>
+                                    <span className="sm:hidden">Refund</span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => actions.handleRefundSubTypeChange('settlement')}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-sm font-semibold transition-all duration-200 haptic-tap ${ui.isSettlement ? 'text-purple-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-300'
+                                        }`}
+                                >
+                                    <ArrowRightLeft size={16} />
+                                    <span className="hidden sm:inline">Settlement</span>
+                                    <span className="sm:hidden">Settle</span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => actions.handleRefundSubTypeChange('forgiveness')}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-sm font-semibold transition-all duration-200 haptic-tap ${ui.isForgiveness ? 'text-orange-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-300'
+                                        }`}
+                                >
+                                    <Ban size={16} />
+                                    <span className="hidden sm:inline">Forgive</span>
+                                    <span className="sm:hidden">Forgive</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -158,21 +200,33 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                     linkableOptions={linkableOptions}
                 />
 
-                {/* Smart Amount Input (Refactored to Safe NumberInput) */}
-                <div className="col-span-full flex flex-col items-center justify-center py-6 bg-gray-50 dark:bg-gray-900/50 rounded-xl mb-2">
-                    <label className="text-sm font-medium text-gray-500 mb-1">Amount</label>
-                    <div className="flex items-baseline text-gray-900 dark:text-white">
-                        <span className="text-3xl font-light mr-1">₹</span>
-                        <NumberInput
-                            value={formData.amount}
-                            onChange={actions.handleAmountChange}
-                            placeholder="0"
-                            className="text-5xl font-bold bg-transparent border-none focus:ring-0 p-0 w-48 text-center placeholder-gray-300 dark:placeholder-gray-700 focus:outline-none"
-                            autoFocus
-                        />
+                {/* Hero Amount Input - Premium Design */}
+                <div className="col-span-full">
+                    <div className="relative glass-card p-8 rounded-2xl overflow-hidden radial-glow">
+                        {/* Shimmer Background */}
+                        <div className="absolute inset-0 bg-linear-to-r from-sky-500/5 via-indigo-500/10 to-purple-500/5 opacity-50" />
+
+                        <div className="relative flex flex-col items-center justify-center">
+                            <label className="text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-3">Amount</label>
+                            <div className="flex items-baseline text-gray-900 dark:text-white">
+                                {/* Shimmer Currency Symbol */}
+                                <span className="text-4xl sm:text-5xl font-extralight mr-2 text-transparent bg-clip-text bg-linear-to-r from-sky-400 to-indigo-400 animate-pulse">
+                                    ₹
+                                </span>
+                                <NumberInput
+                                    value={formData.amount}
+                                    onChange={actions.handleAmountChange}
+                                    placeholder="0"
+                                    className="text-5xl sm:text-6xl font-bold bg-transparent border-none focus:ring-0 p-0 w-56 text-center placeholder-gray-600 dark:placeholder-gray-700 focus:outline-none tabular-nums"
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="mt-2 text-xs text-gray-500 font-medium">Enter amount in Rupees</div>
+                        </div>
                     </div>
                 </div>
-                <Input label="Date" type="date" value={formData.date} onChange={e => setters.setDate(e.target.value)} required />
+
+                <Input label="Date" type="date" value={formData.date} onChange={e => setters.setDate(e.target.value)} required icon={Calendar} />
                 <SearchableSelect label="Category" value={formData.category} onChange={e => actions.handleQuickAddRequest(e.target.value, 'categories', 'Category')} options={categoryOptions} />
                 <SearchableSelect label="Place" value={formData.place} onChange={e => actions.handleQuickAddRequest(e.target.value, 'places', 'Place')} options={placeOptions} />
                 <SearchableSelect label="Tag" value={formData.tag} onChange={e => actions.handleQuickAddRequest(e.target.value, 'tags', 'Tag')} options={tagOptions} />
@@ -255,18 +309,20 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                     </>
                 )}
 
-                {/* Mobile-responsive button group */}
-                <div className="col-span-full flex flex-col sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
-                    <div className="flex gap-3 sm:contents">
-                        <Button type="button" variant="ghost" onClick={actions.resetForm} className="px-3 flex-none" title="Reset Form"><RefreshCw size={20} /></Button>
-                        <Button type="button" variant="secondary" onClick={() => navigate(-1)} className="flex-1 py-3 text-sm sm:text-base">Cancel</Button>
+                {/* Mobile-Sticky Action Bar */}
+                <div className="col-span-full fixed sm:static bottom-0 left-0 right-0 bg-gray-900/95 sm:bg-transparent backdrop-blur-xl sm:backdrop-blur-none border-t border-white/10 sm:border-white/0 p-4 sm:p-0 sm:pt-6 z-50">
+                    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                        <div className="flex gap-3 sm:contents">
+                            <Button type="button" variant="ghost" onClick={actions.resetForm} className="px-3 flex-none haptic-tap" title="Reset Form"><RefreshCw size={20} /></Button>
+                            <Button type="button" variant="secondary" onClick={() => navigate(-1)} className="flex-1 py-3 text-sm sm:text-base haptic-tap">Cancel</Button>
+                        </div>
+                        {!isEditMode && (
+                            <Button type="button" variant="secondary" onClick={actions.handleTemplateSaveRequest} className="flex-1 py-3 text-sm sm:text-base haptic-tap">
+                                <span className="sm:hidden">Save Template</span><span className="hidden sm:inline">Save as Template</span>
+                            </Button>
+                        )}
+                        <Button type="submit" className="flex-1 sm:grow-2 py-3 text-base sm:text-lg shadow-lg shadow-sky-500/25 haptic-tap">{isEditMode ? 'Update' : 'Log Transaction'}</Button>
                     </div>
-                    {!isEditMode && (
-                        <Button type="button" variant="secondary" onClick={actions.handleTemplateSaveRequest} className="flex-1 py-3 text-sm sm:text-base">
-                            <span className="sm:hidden">Save Template</span><span className="hidden sm:inline">Save as Template</span>
-                        </Button>
-                    )}
-                    <Button type="submit" className="flex-1 sm:grow-2 py-3 text-base sm:text-lg shadow-md">{isEditMode ? 'Update' : 'Log Transaction'}</Button>
                 </div>
             </form>
 

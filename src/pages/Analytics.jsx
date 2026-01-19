@@ -121,21 +121,47 @@ const Analytics = () => {
         </Button>
       </div>
 
-      {/* KPI GRID */}
+      {/* KPI GRID - BENTO LAYOUT */}
       <section>
-        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 px-1">Key Performance Indicators</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <StatCard title="Total Consumption" value={stats.totalSpend * 100} colorTheme="blue" />
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-[0.15em] mb-4 px-1">Key Performance Indicators</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mesh-gradient-bg">
+          <StatCard title="Total Consumption" value={stats.totalSpend * 100} colorTheme="blue" className="sm:col-span-2 lg:col-span-2" />
           <StatCard title="Total Received" value={stats.totalReceived * 100} colorTheme="emerald" />
-          <StatCard title="Net Cash Flow" value={stats.customCashFlow * 100} subValue="Spend + Lent - Received" colorTheme="dynamic" />
+          <StatCard title="Net Cash Flow" value={stats.customCashFlow * 100} subtitle="Spend + Lent - Received" colorTheme="dynamic" />
           <StatCard title="Total Lent" value={stats.totalLent * 100} colorTheme="orange" />
           <StatCard title="Active Days" value={stats.activeDays} colorTheme="gray" formatter={(v) => v} />
         </div>
       </section>
 
+      {/* NEW: ACTIONABLE METRICS */}
+      <section>
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-[0.15em] mb-4 px-1">Actionable Insights</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard
+            title="Daily Avg Spend"
+            value={stats.activeDays > 0 ? (stats.totalSpend * 100) / stats.activeDays : 0}
+            subtitle="Burn Rate"
+            colorTheme="rose"
+          />
+          <StatCard
+            title="Savings Rate"
+            value={stats.totalIncome > 0 ? ((stats.totalIncome - stats.totalSpend) / stats.totalIncome) * 100 : 0}
+            subtitle="% of income saved"
+            colorTheme="emerald"
+            formatter={(v) => `${v.toFixed(1)}%`}
+          />
+          <StatCard
+            title="Net Surplus"
+            value={(stats.totalIncome - stats.totalSpend) * 100}
+            subtitle="Income - Expenses"
+            colorTheme="dynamic"
+          />
+        </div>
+      </section>
+
       {/* DETAILED OUTFLOW ANALYSIS */}
       <section>
-        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 px-1">Analysis Metrics</h3>
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-[0.15em] mb-4 px-1">Analysis Metrics</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
             title="Peak Monthly Spend"
@@ -227,6 +253,7 @@ const Analytics = () => {
             labels={stats.monthlyChart.labels}
             spendData={stats.monthlyChart.spendData}
             lentData={stats.monthlyChart.lentData}
+            baseline={stats.baseline3Month}
           />
         </div>
       </div>
@@ -237,23 +264,28 @@ const Analytics = () => {
 
 // --- SUB-COMPONENTS ---
 
-const ForecastBar = ({ title, current, projected, percent, color }) => (
-  <div>
-    <div className="flex justify-between text-sm mb-2">
-      <span className="font-semibold text-gray-600 dark:text-gray-300">{title}</span>
-      <span className="text-gray-500 dark:text-gray-400">
-        <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(current * 100)}</span> / {formatCurrency(projected * 100)}
-      </span>
+const ForecastBar = ({ title, current, projected, percent, color }) => {
+  // Add shimmer animation when near limit (>=80%)
+  const isNearLimit = percent >= 80;
+
+  return (
+    <div>
+      <div className="flex justify-between text-sm mb-2">
+        <span className="font-semibold text-gray-600 dark:text-gray-300">{title}</span>
+        <span className="text-gray-500 dark:text-gray-400">
+          <span className="font-medium text-gray-900 dark:text-white tabular-nums">{formatCurrency(current * 100)}</span> / <span className="tabular-nums">{formatCurrency(projected * 100)}</span>
+        </span>
+      </div>
+      <div className="h-3 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+        <div
+          className={`h-full ${color} rounded-full transition-all duration-1000 ease-out ${isNearLimit ? 'shimmer-bar' : ''}`}
+          style={{ width: `${Math.min(percent, 100)}%` }}
+        />
+      </div>
+      <div className="text-right text-xs text-gray-400 mt-1 tabular-nums">{Math.round(percent)}% of projection</div>
     </div>
-    <div className="h-3 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-      <div
-        className={`h-full ${color} rounded-full transition-all duration-1000 ease-out`}
-        style={{ width: `${Math.min(percent, 100)}%` }}
-      />
-    </div>
-    <div className="text-right text-xs text-gray-400 mt-1">{Math.round(percent)}% of projection</div>
-  </div>
-);
+  );
+};
 
 const HeatmapPanel = ({ data }) => {
   const maxVal = Math.max(...data.map(Math.abs)) || 1;

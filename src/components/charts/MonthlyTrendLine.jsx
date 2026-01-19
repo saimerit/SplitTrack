@@ -11,6 +11,7 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
+import annotationPlugin from 'chartjs-plugin-annotation';
 import { useTheme } from '../../hooks/useTheme';
 
 ChartJS.register(
@@ -21,10 +22,11 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
+  annotationPlugin
 );
 
-const MonthlyTrendLine = ({ labels, spendData, lentData }) => {
+const MonthlyTrendLine = ({ labels, spendData, lentData, baseline = null }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const textColor = isDark ? '#d1d5db' : '#374151';
@@ -103,6 +105,29 @@ const MonthlyTrendLine = ({ labels, spendData, lentData }) => {
           label: (ctx) => ` ${ctx.dataset.label}: ₹${Number(ctx.raw).toFixed(2)}`
         }
       },
+      // Baseline annotation (3-month average)
+      annotation: baseline !== null ? {
+        annotations: {
+          baselineLine: {
+            type: 'line',
+            yMin: baseline,
+            yMax: baseline,
+            borderColor: 'rgba(168, 85, 247, 0.7)', // purple-500
+            borderWidth: 2,
+            borderDash: [6, 4],
+            label: {
+              display: true,
+              content: '3-Month Avg',
+              position: 'end',
+              backgroundColor: 'rgba(168, 85, 247, 0.8)',
+              color: '#fff',
+              font: { size: 10, weight: 'bold' },
+              padding: { x: 6, y: 3 },
+              borderRadius: 4
+            }
+          }
+        }
+      } : {}
     },
     scales: {
       x: {

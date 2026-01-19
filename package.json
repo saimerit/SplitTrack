@@ -16,6 +16,7 @@
     "@capacitor/core": "^7.4.4",
     "@tailwindcss/vite": "^4.1.17",
     "chart.js": "^4.5.1",
+    "chartjs-plugin-annotation": "^3.1.0",
     "clsx": "^2.1.1",
     "firebase": "^12.6.0",
     "firebase-admin": "^13.6.0",

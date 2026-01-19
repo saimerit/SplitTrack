@@ -191,6 +191,15 @@ self.onmessage = (e) => {
         return new Date(y, m - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     });
 
+    // Calculate 3-month rolling average baseline
+    const spendDataArray = monthlyKeys.map(k => monthlySpendStats[k] || 0);
+    let baseline3Month = null;
+    if (spendDataArray.length >= 3) {
+        // Get last 3 months (excluding current if partial)
+        const relevantMonths = spendDataArray.slice(-3);
+        baseline3Month = relevantMonths.reduce((sum, v) => sum + v, 0) / relevantMonths.length;
+    }
+
     // Forecasts
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const daysPassed = Math.max(1, now.getDate());
@@ -215,6 +224,7 @@ self.onmessage = (e) => {
         projectedSpend, forecastSpendPercent,
         projectedLending, forecastLentPercent,
         heatmapData,
+        baseline3Month, // NEW: 3-month rolling average for trend baseline
         monthlyChart: {
             labels: monthlyChartLabels,
             spendData: monthlyKeys.map(k => monthlySpendStats[k] || 0),

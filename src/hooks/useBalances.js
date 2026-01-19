@@ -45,15 +45,33 @@ export const useBalances = (transactions, participants) => {
                     const recipient = txn.participants?.[0];
                     if (!recipient) return;
 
-                    if (payer === 'me') {
-                        if (recipient !== 'me') {
-                            myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;
-                            totalPaymentsMadeByMe += amount;
+                    if (txn.isForgiveness) {
+                        // FORGIVENESS: Reduces debt, doesn't involve money transfer
+                        if (payer === 'me') {
+                            // I'm forgiving their debt to me - reduce their balance
+                            if (recipient !== 'me') {
+                                myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) - amount;
+                                myTotalExpenseShare += amount; // I absorbed their share
+                            }
+                        } else {
+                            // They're forgiving my debt to them - reduce my debt
+                            if (recipient === 'me') {
+                                myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) + amount;
+                                myTotalExpenseShare -= amount; // They absorbed my share
+                            }
                         }
                     } else {
-                        if (recipient === 'me') {
-                            myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
-                            totalRepaymentsMadeToMe += amount;
+                        // SETTLEMENT: Actual money transfer
+                        if (payer === 'me') {
+                            if (recipient !== 'me') {
+                                myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;
+                                totalPaymentsMadeByMe += amount;
+                            }
+                        } else {
+                            if (recipient === 'me') {
+                                myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
+                                totalRepaymentsMadeToMe += amount;
+                            }
                         }
                     }
                 } else {

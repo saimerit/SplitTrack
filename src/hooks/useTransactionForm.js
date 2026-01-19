@@ -22,7 +22,9 @@ const getTxnDateStr = (txn) => {
 // Helper for Smart Name generation
 const generateSmartNameHelper = (links, subTypeStr) => {
     if (!links || links.length === 0) return "";
-    const prefix = (subTypeStr === 'settlement') ? "Settlement" : "Refund";
+    let prefix = "Refund";
+    if (subTypeStr === 'settlement') prefix = "Settlement";
+    else if (subTypeStr === 'forgiveness') prefix = "Forgiven";
     return `${prefix}: ` + links.map(t => t.name).join(', ');
 };
 
@@ -114,6 +116,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
     const isRefundTab = type === 'refund';
     const isSettlement = isRefundTab && refundSubType === 'settlement';
+    const isForgiveness = isRefundTab && refundSubType === 'forgiveness';
     const isProductRefund = isRefundTab && refundSubType === 'product';
     const isIncome = type === 'income';
 
@@ -170,8 +173,34 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         return Math.max(0, debt);
     }, [groupTransactions, isEditMode, initialData]);
 
+    // Calculate net debt between 'me' and another person
+    // Returns positive if I owe them, negative if they owe me
+    const getNetDebtWithPerson = useCallback((personId) => {
+        if (!personId || personId === 'me') return 0;
+
+        let iOweThem = 0;  // Debts I owe to this person
+        let theyOweMe = 0; // Debts this person owes to me
+
+        groupTransactions.forEach(t => {
+            if (t.isReturn || t.isDeleted) return;
+
+            // Transactions where this person paid and I have a split (I owe them)
+            if (t.payer === personId && t.splits?.['me'] > 0) {
+                iOweThem += getOutstandingDebt(t, 'me');
+            }
+
+            // Transactions where I paid and they have a split (they owe me)
+            if (t.payer === 'me' && t.splits?.[personId] > 0) {
+                theyOweMe += getOutstandingDebt(t, personId);
+            }
+        });
+
+        return iOweThem - theyOweMe; // Positive = I owe them, Negative = they owe me
+    }, [groupTransactions, getOutstandingDebt]);
+
     const eligibleParents = useMemo(() => {
-        if (!isSettlement) {
+        // For settlements and forgiveness, show debt-based transactions
+        if (!isSettlement && !isForgiveness) {
             return groupTransactions
                 .filter(t => t.amount > 0 && !t.isReturn)
                 .filter(t => !linkedTxns.some(l => l.id === t.id))
@@ -207,6 +236,8 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         });
 
         let all = [...debtsIOwe, ...debtsTheyOwe];
+
+        // Filter by debtor - works the same for both settlement and forgiveness
         if (repaymentFilter) all = all.filter(t => t.counterParty === repaymentFilter);
         else {
             const targetPerson = payer === 'me' ? selectedParticipants[0] : payer;
@@ -216,7 +247,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         const result = all.filter(t => t.outstanding > 0).filter(t => !linkedTxns.some(l => l.id === t.id)).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
         return [...new Map(result.map(item => [item.id, item])).values()];
-    }, [groupTransactions, linkedTxns, isSettlement, payer, selectedParticipants, repaymentFilter, getOutstandingDebt]);
+    }, [groupTransactions, linkedTxns, isSettlement, isForgiveness, payer, selectedParticipants, repaymentFilter, getOutstandingDebt]);
 
     // --- EFFECTS ---
 
@@ -395,9 +426,10 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         setSelectedParticipants([newRecipient]);
     };
 
-    const handleFlipDirection = (newPositiveAmount, currentLinks) => {
+    const handleFlipDirection = (newPositiveAmount, currentLinks, counterParty = null) => {
         const oldPayer = payer;
-        const oldRecipient = selectedParticipants[0];
+        // Use the provided counterParty if selectedParticipants is empty
+        const oldRecipient = selectedParticipants[0] || counterParty;
         if (!oldRecipient || oldRecipient === oldPayer) return;
         setPayer(oldRecipient);
         setSelectedParticipants([oldPayer]);
@@ -414,7 +446,8 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         let allocValue = 0;
         let newLink = null;
 
-        if (!isSettlement) {
+        // Product refund logic - uses full transaction amount
+        if (!isSettlement && !isForgiveness) {
             allocValue = (parent.remainingRefundable || parent.amount) / 100;
             setAmount(allocValue.toFixed(2));
             if (parent.payer) setPayer(parent.payer);
@@ -449,17 +482,29 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             setLinkedTxns([newLink]);
             updateSmartName([newLink], refundSubType);
         } else {
+            // Settlement and Forgiveness logic - uses debtor's outstanding share
             if (payer === 'me' && selectedParticipants.length === 0) {
                 const inferred = parent.counterParty;
                 if (inferred && inferred !== 'me') setSelectedParticipants([inferred]);
             }
             const outstandingRupees = parent.outstanding / 100;
             const isMyDebt = parent.relationType === 'owed_by_me';
-            allocValue = (payer === 'me') ? (isMyDebt ? outstandingRupees : -outstandingRupees) : (isMyDebt ? -outstandingRupees : outstandingRupees);
+
+            // Settlement: owed_by_me = positive (I pay off my debt), owed_to_me = negative (flip, they pay me)
+            // Forgiveness: owed_to_me = positive (I forgive, I'm the giver), owed_by_me = negative (flip, they forgive me)
+            if (isForgiveness) {
+                // Inverted signs for forgiveness
+                allocValue = (payer === 'me') ? (isMyDebt ? -outstandingRupees : outstandingRupees) : (isMyDebt ? outstandingRupees : -outstandingRupees);
+            } else {
+                // Settlement logic
+                allocValue = (payer === 'me') ? (isMyDebt ? outstandingRupees : -outstandingRupees) : (isMyDebt ? -outstandingRupees : outstandingRupees);
+            }
 
             const currentTotal = parseFloat(amount) || 0;
             let newTotal = currentTotal + allocValue;
             let shouldFlip = false;
+
+            // Flip direction if total goes negative (works for both settlement and forgiveness)
             if (newTotal < 0) { shouldFlip = true; newTotal = Math.abs(newTotal); }
 
             newLink = {
@@ -475,7 +520,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
             // FIX: Append new link instead of replacing
             const updatedLinks = [...linkedTxns, newLink];
-            if (shouldFlip) handleFlipDirection(newTotal, updatedLinks);
+            if (shouldFlip) handleFlipDirection(newTotal, updatedLinks, parent.counterParty);
             else { setLinkedTxns(updatedLinks); setAmount(newTotal.toFixed(2)); }
             updateSmartName(updatedLinks, refundSubType);
         }
@@ -654,22 +699,22 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         const finalAmount = amountInPaise * multiplier;
 
         let safeParticipants = selectedParticipants;
-        if (isSettlement) {
-            // Settlement Logic: Ensure non-empty participants
+        if (isSettlement || isForgiveness) {
+            // Settlement/Forgiveness Logic: Ensure non-empty participants
             if (!selectedParticipants || selectedParticipants.length === 0) {
-                // Default to payer? No, settlement must have a recipient.
+                // Default to payer? No, settlement/forgiveness must have a recipient.
                 // We rely on handleSubmit validation, but for safety, filter empty.
             }
         } else {
             if (!selectedParticipants.length && payer === 'me') safeParticipants = []; // Just me
         }
 
-        if (!isSettlement && payer !== 'me' && !selectedParticipants.includes(payer) && includePayer) {
+        if (!isSettlement && !isForgiveness && payer !== 'me' && !selectedParticipants.includes(payer) && includePayer) {
             safeParticipants = [...safeParticipants, payer];
         }
 
         let finalSplits = { ...splits };
-        if (!isSettlement && !isIncome && splitMethod === 'equal') {
+        if (!isSettlement && !isForgiveness && !isIncome && splitMethod === 'equal') {
             const involvedCount = splitAllocatorParticipants.length;
             if (involvedCount > 0) {
                 const absAmount = Math.abs(amountInPaise);
@@ -697,8 +742,12 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         const linkedTransactionsData = linkedTxns.map(t => ({ id: t.id, amount: Math.round(parseFloat(t.allocated) * 100) * multiplier }));
         const parentIds = linkedTransactionsData.map(t => t.id);
 
+        // Ensure we don't pass undefined values to Firebase
+        const participantForSettlement = safeParticipants[0] || null;
+        const firstParentId = parentIds.length > 0 ? parentIds[0] : null;
+
         let txnData = {
-            expenseName: name, amount: finalAmount, type: isSettlement ? 'expense' : type,
+            expenseName: name, amount: finalAmount, type: (isSettlement || isForgiveness) ? 'expense' : type,
             category: category.startsWith('add_new') ? '' : category,
             place: place.startsWith('add_new') ? '' : place,
             tag: tag.startsWith('add_new') ? '' : tag,
@@ -710,14 +759,17 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                     amount: Math.round(parseFloat(p.amount) * 100) * multiplier
                 }))
                 : [{ mode: mode.startsWith('add_new') ? '' : mode, amount: amountInPaise * multiplier }],
-            description, timestamp: Timestamp.fromDate(new Date(date)),
+            description: isForgiveness ? `Debt Forgiven: ${description}`.trim() : description,
+            timestamp: Timestamp.fromDate(new Date(date)),
             dateString: date,
-            payer: isIncome ? 'me' : payer, isReturn: isSettlement,
-            participants: isIncome ? [] : (isSettlement ? [safeParticipants[0]] : safeParticipants),
-            splitMethod: (isSettlement || isIncome) ? 'none' : splitMethod,
-            splits: (isSettlement || isIncome) ? {} : finalSplits,
+            payer: isIncome ? 'me' : payer,
+            isReturn: isSettlement || isForgiveness,
+            isForgiveness: isForgiveness || false,
+            participants: isIncome ? [] : ((isSettlement || isForgiveness) ? (participantForSettlement ? [participantForSettlement] : []) : safeParticipants),
+            splitMethod: (isSettlement || isForgiveness || isIncome) ? 'none' : splitMethod,
+            splits: (isSettlement || isForgiveness || isIncome) ? {} : finalSplits,
             linkedTransactions: linkedTransactionsData, parentTransactionIds: parentIds,
-            parentTransactionId: parentIds.length > 0 ? parentIds[0] : null, isLinkedRefund: parentIds.length > 0,
+            parentTransactionId: firstParentId, isLinkedRefund: parentIds.length > 0,
             groupId: formGroupId
         };
 
@@ -805,7 +857,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             suggestion, setSuggestion,
             showSuccess,
             // Computed booleans
-            isRefundTab, isSettlement, isProductRefund, isIncome
+            isRefundTab, isSettlement, isForgiveness, isProductRefund, isIncome
         },
 
         // 4. Linked Transaction Logic

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, Sparkles, Layers, ArrowRightLeft } from 'lucide-react';
+import { RefreshCw, Sparkles, Layers, ArrowRightLeft, Ban } from 'lucide-react';
 import { useTransactionFormLogic } from '../../hooks/useTransactionForm';
 import useAppStore from '../../store/useAppStore';
 import useBudgetCheck from '../../hooks/useBudgetCheck';
@@ -56,17 +56,19 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
     const { eligibleParents = [] } = data;
     const { getName, getTxnDateStr } = utils;
-    const { isSettlement } = ui;
+    const { isSettlement, isForgiveness } = ui;
 
     const linkableOptions = useMemo(() => {
         if (!eligibleParents) return [];
         return [
             { value: '', label: '-- Select Expense to Link --' },
             ...eligibleParents.map(t => {
-                if (!isSettlement) {
+                // For product refunds, show refundable amount
+                if (!isSettlement && !isForgiveness) {
                     const rem = t.netAmount !== undefined ? t.netAmount : t.amount;
                     return { value: t.id, label: `${t.expenseName} (Refundable: ₹${(rem / 100).toFixed(2)}) - ${getTxnDateStr(t)}`, className: 'text-gray-800 dark:text-gray-200', data: t };
                 }
+                // For settlements and forgiveness, show counterParty's outstanding share
                 const isOwedToMe = t.relationType === 'owed_to_me';
                 const sign = isOwedToMe ? '+' : '-';
                 const colorClass = isOwedToMe ? 'text-green-600 dark:text-green-400 font-medium' : 'text-red-600 dark:text-red-400 font-medium';
@@ -74,7 +76,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                 return { value: t.id, label: `${prefix}${t.expenseName} (${sign}₹${(t.outstanding / 100).toFixed(2)}) - ${getTxnDateStr(t)}`, className: colorClass, data: t };
             }),
         ];
-    }, [eligibleParents, getName, getTxnDateStr, isSettlement]);
+    }, [eligibleParents, getName, getTxnDateStr, isSettlement, isForgiveness]);
 
     return (
         <>
@@ -102,13 +104,17 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                 {ui.isRefundTab && (
                     <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                            <Button type="button" onClick={() => actions.handleRefundSubTypeChange('product')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${!ui.isSettlement ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
+                            <Button type="button" onClick={() => actions.handleRefundSubTypeChange('product')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${ui.isProductRefund ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
                                 <RefreshCw size={18} className="shrink-0" />
                                 <span>Product Refund</span>
                             </Button>
                             <Button type="button" onClick={() => actions.handleRefundSubTypeChange('settlement')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${ui.isSettlement ? 'bg-purple-100 border-purple-500 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
                                 <ArrowRightLeft size={18} className="shrink-0" />
                                 <span>Peer Settlement</span>
+                            </Button>
+                            <Button type="button" onClick={() => actions.handleRefundSubTypeChange('forgiveness')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-md text-sm border font-medium transition-colors ${ui.isForgiveness ? 'bg-orange-100 border-orange-500 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}>
+                                <Ban size={18} className="shrink-0" />
+                                <span>Forgive Debt</span>
                             </Button>
                         </div>
                     </div>
@@ -185,8 +191,8 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                                 setters.setIsMultiMode(!formData.isMultiMode);
                             }}
                             className={`text-xs font-medium px-3 py-1 rounded-full transition-colors ${formData.isMultiMode
-                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                                    : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
                                 }`}
                         >
                             {formData.isMultiMode ? '✓ Multi-Mode' : 'Multi-Mode'}

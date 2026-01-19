@@ -63,15 +63,36 @@ export const rectifyAllStats = async (participants = []) => {
       const recipient = txn.participants?.[0];
       if (!recipient) return;
 
-      if (payer === 'me') {
-        if (recipient !== 'me') {
-          myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;
-          totalPaymentsMadeByMe += amount;
+      if (txn.isForgiveness) {
+        // FORGIVENESS: Reduces debt, doesn't involve money transfer
+        // Forgiving means absorbing their expense share into mine
+        if (payer === 'me') {
+          // I'm forgiving their debt to me - reduce their balance (they owe me less)
+          if (recipient !== 'me') {
+            myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) - amount;
+            // I'm absorbing their expense share
+            myTotalExpenseShare += amount;
+          }
+        } else {
+          // They're forgiving my debt to them - reduce my debt to them (I owe them less)
+          if (recipient === 'me') {
+            myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) + amount;
+            // My expense share decreases (they absorbed it)
+            myTotalExpenseShare -= amount;
+          }
         }
       } else {
-        if (recipient === 'me') {
-          myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
-          totalRepaymentsMadeToMe += amount;
+        // SETTLEMENT: Actual money transfer
+        if (payer === 'me') {
+          if (recipient !== 'me') {
+            myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;
+            totalPaymentsMadeByMe += amount;
+          }
+        } else {
+          if (recipient === 'me') {
+            myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
+            totalRepaymentsMadeToMe += amount;
+          }
         }
       }
     } else {

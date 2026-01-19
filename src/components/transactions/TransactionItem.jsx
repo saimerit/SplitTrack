@@ -94,12 +94,24 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
   if (txn.isReturn) {
     const recipientId = txn.participants[0];
     const recipientName = getName(recipientId);
-    if (txn.payer === 'me') {
-      shareText = `You repaid ${recipientName}`;
-      shareColor = 'text-red-600 font-medium';
-    } else if (recipientId === 'me') {
-      shareText = `${payerName} repaid you`;
-      shareColor = 'text-green-600 font-medium';
+    if (txn.isForgiveness) {
+      // Forgiveness transaction
+      if (txn.payer === 'me') {
+        shareText = `You forgave ${recipientName}`;
+        shareColor = 'text-orange-600 font-medium';
+      } else if (recipientId === 'me') {
+        shareText = `Forgiven by ${payerName}`;
+        shareColor = 'text-orange-600 font-medium';
+      }
+    } else {
+      // Regular settlement/repayment
+      if (txn.payer === 'me') {
+        shareText = `You repaid ${recipientName}`;
+        shareColor = 'text-red-600 font-medium';
+      } else if (recipientId === 'me') {
+        shareText = `${payerName} repaid you`;
+        shareColor = 'text-green-600 font-medium';
+      }
     }
   } else if (txn.payer === 'me') {
     // I paid - check if I have a share or lent the full amount

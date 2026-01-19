@@ -4,11 +4,11 @@ import { formatCurrency } from '../../../utils/formatters';
 import SearchableSelect from '../../common/SearchableSelect';
 
 const ExpenseLinker = ({ ui, formData, setters, links, debtorOptions, linkableOptions }) => {
-    if (!ui.isProductRefund && !ui.isSettlement) return null;
+    if (!ui.isProductRefund && !ui.isSettlement && !ui.isForgiveness) return null;
 
     return (
         <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-blue-50 dark:bg-blue-900/20 p-4 rounded border border-blue-100 dark:border-blue-800">
-            {ui.isSettlement && (
+            {(ui.isSettlement || ui.isForgiveness) && (
                 <div className="mb-4">
                     <label className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase mb-1 flex items-center gap-2">
                         <Filter size={12} /> Filter by Debtor

@@ -81,7 +81,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
     return (
         <>
             {ui.showSuccess && <SuccessAnimation message={isEditMode ? "Transaction Updated!" : "Transaction Logged!"} />}
-            <form onSubmit={augmentedHandleSubmit} className="max-w-7xl mx-auto glass-card-elevated p-4 sm:p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-24 sm:pb-8">
+            <form onSubmit={augmentedHandleSubmit} className="max-w-7xl mx-auto glass-card-elevated p-4 sm:p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
                 {/* Space Switcher */}
                 <div className="col-span-1 md:col-span-2 lg:col-span-4 bg-sky-50 dark:bg-sky-900/10 p-3 rounded-lg border border-sky-100 dark:border-sky-900 mb-2 flex items-center justify-between">
@@ -112,8 +112,8 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                             {/* Sliding Background Indicator */}
                             <div
                                 className={`absolute top-1 bottom-1 transition-all duration-300 ease-out rounded-xl border border-white/10 ${ui.isProductRefund ? 'bg-linear-to-r from-emerald-500/20 to-green-500/20' :
-                                        ui.isSettlement ? 'bg-linear-to-r from-purple-500/20 to-violet-500/20' :
-                                            'bg-linear-to-r from-orange-500/20 to-amber-500/20'
+                                    ui.isSettlement ? 'bg-linear-to-r from-purple-500/20 to-violet-500/20' :
+                                        'bg-linear-to-r from-orange-500/20 to-amber-500/20'
                                     }`}
                                 style={{
                                     width: `calc(${100 / 3}% - 4px)`,
@@ -309,8 +309,8 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                     </>
                 )}
 
-                {/* Mobile-Sticky Action Bar */}
-                <div className="col-span-full fixed sm:static bottom-0 left-0 right-0 bg-gray-900/95 sm:bg-transparent backdrop-blur-xl sm:backdrop-blur-none border-t border-white/10 sm:border-white/0 p-4 sm:p-0 sm:pt-6 z-50">
+                {/* Action Bar */}
+                <div className="col-span-full pt-6 border-t border-white/10">
                     <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                         <div className="flex gap-3 sm:contents">
                             <Button type="button" variant="ghost" onClick={actions.resetForm} className="px-3 flex-none haptic-tap" title="Reset Form"><RefreshCw size={20} /></Button>

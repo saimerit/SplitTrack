@@ -29,6 +29,7 @@ const History = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [localSearchQuery, setLocalSearchQuery] = useState('');
+  const [bulkProgress, setBulkProgress] = useState(null); // NEW: Progress state for bulk actions
 
   // Reset to page 1 if data changes significantly
   useEffect(() => {
@@ -134,14 +135,16 @@ const History = () => {
   const handleBulkDelete = () => setShowBulkConfirm(true);
 
   const confirmBulkDelete = async () => {
-    // Close modal and reset selection immediately
+    // Close modal immediately
     const idsToDelete = [...selectedIds];
     setShowBulkConfirm(false);
-    setIsSelectionMode(false);
-    setSelectedIds(new Set());
+
+    // Initialize progress tracking
+    setBulkProgress({ current: 0, total: idsToDelete.length });
 
     let successCount = 0;
-    for (const id of idsToDelete) {
+    for (let i = 0; i < idsToDelete.length; i++) {
+      const id = idsToDelete[i];
       const txn = transactions.find(t => t.id === id);
       if (txn) {
         try {
@@ -151,7 +154,14 @@ const History = () => {
           console.error('Bulk delete error for:', id, err);
         }
       }
+      // Update progress after each deletion
+      setBulkProgress({ current: i + 1, total: idsToDelete.length });
     }
+
+    // Clear progress and selection after completion
+    setBulkProgress(null);
+    setIsSelectionMode(false);
+    setSelectedIds(new Set());
     showToast(`Deleted ${successCount} of ${idsToDelete.length} transactions.`);
   };
 
@@ -324,6 +334,17 @@ const History = () => {
               Cancel
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Progress Overlay */}
+      {bulkProgress && (
+        <div className="fixed inset-0 z-100 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+          <div className="w-16 h-16 border-4 border-sky-500/20 border-t-sky-500 rounded-full animate-spin mb-4" />
+          <div className="text-white font-mono text-xl">
+            {Math.round((bulkProgress.current / bulkProgress.total) * 100)}%
+          </div>
+          <p className="text-gray-400 text-sm mt-2">Updating Ledger...</p>
         </div>
       )}
 

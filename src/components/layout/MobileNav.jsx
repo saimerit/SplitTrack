@@ -132,7 +132,7 @@ const MobileNav = () => {
             </div>
 
             {/* --- BOTTOM NAVIGATION BAR --- */}
-            <div className="fixed bottom-0 left-0 z-50 w-full h-16 border-t border-white/10 md:hidden pb-safe" style={{ backgroundColor: 'var(--bg-surface)' }}>
+            <div className="mobile-nav fixed bottom-0 left-0 z-50 w-full h-16 border-t border-white/10 md:hidden" style={{ backgroundColor: 'var(--bg-surface)' }}>
                 <div className="grid h-full grid-cols-4 mx-auto max-w-lg">
 
                     <NavLink to="/" className={navClass} onClick={closeMenu}>

@@ -639,3 +639,34 @@ export const deleteTemplate = async (id) => {
   await firestoreDeleteDoc(ref);
 };
 
+/**
+ * DEEP REPAIR:
+ * Iterates through every transaction and recalibrates its settlement metadata.
+ * Use this to fix "Partial" statuses that don't match actual linked payments.
+ */
+export const repairAllTransactionStats = async () => {
+  const colRef = collection(db, COLLECTION_PATH);
+  const q = query(colRef, where("isDeleted", "==", false));
+  const snap = await getDocs(q);
+  const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  const total = transactions.length;
+  let processed = 0;
+
+  // Process in sequence to avoid hitting Firestore rate limits for massive ledgers
+  for (const txn of transactions) {
+    // Only repair items that could have children (expenses) or are intended to be parents
+    if (txn.type === 'expense' || txn.amount > 0) {
+      await updateParentStats(txn.id);
+    }
+    processed++;
+    if (processed % 10 === 0) console.log(`Repair progress: ${processed}/${total}`);
+  }
+
+  // Final step: Sync the global dashboard
+  const participants = useAppStore.getState().rawParticipants;
+  await rectifyAllStats(participants);
+
+  return { processed };
+};
+

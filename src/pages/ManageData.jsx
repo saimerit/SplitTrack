@@ -9,9 +9,9 @@ import ConfirmModal from '../components/modals/ConfirmModal';
 import RecurringManager from '../components/recurring/RecurringManager';
 import ParticipantGroupsManager from '../components/participants/ParticipantGroupsManager';
 import SmartRulesManager from '../components/rules/SmartRulesManager';
-import DataHealthCheck from '../components/data/DataHealthCheck';
-
-const LEDGER_ID = 'main-ledger';
+{ activeTab === 'recurring' && <RecurringManager /> }
+{ activeTab === 'smartRules' && <SmartRulesManager /> }
+      </div >
 
 const SimpleManager = ({ title, data, collectionName, onDelete }) => {
   const [newItem, setNewItem] = useState('');
@@ -232,7 +232,6 @@ const ManageData = () => {
     { id: 'modes', label: 'Modes' },
     { id: 'recurring', label: 'Recurring', icon: <Repeat size={16} /> },
     { id: 'smartRules', label: 'Smart Rules', icon: <Sparkles size={16} /> },
-    { id: 'dataHealth', label: 'Data Health', icon: <ShieldCheck size={16} /> },
   ];
 
   return (

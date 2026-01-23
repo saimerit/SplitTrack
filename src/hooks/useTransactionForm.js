@@ -170,7 +170,13 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                         console.log(`[DEBT] Parent: ${parentTxn.expenseName.slice(0, 20)}, Settlement: ${rel.expenseName?.slice(0, 20)}, link.amount=${link.amount}, subtracting ${Math.abs(link.amount)}`);
                         // If parent is a settlement (credit), we ADD to reduce the credit (move closer to 0)
                         if (parentTxn.isReturn) {
-                            debt += Math.abs(link.amount);
+                            // If it's a deficit (positive debt), we pay it off -> subtract
+                            if (debt > 0) {
+                                debt -= Math.abs(link.amount);
+                            } else {
+                                // If it's a credit (negative debt), we consume it -> add (move closer to 0)
+                                debt += Math.abs(link.amount);
+                            }
                         } else {
                             debt -= Math.abs(link.amount);
                         }
@@ -222,12 +228,37 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     const eligibleParents = useMemo(() => {
         // For settlements and forgiveness, show debt-based transactions
         if (!isSettlement && !isForgiveness) {
-            return groupTransactions
+            // Standard Case: Expenses with remaining balance
+            const standardDebts = groupTransactions
                 .filter(t => t.amount > 0 && !t.isReturn)
                 .filter(t => !linkedTxns.some(l => l.id === t.id))
                 .map(t => ({ ...t, remainingRefundable: (t.netAmount !== undefined ? t.netAmount : t.amount) }))
-                .filter(t => t.remainingRefundable > 0)
-                .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                .filter(t => t.remainingRefundable > 0);
+
+            // SPECIAL CASE: Overpaid Settlements -> REMOVED as per user request
+            // We only track Standard Debts and Partial Settlement Deficits now.
+
+            // CHAINING: Partial Settlements -> Treat as ongoing Debt
+            const partialSettlements = groupTransactions
+                .filter(t => t.isReturn && t.remainingAmount > 0 && t.settlementStatus === 'partial' && t.settlementDeficit > 0)
+                .filter(t => !linkedTxns.some(l => l.id === t.id))
+                .map(t => {
+                    const iPaid = t.payer === 'me';
+                    // If I paid (partial), I still owe (Deficit) -> owed_by_me
+                    // If They paid (partial), They still owe (Deficit) -> owed_to_me
+                    const relationType = iPaid ? 'owed_by_me' : 'owed_to_me';
+
+                    return {
+                        ...t,
+                        expenseName: `${t.expenseName} (Deficit)`,
+                        amount: t.remainingAmount, // The Deficit
+                        remainingRefundable: t.remainingAmount,
+                        relationType: relationType,
+                        isPartialAdjustment: true
+                    };
+                });
+
+            return [...standardDebts, ...partialSettlements].sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
         }
 
         const debtsIOwe = groupTransactions.filter(t => !t.isReturn && t.payer !== 'me' && t.splits?.['me'] > 0)
@@ -295,29 +326,11 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 }
             }
 
-            // CHECK FOR CONSUMED CREDIT:
-            // If this settlement is overpaid (negative totalRemaining), check if any NEW transactions
-            // have linked TO this settlement as a parent to use that credit.
-            if (totalRemaining < 0) {
-                const childUsage = groupTransactions
-                    .filter(child =>
-                        !child.isDeleted &&
-                        (child.parentTransactionId === t.id || (child.parentTransactionIds && child.parentTransactionIds.includes(t.id)))
-                    )
-                    .reduce((sum, child) => {
-                        // If child is an expense, it ADDS to the debt (consumes credit)
-                        // If child is a settlement, it might be an adjustment
-                        return sum + (child.amount || 0);
-                    }, 0);
 
-                // Add the child usage to the negative remaining (reducing the credit)
-                // e.g. remaining -200 (credit), used 50 -> result -150
-                // If usage is 200, result is 0 (fully used)
-                totalRemaining += childUsage;
-            }
 
-            // Only include if there's significant remaining debt or credit
-            return Math.abs(totalRemaining) > 1;
+            // Only include if there's significant remaining debt (POSITIVE only)
+            // We NO LONGER track credits/overpayments here.
+            return totalRemaining > 1;
         }).map(t => {
             // Get ALL linked parent IDs again
             let allParentIds = [];
@@ -375,14 +388,10 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 relationType,
                 counterParty,
                 outstanding: totalRemaining,
-                // Pass metadata for UI filtering/labels
-                isAvailableAsCredit: t.isAvailableAsCredit,
-                overpaidAmount: t.overpaidAmount,
-                remainingAmount: t.remainingAmount,
+                remainingAmount: t.remainingAmount, // For UI partial settlement detection
+                settlementStatus: t.settlementStatus, // For UI partial settlement indicator
                 // Show remaining amount
-                displayName: totalRemaining < 0
-                    ? `⚠️ Overpaid: ${t.expenseName} (₹${(Math.abs(totalRemaining) / 100).toFixed(2)} credit)`
-                    : `🔄 Continue: ${t.expenseName} (₹${(totalRemaining / 100).toFixed(2)} remaining)`
+                displayName: `Continue: ${t.expenseName} (₹${(totalRemaining / 100).toFixed(2)} remaining)`
             };
         });
 
@@ -989,7 +998,11 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             splits: (isSettlement || isForgiveness || isIncome) ? {} : finalSplits,
             linkedTransactions: linkedTransactionsData, parentTransactionIds: parentIds,
             parentTransactionId: firstParentId, isLinkedRefund: parentIds.length > 0,
-            groupId: formGroupId
+            groupId: formGroupId,
+            // BASKET VALUE LOGIC:
+            // Calculate the exact difference between Payment Amount and Total Allocated to Links (in PAISE).
+            // This 'basketDiff' will be used by the backend as the definitive Deficit (if positive) or Overpayment (if negative).
+            basketDiff: (isSettlement || isForgiveness) ? (amountInPaise - linkedTransactionsData.reduce((sum, t) => sum + Math.abs(t.amount), 0)) : 0
         };
 
         // Apply smart tagging rules (auto-fill empty category/tag/mode based on expense name)

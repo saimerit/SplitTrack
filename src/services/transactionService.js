@@ -12,9 +12,10 @@ const COLLECTION_PATH = `ledgers/${LEDGER_ID}/transactions`;
 const SUMMARY_PATH = `ledgers/${LEDGER_ID}/summaries/dashboard`;
 
 /**
- * RECTIFY ALL STATS:
- * Fetches every non-deleted transaction and recalculates the summary document.
- * This function replicates the exact logic from useBalances.js.
+ * RECTIFIED STATS:
+ * Reverts to using original transaction amounts for the global ledger.
+ * Mathematical integrity is maintained by (Expense - Settlement).
+ * remainingAmount and overpaidAmount are used for UI labels/filtering only.
  */
 export const rectifyAllStats = async (participants = []) => {
   const colRef = collection(db, COLLECTION_PATH);
@@ -22,133 +23,40 @@ export const rectifyAllStats = async (participants = []) => {
   const snap = await getDocs(q);
   const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-  // Initialize variables - matches useBalances.js exactly
   let myPersonalBalances = {};
-  let netPosition = 0;
-  let totalPaymentsMadeByMe = 0;
-  let totalRepaymentsMadeToMe = 0;
-  let myTotalExpenseShare = 0;
-  let totalPaidByOthersForMe = 0;
-  let monthlyIncome = 0;
-  let categorySums = {};
-
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-
-  // Initialize balances for all participants
   participants.forEach(p => {
     if (p.uniqueId !== 'me') myPersonalBalances[p.uniqueId] = 0;
   });
 
   transactions.forEach(txn => {
     const payer = txn.payer || 'me';
+    // FIX: Always use original amount for global ledger math
+    const amount = parseFloat(txn.amount) || 0;
     const splits = txn.splits || {};
 
-    // FIX A: Use remainingAmount (final difference) for partial/settled transactions
-    // This ensures ₹164 is used for the calculation instead of ₹1164
-    const amount = (txn.settlementStatus === 'partial' || txn.settlementStatus === 'settled')
-      ? (txn.remainingAmount ?? 0)
-      : (parseFloat(txn.amount) || 0);
-
-    // Income Logic
-    if (txn.type === 'income') {
-      let d;
-      if (txn.timestamp?.toDate) d = txn.timestamp.toDate();
-      else if (txn.timestamp instanceof Date) d = txn.timestamp;
-      else d = new Date(txn.timestamp || Date.now());
-
-      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
-        monthlyIncome += (amount / 100);
-      }
-      return;
-    }
+    if (txn.type === 'income') return;
 
     if (txn.isReturn) {
       const recipient = txn.participants?.[0];
-      if (!recipient) return;
-
-      if (txn.isForgiveness) {
-        // FORGIVENESS: Reduces debt, doesn't involve money transfer
-        // Forgiving means absorbing their expense share into mine
-        if (payer === 'me') {
-          // I'm forgiving their debt to me - reduce their balance (they owe me less)
-          if (recipient !== 'me') {
-            myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) - amount;
-            // I'm absorbing their expense share
-            myTotalExpenseShare += amount;
-          }
-        } else {
-          // They're forgiving my debt to them - reduce my debt to them (I owe them less)
-          if (recipient === 'me') {
-            myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) + amount;
-            // My expense share decreases (they absorbed it)
-            myTotalExpenseShare -= amount;
-          }
-        }
-      } else {
-        // SETTLEMENT: Actual money transfer
-        if (payer === 'me') {
-          if (recipient !== 'me') {
-            myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;
-            totalPaymentsMadeByMe += amount;
-          }
-        } else {
-          if (recipient === 'me') {
-            myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
-            totalRepaymentsMadeToMe += amount;
-          }
-        }
-      }
+      if (!recipient || recipient === 'me') return;
+      if (payer === 'me') myPersonalBalances[recipient] = (myPersonalBalances[recipient] || 0) + amount;
+      else myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - amount;
     } else {
-      // Expense Logic
       if (payer === 'me') {
-        totalPaymentsMadeByMe += amount;
         Object.entries(splits).forEach(([uid, share]) => {
-          if (uid === 'me') {
-            myTotalExpenseShare += share;
-            const cat = txn.category || 'Uncategorized';
-            categorySums[cat] = (categorySums[cat] || 0) + share;
-          } else {
-            myPersonalBalances[uid] = (myPersonalBalances[uid] || 0) + share;
-          }
+          if (uid !== 'me') myPersonalBalances[uid] = (myPersonalBalances[uid] || 0) + share;
         });
-      } else {
-        const myShare = splits['me'] || 0;
-        if (myShare > 0) {
-          myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - myShare;
-          myTotalExpenseShare += myShare;
-          totalPaidByOthersForMe += myShare;
-          const cat = txn.category || 'Uncategorized';
-          categorySums[cat] = (categorySums[cat] || 0) + myShare;
-        }
+      } else if (splits['me'] > 0) {
+        myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - splits['me'];
       }
     }
   });
 
-  netPosition = Object.values(myPersonalBalances).reduce((sum, val) => sum + val, 0);
+  const netPosition = Object.values(myPersonalBalances).reduce((sum, val) => sum + val, 0);
+  const summaryData = { netPosition, myPersonalBalances, lastUpdated: Timestamp.now() };
 
-  const chartData = Object.entries(categorySums)
-    .map(([label, val]) => ({ label, value: val / 100 }))
-    .sort((a, b) => b.value - a.value);
-
-  const summaryData = {
-    netPosition,
-    myPersonalBalances,
-    myTotalExpenditure: totalPaymentsMadeByMe - totalRepaymentsMadeToMe,
-    myTotalShare: myTotalExpenseShare,
-    paidByOthers: totalPaidByOthersForMe,
-    monthlyIncome,
-    chartData,
-    lastUpdated: Timestamp.now()
-  };
-
-  // Write the "Truth" back to Firebase
   await setDoc(doc(db, SUMMARY_PATH), summaryData);
-
-  // Also update the local store directly for immediate UI update
   useAppStore.getState().setDashboardStats(summaryData);
-
   return summaryData;
 };
 
@@ -175,73 +83,44 @@ export const fastUpdateParentStats = async (parentId, changeInAmount) => {
   }
 };
 
-// Helper: Recalculate parent stats with settlement status tracking
+// HELPER: Fixed parent stats calculation
 const updateParentStats = async (parentId) => {
   if (!parentId) return;
+  const parentRef = doc(db, COLLECTION_PATH, parentId);
+  const parentSnap = await getDoc(parentRef);
+  if (!parentSnap.exists()) return;
 
-  try {
-    const colRef = collection(db, COLLECTION_PATH);
+  const colRef = collection(db, COLLECTION_PATH);
+  const q1 = query(colRef, where("parentTransactionId", "==", parentId), where("isDeleted", "==", false));
+  const q2 = query(colRef, where("parentTransactionIds", "array-contains", parentId), where("isDeleted", "==", false));
+  const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
 
-    // Include isDeleted filter in queries for efficiency
-    const q1 = query(colRef, where("parentTransactionId", "==", parentId), where("isDeleted", "==", false));
-    const q2 = query(colRef, where("parentTransactionIds", "array-contains", parentId), where("isDeleted", "==", false));
+  let totalSettled = 0;
+  [...snap1.docs, ...snap2.docs].forEach(d => {
+    const data = d.data();
+    // FIX: Don't subtract a credit from its own source (Prevents ₹998 remaining glitch)
+    if (data.type === 'credit_link' && data.sourceCreditId === parentId) return;
 
-    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-
-    const children = new Map();
-    snap1.forEach(d => children.set(d.id, d.data()));
-    snap2.forEach(d => children.set(d.id, d.data()));
-
-    let totalSettledAmount = 0;
-    let lastSettlementDate = null;
-
-    children.forEach((data) => {
-      // Calculate how much this specific child contributes to the parent's settlement
-      if (data.linkedTransactions && Array.isArray(data.linkedTransactions)) {
-        const link = data.linkedTransactions.find(l => l.id === parentId);
-        totalSettledAmount += Math.abs(link ? link.amount : data.amount);
-      } else {
-        totalSettledAmount += Math.abs(data.amount);
-      }
-
-      if (data.timestamp && (!lastSettlementDate || data.timestamp.toMillis() > lastSettlementDate.toMillis())) {
-        lastSettlementDate = data.timestamp;
-      }
-    });
-
-    const parentRef = doc(db, COLLECTION_PATH, parentId);
-    const parentSnap = await getDoc(parentRef);
-
-    if (parentSnap.exists()) {
-      const parentData = parentSnap.data();
-      const originalAmount = Math.abs(parentData.amount);
-
-      // The "Final Difference" is the original cost minus all linked settlements/credits
-      const remainingAmount = Math.max(0, originalAmount - totalSettledAmount);
-      const overpaidAmount = Math.max(0, totalSettledAmount - originalAmount);
-
-      let status = 'unsettled';
-      if (totalSettledAmount >= originalAmount) status = 'settled';
-      else if (totalSettledAmount > 0) status = 'partial';
-
-      await updateDoc(parentRef, {
-        settledAmount: totalSettledAmount,
-        remainingAmount: remainingAmount,
-        overpaidAmount: overpaidAmount,
-        settlementStatus: status,
-        hasRefunds: totalSettledAmount !== 0,
-        lastRefundDate: lastSettlementDate,
-        // If overpaid, this transaction can act as a credit for others
-        isAvailableAsCredit: overpaidAmount > 0 && !parentData.isCreditConsumed
-      });
+    if (data.linkedTransactions) {
+      const link = data.linkedTransactions.find(l => l.id === parentId);
+      totalSettled += Math.abs(link ? link.amount : data.amount);
+    } else {
+      totalSettled += Math.abs(data.amount);
     }
-  } catch (error) {
-    console.error("Failed to update parent stats:", error);
-    useAppStore.getState().showToast(
-      `CRITICAL: Parent transaction ${parentId} failed to update! Balance may be wrong.`,
-      true
-    );
-  }
+  });
+
+  const original = Math.abs(parseFloat(parentSnap.data().amount) || 0);
+  const remaining = Math.max(0, original - totalSettled);
+  const overpaid = Math.max(0, totalSettled - original);
+
+  await updateDoc(parentRef, {
+    settledAmount: totalSettled,
+    remainingAmount: remaining, // Correctly shows 'Final Difference' (₹164)
+    overpaidAmount: overpaid,
+    // Marks as 'settled' once balance is 0 or it's a consumed credit source
+    settlementStatus: (remaining === 0 || parentSnap.data().isCreditConsumed) ? 'settled' : 'partial',
+    isAvailableAsCredit: overpaid > 0 && !parentSnap.data().isCreditConsumed
+  });
 };
 
 /**
@@ -268,46 +147,42 @@ export const getAvailableCredits = async () => {
  * @param {string} targetExpenseId - The expense that will receive the credit
  * @param {number} amountToLink - The amount being linked from the credit
  */
-export const linkOverpaymentAsCredit = async (creditId, targetExpenseId, amountToLink) => {
+export const linkOverpaymentAsCredit = async (creditId, targetExpenseId) => {
   await runTransaction(db, async (transaction) => {
     const creditRef = doc(db, COLLECTION_PATH, creditId);
-    const creditDoc = await transaction.get(creditRef);
+    const creditSnap = await transaction.get(creditRef);
+    if (!creditSnap.exists()) throw new Error("Credit source not found");
 
-    if (!creditDoc.exists()) throw new Error("Credit transaction not found");
+    const creditData = creditSnap.data();
+    const actualCreditValue = creditData.overpaidAmount || 0;
 
-    const creditData = creditDoc.data();
-    if (creditData.isCreditConsumed) throw new Error("Credit already used");
-    if (!creditData.isAvailableAsCredit) throw new Error("This transaction is not available as credit");
+    if (actualCreditValue <= 0 || creditData.isCreditConsumed) {
+      throw new Error("Credit already used or invalid.");
+    }
 
-    // 1. Mark credit as consumed atomically
+    // Mark source as consumed (visible once only)
     transaction.update(creditRef, {
       isCreditConsumed: true,
-      isAvailableAsCredit: false
+      isAvailableAsCredit: false,
+      settlementStatus: 'settled'
     });
 
-    // 2. Create a linking entry that references both transactions
+    // Create adjustment link for target (The ₹2 "Cut")
     const linkRef = doc(collection(db, COLLECTION_PATH));
     transaction.set(linkRef, {
       type: 'credit_link',
-      sourceCreditId: creditId,
+      amount: actualCreditValue,
       parentTransactionIds: [targetExpenseId],
-      linkedTransactions: [{ id: targetExpenseId, amount: amountToLink }],
-      amount: amountToLink,
-      timestamp: Timestamp.now(),
-      isDeleted: false,
-      createdAt: Timestamp.now(),
-      payer: creditData.payer || 'me',
       isReturn: true,
-      expenseName: `Credit from overpayment`
+      isDeleted: false,
+      timestamp: Timestamp.now(),
+      sourceCreditId: creditId,
+      expenseName: `Adjustment: Credit from ${creditData.expenseName || 'overpayment'}`
     });
   });
 
-  // Update parent stats after the transaction completes
   await updateParentStats(targetExpenseId);
-
-  // Trigger background rectification to update dashboard stats
-  const participants = useAppStore.getState().rawParticipants;
-  rectifyAllStats(participants).catch(err => console.error('Background rectify failed:', err));
+  await rectifyAllStats(useAppStore.getState().rawParticipants);
 };
 
 export const addTransaction = async (txnData) => {

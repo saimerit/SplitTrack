@@ -88,11 +88,15 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
                 const prefix = isOwedToMe ? `[${getName(t.counterParty)} owes You] ` : `[You owe ${getName(t.counterParty)}] `;
                 const displayName = t.displayName || t.expenseName;
+
+                // Reverted to use calculated outstanding for display consistency
+                const displayValue = Math.abs(t.outstanding);
+
                 const amountLabel = isOverpaid
                     ? `⚠️ Overpaid: ₹${(Math.abs(t.outstanding) / 100).toFixed(2)}`
                     : isPartialSettlement
-                        ? `🔄 Remaining: ₹${(Math.abs(t.outstanding) / 100).toFixed(2)}`
-                        : `Outstanding: ₹${(Math.abs(t.outstanding) / 100).toFixed(2)}`;
+                        ? `🔄 Remaining: ₹${(displayValue / 100).toFixed(2)}`
+                        : `Outstanding: ₹${(displayValue / 100).toFixed(2)}`;
                 return { value: t.id, label: `${prefix}${displayName} (${amountLabel}) - ${getTxnDateStr(t)}`, className: colorClass, data: t };
             }),
         ];

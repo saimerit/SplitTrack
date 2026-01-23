@@ -375,6 +375,10 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 relationType,
                 counterParty,
                 outstanding: totalRemaining,
+                // Pass metadata for UI filtering/labels
+                isAvailableAsCredit: t.isAvailableAsCredit,
+                overpaidAmount: t.overpaidAmount,
+                remainingAmount: t.remainingAmount,
                 // Show remaining amount
                 displayName: totalRemaining < 0
                     ? `⚠️ Overpaid: ${t.expenseName} (₹${(Math.abs(totalRemaining) / 100).toFixed(2)} credit)`

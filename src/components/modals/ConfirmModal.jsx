@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Button from '../common/Button';
 
 const ConfirmModal = ({
@@ -11,9 +11,25 @@ const ConfirmModal = ({
   confirmInputRequired = null
 }) => {
   const [inputValue, setInputValue] = useState('');
+  const onCancelRef = useRef(onCancel);
 
-  // FIX: Removed the useEffect. 
-  // We now clear the input manually in the handlers below.
+  // Keep ref updated
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
+
+  // Handle escape key to close modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        setInputValue('');
+        onCancelRef.current?.();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -32,8 +48,18 @@ const ConfirmModal = ({
     setInputValue('');
   };
 
+  // Handle backdrop click
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      handleCancel();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-center items-center bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex justify-center items-center bg-black/50 backdrop-blur-sm"
+      onClick={handleBackdropClick}
+    >
       <div className="p-6 rounded-lg shadow-xl w-96 border border-white/10 animate-scale-in" style={{ backgroundColor: 'var(--bg-surface)' }}>
         <h3 className="text-xl font-semibold text-gray-100">{title}</h3>
 

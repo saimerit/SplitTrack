@@ -69,11 +69,31 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                     return { value: t.id, label: `${t.expenseName} (Refundable: ₹${(rem / 100).toFixed(2)}) - ${getTxnDateStr(t)}`, className: 'text-gray-800 dark:text-gray-200', data: t };
                 }
                 // For settlements and forgiveness, show counterParty's outstanding share
+                // Overpaid (negative outstanding) = ORANGE, Owed (positive outstanding) = based on relationType
+                const isOverpaid = t.outstanding < 0;
                 const isOwedToMe = t.relationType === 'owed_to_me';
-                const sign = isOwedToMe ? '+' : '-';
-                const colorClass = isOwedToMe ? 'text-green-600 dark:text-green-400 font-medium' : 'text-red-600 dark:text-red-400 font-medium';
+                const isPartialSettlement = t.isPartialSettlement || false;
+
+                // Color logic: ORANGE for overpaid, PURPLE for partial settlement, GREEN for owed_to_me, RED for owed_by_me
+                let colorClass;
+                if (isOverpaid) {
+                    colorClass = 'text-orange-600 dark:text-orange-400 font-medium'; // Overpaid - orange
+                } else if (isPartialSettlement) {
+                    colorClass = 'text-purple-600 dark:text-purple-400 font-medium'; // Partial settlement - purple
+                } else if (isOwedToMe) {
+                    colorClass = 'text-green-600 dark:text-green-400 font-medium'; // They owe you - green
+                } else {
+                    colorClass = 'text-red-600 dark:text-red-400 font-medium'; // You owe them - red
+                }
+
                 const prefix = isOwedToMe ? `[${getName(t.counterParty)} owes You] ` : `[You owe ${getName(t.counterParty)}] `;
-                return { value: t.id, label: `${prefix}${t.expenseName} (${sign}₹${(t.outstanding / 100).toFixed(2)}) - ${getTxnDateStr(t)}`, className: colorClass, data: t };
+                const displayName = t.displayName || t.expenseName;
+                const amountLabel = isOverpaid
+                    ? `⚠️ Overpaid: ₹${(Math.abs(t.outstanding) / 100).toFixed(2)}`
+                    : isPartialSettlement
+                        ? `🔄 Remaining: ₹${(Math.abs(t.outstanding) / 100).toFixed(2)}`
+                        : `Outstanding: ₹${(Math.abs(t.outstanding) / 100).toFixed(2)}`;
+                return { value: t.id, label: `${prefix}${displayName} (${amountLabel}) - ${getTxnDateStr(t)}`, className: colorClass, data: t };
             }),
         ];
     }, [eligibleParents, getName, getTxnDateStr, isSettlement, isForgiveness]);

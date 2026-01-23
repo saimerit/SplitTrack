@@ -9,6 +9,7 @@ import useAppStore from '../../store/useAppStore';
 
 const Layout = () => {
   const toast = useAppStore(state => state.toast);
+  const isPrivacyEnabled = useAppStore(state => state.isPrivacyEnabled);
   // Default: Closed on Mobile, Open on Desktop
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ const Layout = () => {
   return (
     <>
       {/* Main Layout Container */}
-      <div className="flex h-dvh text-gray-900 dark:text-gray-100 w-full overflow-hidden" style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-main)' }}>
+      <div className={`flex h-dvh text-gray-900 dark:text-gray-100 w-full overflow-hidden ${isPrivacyEnabled ? 'privacy-active' : ''}`} style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-main)' }}>
 
         {/* Sidebar Component - Fixed position, doesn't affect flex */}
         <Sidebar

@@ -115,13 +115,46 @@ body {
   background-attachment: fixed;
 }
 
+/* --- NEON GLOW UTILITY (Dark Mode) --- */
+.dark .neon-glow {
+  text-shadow:
+    0 0 4px var(--primary),
+    0 0 8px color-mix(in srgb, var(--primary) 50%, transparent);
+}
+
+.neon-glow-primary {
+  text-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
+}
+
+.neon-glow-emerald {
+  text-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+}
+
+.neon-glow-rose {
+  text-shadow: 0 0 6px rgba(244, 63, 94, 0.4);
+}
+
+/* --- PRIVACY BLUR --- */
+.privacy-active .currency-value,
+.privacy-active .currency-blur {
+  filter: blur(8px);
+  user-select: none;
+  transition: filter 0.2s ease;
+}
+
+.privacy-active .currency-value:hover,
+.privacy-active .currency-blur:hover {
+  filter: blur(4px);
+  /* Slight reveal on hover */
+}
+
 /* --- GLASS CARD UTILITY --- */
 .glass-card {
   background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-top-color: rgba(255, 255, 255, 0.15);
+  border-top: 0.5px solid rgba(255, 255, 255, 0.2);
   box-shadow:
     0 4px 30px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 0 rgba(255, 255, 255, 0.08);

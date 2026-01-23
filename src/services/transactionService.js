@@ -170,47 +170,37 @@ export const fastUpdateParentStats = async (parentId, changeInAmount) => {
   }
 };
 
-// Helper: Recalculate parent stats
+// Helper: Recalculate parent stats with settlement status tracking
 const updateParentStats = async (parentId) => {
   if (!parentId) return;
 
   try {
     const colRef = collection(db, COLLECTION_PATH);
 
-    // 1. Get both legacy and new links
-    const q1 = query(colRef, where("parentTransactionId", "==", parentId));
-    const q2 = query(colRef, where("parentTransactionIds", "array-contains", parentId));
+    // Include isDeleted filter in queries for efficiency
+    const q1 = query(colRef, where("parentTransactionId", "==", parentId), where("isDeleted", "==", false));
+    const q2 = query(colRef, where("parentTransactionIds", "array-contains", parentId), where("isDeleted", "==", false));
 
     const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
 
     const children = new Map();
-    // Filter out deleted children
-    snap1.forEach(d => { if (!d.data().isDeleted) children.set(d.id, d.data()); });
-    snap2.forEach(d => { if (!d.data().isDeleted) children.set(d.id, d.data()); });
+    snap1.forEach(d => children.set(d.id, d.data()));
+    snap2.forEach(d => children.set(d.id, d.data()));
 
-    let totalRefunds = 0;
-    let lastRefundDate = null;
+    let totalSettledAmount = 0;
+    let lastSettlementDate = null;
 
     children.forEach((data) => {
-      // Skip Repayments for Net Cost calculation
-      if (data.isReturn) return;
-
-      let allocatedAmount = 0;
-
-      // Find specific allocation
+      // Calculate how much this specific child contributes to the parent's settlement
       if (data.linkedTransactions && Array.isArray(data.linkedTransactions)) {
         const link = data.linkedTransactions.find(l => l.id === parentId);
-        allocatedAmount = link ? link.amount : data.amount;
+        totalSettledAmount += Math.abs(link ? link.amount : data.amount);
       } else {
-        allocatedAmount = data.amount;
+        totalSettledAmount += Math.abs(data.amount);
       }
 
-      totalRefunds += allocatedAmount; // Refunds are negative
-
-      if (data.timestamp) {
-        if (!lastRefundDate || data.timestamp.toMillis() > lastRefundDate.toMillis()) {
-          lastRefundDate = data.timestamp;
-        }
+      if (data.timestamp && (!lastSettlementDate || data.timestamp.toMillis() > lastSettlementDate.toMillis())) {
+        lastSettlementDate = data.timestamp;
       }
     });
 
@@ -219,13 +209,25 @@ const updateParentStats = async (parentId) => {
 
     if (parentSnap.exists()) {
       const parentData = parentSnap.data();
-      const originalAmount = parentData.amount;
-      const newNet = originalAmount + totalRefunds;
+      const originalAmount = Math.abs(parentData.amount);
+
+      // The "Final Difference" is the original cost minus all linked settlements/credits
+      const remainingAmount = Math.max(0, originalAmount - totalSettledAmount);
+      const overpaidAmount = Math.max(0, totalSettledAmount - originalAmount);
+
+      let status = 'unsettled';
+      if (totalSettledAmount >= originalAmount) status = 'settled';
+      else if (totalSettledAmount > 0) status = 'partial';
 
       await updateDoc(parentRef, {
-        netAmount: newNet,
-        hasRefunds: totalRefunds !== 0,
-        lastRefundDate: lastRefundDate
+        settledAmount: totalSettledAmount,
+        remainingAmount: remainingAmount,
+        overpaidAmount: overpaidAmount,
+        settlementStatus: status,
+        hasRefunds: totalSettledAmount !== 0,
+        lastRefundDate: lastSettlementDate,
+        // If overpaid, this transaction can act as a credit for others
+        isAvailableAsCredit: overpaidAmount > 0 && !parentData.isCreditConsumed
       });
     }
   } catch (error) {
@@ -237,24 +239,67 @@ const updateParentStats = async (parentId) => {
   }
 };
 
+/**
+ * Fetches transactions where the user has overpaid, 
+ * allowing these to be linked as "payments" for other expenses.
+ */
+export const getAvailableCredits = async () => {
+  const colRef = collection(db, COLLECTION_PATH);
+  // Look for transactions that have an overpaidAmount > 0
+  const q = query(colRef, where("overpaidAmount", ">", 0), where("isDeleted", "==", false));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+};
+
 export const addTransaction = async (txnData) => {
-  const docRef = await addDoc(collection(db, COLLECTION_PATH), {
+  // --- OPTIMISTIC UI: Immediate local update ---
+  const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const createdAt = Timestamp.now();
+
+  const localTxn = {
     ...txnData,
+    id: tempId,
     isDeleted: false,
-    createdAt: Timestamp.now()
-  });
+    createdAt,
+    syncStatus: 'pending'
+  };
 
-  if (txnData.parentTransactionIds && txnData.parentTransactionIds.length > 0) {
-    await Promise.all(txnData.parentTransactionIds.map(pid => updateParentStats(pid)));
-  } else if (txnData.parentTransactionId) {
-    await updateParentStats(txnData.parentTransactionId);
+  // Push to local store immediately for instant UI feedback
+  useAppStore.getState().addTransactionLocal(localTxn);
+
+  // --- BACKGROUND SYNC: Firestore write ---
+  try {
+    const docRef = await addDoc(collection(db, COLLECTION_PATH), {
+      ...txnData,
+      isDeleted: false,
+      createdAt
+    });
+
+    // Replace temp ID with real Firestore ID
+    useAppStore.getState().replaceLocalTransaction(tempId, {
+      ...localTxn,
+      id: docRef.id,
+      syncStatus: 'synced'
+    });
+
+    // Update parent stats if linked
+    if (txnData.parentTransactionIds && txnData.parentTransactionIds.length > 0) {
+      await Promise.all(txnData.parentTransactionIds.map(pid => updateParentStats(pid)));
+    } else if (txnData.parentTransactionId) {
+      await updateParentStats(txnData.parentTransactionId);
+    }
+
+    // Trigger background rectification to update dashboard stats
+    const participants = useAppStore.getState().rawParticipants;
+    rectifyAllStats(participants).catch(err => console.error('Background rectify failed:', err));
+
+    return docRef.id;
+  } catch (error) {
+    // Mark as error in local state
+    useAppStore.getState().markTransactionSyncError(tempId);
+    useAppStore.getState().showToast('Failed to sync transaction. Will retry.', true);
+    throw error;
   }
-
-  // Trigger background rectification to update dashboard stats
-  const participants = useAppStore.getState().rawParticipants;
-  rectifyAllStats(participants).catch(err => console.error('Background rectify failed:', err));
-
-  return docRef.id;
 };
 
 export const updateTransaction = async (id, txnData, oldParentId) => {
@@ -579,7 +624,18 @@ export const deleteRecurringTransaction = async (id) => {
   await firestoreDeleteDoc(ref);
 };
 
-// --- CRUD for Templates (Pinning) ---
+// --- CRUD for Templates ---
+export const addTemplate = async (templateData) => {
+  const ref = collection(db, `ledgers/${LEDGER_ID}/templates`);
+  const docRef = await addDoc(ref, {
+    ...templateData,
+    createdAt: Timestamp.now(),
+    usageCount: 0,
+    isPinned: false
+  });
+  return docRef.id;
+};
+
 export const updateTemplate = async (id, data) => {
   const ref = doc(db, `ledgers/${LEDGER_ID}/templates`, id);
   await updateDoc(ref, data);

@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, AlertTriangle, CheckCircle, Link2Off, Folder, CreditCard, TrendingDown, Filter } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, CheckCircle, Link2Off, Folder, CreditCard, TrendingDown, Filter, RefreshCw, ShieldAlert } from 'lucide-react';
 import useAppStore from '../../store/useAppStore';
 import { runDataHealthScan } from '../../utils/applySmartRules';
+import { repairAllTransactionStats } from '../../services/transactionService';
 import Button from '../common/Button';
 
 const DataHealthCheck = () => {
@@ -10,6 +11,24 @@ const DataHealthCheck = () => {
     const { transactions, participants, showToast } = useAppStore();
     const [hasScanned, setHasScanned] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [isRepairing, setIsRepairing] = useState(false);
+
+    const handleRepair = async () => {
+        if (!window.confirm("This will overwrite settlement statuses for all transactions based on current links. Proceed?")) return;
+
+        setIsRepairing(true);
+        try {
+            const { processed } = await repairAllTransactionStats();
+            showToast(`Success! Recalibrated ${processed} transactions.`);
+            // Refresh the health scan
+            handleScan();
+        } catch (err) {
+            showToast("Repair failed. Check console for details.", true);
+            console.error(err);
+        } finally {
+            setIsRepairing(false);
+        }
+    };
 
     const healthReport = useMemo(() => {
         if (!hasScanned) return null;
@@ -105,6 +124,26 @@ const DataHealthCheck = () => {
                             <ShieldCheck size={16} /> Run Scan
                         </>
                     )}
+                </Button>
+            </div>
+
+            {/* Data Repair Tool */}
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl mt-6">
+                <div className="flex items-center gap-3 mb-4">
+                    <ShieldAlert className="text-amber-400" size={24} />
+                    <div>
+                        <h4 className="font-bold text-gray-200">Data Repair Tool</h4>
+                        <p className="text-xs text-gray-400">Forces a recalculation of all settlement statuses. Use this if your balances look "stuck".</p>
+                    </div>
+                </div>
+                <Button
+                    variant="secondary"
+                    onClick={handleRepair}
+                    disabled={isRepairing}
+                    className="w-full bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 border-amber-500/30"
+                >
+                    {isRepairing ? <RefreshCw className="animate-spin mr-2" size={16} /> : <RefreshCw className="mr-2" size={16} />}
+                    {isRepairing ? "Repairing Data..." : "Run Deep Recalibration"}
                 </Button>
             </div>
 

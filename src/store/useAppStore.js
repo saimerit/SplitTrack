@@ -126,6 +126,32 @@ const useAppStore = create(
         set({ transactions: filteredTxns, participants: filteredParts, participantsLookup: lookup });
       },
 
+      // --- Optimistic UI Actions ---
+      addTransactionLocal: (txn) => {
+        set((state) => ({
+          rawTransactions: [txn, ...state.rawTransactions]
+        }));
+        get().refreshViews();
+      },
+
+      replaceLocalTransaction: (tempId, realTxn) => {
+        set((state) => ({
+          rawTransactions: state.rawTransactions.map(t =>
+            t.id === tempId ? { ...realTxn, syncStatus: 'synced' } : t
+          )
+        }));
+        get().refreshViews();
+      },
+
+      markTransactionSyncError: (tempId) => {
+        set((state) => ({
+          rawTransactions: state.rawTransactions.map(t =>
+            t.id === tempId ? { ...t, syncStatus: 'error' } : t
+          )
+        }));
+        get().refreshViews();
+      },
+
       // --- Setters ---
       setActiveGroupId: (id) => { set({ activeGroupId: id }); get().refreshViews(); },
       setGroups: (data) => set({ groups: data }),

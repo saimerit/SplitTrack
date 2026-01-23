@@ -60,20 +60,43 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
 
     const linkableOptions = useMemo(() => {
         if (!eligibleParents) return [];
+
+        // Filter out already consumed credits
+        const activeParents = eligibleParents.filter(t => !t.isCreditConsumed);
+
         return [
             { value: '', label: '-- Select Expense to Link --' },
-            ...eligibleParents.map(t => {
-                // For product refunds, show refundable amount
-                if (!isSettlement && !isForgiveness) {
-                    const rem = t.netAmount !== undefined ? t.netAmount : t.amount;
-                    return { value: t.id, label: `${t.expenseName} (Refundable: ₹${(rem / 100).toFixed(2)}) - ${getTxnDateStr(t)}`, className: 'text-gray-800 dark:text-gray-200', data: t };
-                }
-                // For settlements and forgiveness, show counterParty's outstanding share
+            ...activeParents.map(t => {
+                // Use outstanding or remaining amount
+                // Use outstanding or remaining amount
+                const outstanding = t.outstanding || 0;
+                const rem = t.remainingAmount !== undefined ? t.remainingAmount : outstanding;
+                const isPartial = t.settlementStatus === 'partial';
                 const isOwedToMe = t.relationType === 'owed_to_me';
-                const sign = isOwedToMe ? '+' : '-';
-                const colorClass = isOwedToMe ? 'text-green-600 dark:text-green-400 font-medium' : 'text-red-600 dark:text-red-400 font-medium';
+                const isOverpaidAdjust = t.isOverpaymentAdjustment;
+
+                let colorClass;
+                let amountLabel;
+
+                if (isPartial) {
+                    // Partial settlement - purple with important to override hover
+                    colorClass = '!text-purple-600 dark:!text-purple-400 font-semibold';
+                    amountLabel = `🔄 Remaining: ₹${(rem / 100).toFixed(2)}`;
+                } else {
+                    // Normal debt - green/red with darker shades and important
+                    colorClass = isOwedToMe
+                        ? '!text-green-700 dark:!text-green-500 font-medium'
+                        : '!text-red-700 dark:!text-red-500 font-medium';
+                    amountLabel = `Outstanding: ₹${(outstanding / 100).toFixed(2)}`;
+                }
+
                 const prefix = isOwedToMe ? `[${getName(t.counterParty)} owes You] ` : `[You owe ${getName(t.counterParty)}] `;
-                return { value: t.id, label: `${prefix}${t.expenseName} (${sign}₹${(t.outstanding / 100).toFixed(2)}) - ${getTxnDateStr(t)}`, className: colorClass, data: t };
+                return {
+                    value: t.id,
+                    label: `${prefix}${t.displayName || t.expenseName} (${amountLabel}) - ${getTxnDateStr(t)}`,
+                    className: colorClass,
+                    data: t
+                };
             }),
         ];
     }, [eligibleParents, getName, getTxnDateStr, isSettlement, isForgiveness]);

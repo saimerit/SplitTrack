@@ -34,10 +34,23 @@ const ExpenseLinker = ({ ui, formData, setters, links, debtorOptions, linkableOp
                 let bgColor = 'bg-white dark:bg-gray-800';
                 let borderColor = 'border-gray-300 dark:border-gray-600';
 
+                // Check if allocation is negative (settlement direction flip)
+                const allocatedValue = parseFloat(link.allocated) || 0;
+                const isNegativeAllocation = allocatedValue < 0;
+
+                // Determine if this item is a credit link
+                const isCreditItem = link.relationType === 'credit_link' || (isNegativeAllocation && ui.isSettlement);
+
+                // Style logic
                 if (link.relationType === 'product_refund') {
                     textColor = 'text-green-700 dark:text-green-400 font-medium';
                     bgColor = 'bg-green-50 dark:bg-green-900/20';
                     borderColor = 'border-green-200 dark:border-green-800';
+                } else if (isNegativeAllocation) {
+                    // Negative settlement allocation
+                    textColor = 'text-orange-700 dark:text-orange-400 font-medium';
+                    bgColor = 'bg-orange-50 dark:bg-orange-900/20';
+                    borderColor = 'border-orange-200 dark:border-orange-800';
                 } else {
                     const isOwedToMe = link.relationType === 'owed_to_me';
                     if (isOwedToMe) {
@@ -53,7 +66,9 @@ const ExpenseLinker = ({ ui, formData, setters, links, debtorOptions, linkableOp
 
                 return (
                     <div key={link.id} className={`flex items-center gap-2 mt-2 p-2 rounded border ${bgColor} ${borderColor}`}>
-                        <span className={`flex-1 truncate text-sm ${textColor}`}>{link.name}</span>
+                        <span className={`flex-1 truncate text-sm ${textColor}`}>
+                            {link.name}
+                        </span>
                         <input
                             type="number"
                             value={link.allocated}

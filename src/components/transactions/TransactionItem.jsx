@@ -3,9 +3,11 @@ import {
   Trash2, Edit2, X, RefreshCw, ChevronRight, ChevronDown, Copy, CheckCircle, Circle,
   Utensils, ShoppingCart, Car, Zap, Smartphone, Plane,
   IceCream, BookOpen, Coffee, Package, HandCoins, Calendar, MapPin, Tag, Cookie,
-  Film, Music, Gamepad2
+  Film, Music, Gamepad2, Bookmark
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { addTemplate } from '../../services/transactionService';
+import useAppStore from '../../store/useAppStore';
 
 const getCategoryIcon = (category) => {
   const cat = (category || '').toLowerCase();
@@ -71,6 +73,9 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
   const [showModal, setShowModal] = useState(false);
   // Desktop Inline Expansion State
   const [isExpanded, setIsExpanded] = useState(false);
+  // Save as Template loading state
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const showToast = useAppStore(state => state.showToast);
 
   // Lock body scroll when mobile modal is open
   useEffect(() => {
@@ -78,6 +83,34 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
     else document.body.style.overflow = 'unset';
     return () => { document.body.style.overflow = 'unset'; };
   }, [showModal]);
+
+  // Handle Save as Template
+  const handleSaveAsTemplate = async (e) => {
+    if (e) e.stopPropagation();
+    if (isSavingTemplate) return;
+
+    setIsSavingTemplate(true);
+    try {
+      const templateData = {
+        name: txn.expenseName || 'Template',
+        expenseName: txn.expenseName || '',
+        amount: txn.amount,
+        category: txn.category || '',
+        splits: txn.splits || {},
+        tag: txn.tag || '',
+        place: txn.place || '',
+        paymentMode: txn.modeOfPayment || 'Cash',
+        description: txn.description || ''
+      };
+      await addTemplate(templateData);
+      showToast(`Saved "${txn.expenseName}" as template`, false);
+    } catch (err) {
+      console.error('Failed to save template:', err);
+      showToast('Failed to save template', true);
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
 
   const getName = (uid) => {
     if (uid === 'me') return 'You';
@@ -245,6 +278,7 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
             </div>
 
             <div className="p-4 border-t border-gray-800 bg-gray-900 flex gap-3 shrink-0 safe-area-pb">
+              <button onClick={handleSaveAsTemplate} disabled={isSavingTemplate} className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-indigo-900/20 border border-indigo-800 text-indigo-400 font-semibold hover:bg-indigo-900/30 transition-colors disabled:opacity-50" title="Save as Template"><Bookmark size={18} /></button>
               <button onClick={(e) => { e.stopPropagation(); setShowModal(false); onEdit(txn); }} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-gray-800 border border-gray-700 text-gray-200 font-semibold shadow-sm hover:bg-gray-700 transition-colors"><Edit2 size={18} /> Edit</button>
               <button onClick={(e) => { e.stopPropagation(); setShowModal(false); onDelete(txn.id, txn.parentTransactionId); }} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-red-900/20 border border-red-800 text-red-400 font-semibold hover:bg-red-900/30 transition-colors"><Trash2 size={18} /> Delete</button>
             </div>
@@ -325,6 +359,7 @@ const TransactionItem = ({ txn, linkedRefunds = [], participantsLookup, onEdit, 
           </div>
 
           <div className="flex gap-3 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={handleSaveAsTemplate} disabled={isSavingTemplate} className="p-2 bg-gray-800 rounded-full text-gray-400 hover:text-indigo-400 transition-colors disabled:opacity-50" title="Save as Template"><Bookmark size={16} /></button>
             <button onClick={() => onClone(txn)} className="p-2 bg-gray-800 rounded-full text-gray-400 hover:text-indigo-400 transition-colors" title="Clone"><Copy size={16} /></button>
             <button onClick={() => onEdit(txn)} className="p-2 bg-gray-800 rounded-full text-gray-400 hover:text-yellow-400 transition-colors" title="Edit"><Edit2 size={16} /></button>
             <button onClick={() => onDelete(txn.id, txn.parentTransactionId)} className="p-2 bg-gray-800 rounded-full text-gray-400 hover:text-red-400 transition-colors" title="Delete"><Trash2 size={16} /></button>

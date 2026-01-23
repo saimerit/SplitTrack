@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 // Auth & Hooks
@@ -54,6 +54,7 @@ const ProtectedRoute = ({ children }) => {
 };
 
 const App = () => {
+
   return (
     <BrowserRouter>
       {/* Initialize Theme immediately inside Router context if needed, or outside */}

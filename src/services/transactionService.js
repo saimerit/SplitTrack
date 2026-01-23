@@ -44,7 +44,12 @@ export const rectifyAllStats = async (participants = []) => {
   transactions.forEach(txn => {
     const payer = txn.payer || 'me';
     const splits = txn.splits || {};
-    const amount = parseFloat(txn.amount) || 0;
+
+    // FIX A: Use remainingAmount (final difference) for partial/settled transactions
+    // This ensures ₹164 is used for the calculation instead of ₹1164
+    const amount = (txn.settlementStatus === 'partial' || txn.settlementStatus === 'settled')
+      ? (txn.remainingAmount ?? 0)
+      : (parseFloat(txn.amount) || 0);
 
     // Income Logic
     if (txn.type === 'income') {
@@ -245,10 +250,64 @@ const updateParentStats = async (parentId) => {
  */
 export const getAvailableCredits = async () => {
   const colRef = collection(db, COLLECTION_PATH);
-  // Look for transactions that have an overpaidAmount > 0
-  const q = query(colRef, where("overpaidAmount", ">", 0), where("isDeleted", "==", false));
+  // FIX C: Ensure we only get unconsumed credits
+  const q = query(
+    colRef,
+    where("overpaidAmount", ">", 0),
+    where("isAvailableAsCredit", "==", true),
+    where("isDeleted", "==", false)
+  );
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+};
+
+/**
+ * Atomically links an overpayment credit to a target expense.
+ * This ensures "link once" rule - a credit can only be used one time.
+ * @param {string} creditId - The ID of the overpaid transaction to consume as credit
+ * @param {string} targetExpenseId - The expense that will receive the credit
+ * @param {number} amountToLink - The amount being linked from the credit
+ */
+export const linkOverpaymentAsCredit = async (creditId, targetExpenseId, amountToLink) => {
+  await runTransaction(db, async (transaction) => {
+    const creditRef = doc(db, COLLECTION_PATH, creditId);
+    const creditDoc = await transaction.get(creditRef);
+
+    if (!creditDoc.exists()) throw new Error("Credit transaction not found");
+
+    const creditData = creditDoc.data();
+    if (creditData.isCreditConsumed) throw new Error("Credit already used");
+    if (!creditData.isAvailableAsCredit) throw new Error("This transaction is not available as credit");
+
+    // 1. Mark credit as consumed atomically
+    transaction.update(creditRef, {
+      isCreditConsumed: true,
+      isAvailableAsCredit: false
+    });
+
+    // 2. Create a linking entry that references both transactions
+    const linkRef = doc(collection(db, COLLECTION_PATH));
+    transaction.set(linkRef, {
+      type: 'credit_link',
+      sourceCreditId: creditId,
+      parentTransactionIds: [targetExpenseId],
+      linkedTransactions: [{ id: targetExpenseId, amount: amountToLink }],
+      amount: amountToLink,
+      timestamp: Timestamp.now(),
+      isDeleted: false,
+      createdAt: Timestamp.now(),
+      payer: creditData.payer || 'me',
+      isReturn: true,
+      expenseName: `Credit from overpayment`
+    });
+  });
+
+  // Update parent stats after the transaction completes
+  await updateParentStats(targetExpenseId);
+
+  // Trigger background rectification to update dashboard stats
+  const participants = useAppStore.getState().rawParticipants;
+  rectifyAllStats(participants).catch(err => console.error('Background rectify failed:', err));
 };
 
 export const addTransaction = async (txnData) => {
@@ -274,6 +333,16 @@ export const addTransaction = async (txnData) => {
       isDeleted: false,
       createdAt
     });
+
+    // FIX B: If this transaction uses a credit, mark that credit as consumed
+    if (txnData.linkedCreditId) {
+      const creditRef = doc(db, COLLECTION_PATH, txnData.linkedCreditId);
+      await updateDoc(creditRef, {
+        isCreditConsumed: true,
+        isAvailableAsCredit: false,
+        consumedBySettlementId: docRef.id
+      });
+    }
 
     // Replace temp ID with real Firestore ID
     useAppStore.getState().replaceLocalTransaction(tempId, {

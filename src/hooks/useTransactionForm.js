@@ -378,7 +378,10 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         }
         else {
             const targetPerson = payer === 'me' ? selectedParticipants[0] : payer;
-            if (targetPerson && targetPerson !== 'me') all = all.filter(t => t.counterParty === targetPerson);
+            if (targetPerson && targetPerson !== 'me') {
+                // This forces the list to show ONLY transactions where the target is the counterparty
+                all = all.filter(t => t.counterParty === targetPerson);
+            }
         }
 
         // We use Math.abs > 1 to avoid showing transactions settled within 1 paise/cent

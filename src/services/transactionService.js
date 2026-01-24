@@ -165,17 +165,17 @@ const updateParentStats = async (parentId) => {
   // The new transaction carries the updated balance (Deficit or Surplus).
   // Therefore, the old parent logic should strictly close it.
 
-  if (totalSettled > 0) {
+  // FIX: Improved settlement status logic
+  if (Math.abs(netBalance) < 1) {
+    // Net zero balance means fully settled/consumed
     updateData.settlementStatus = 'settled';
     updateData.remainingAmount = 0;
     updateData.overpaidAmount = 0;
-  } else if (parentData.isReturn) {
-    // If not linked yet, maintain status
-    const isCleared = (remaining <= 1 && overpaid <= 1);
-    updateData.settlementStatus = isCleared ? 'settled' : 'partial';
+  } else if (netBalance > 0) {
+    updateData.settlementStatus = 'partial';
   } else {
-    // Expense not linked
-    updateData.settlementStatus = deleteField();
+    // Negative balance means it's still a credit pool (overpaid)
+    updateData.settlementStatus = 'settled';
   }
 
   await updateDoc(parentRef, updateData);

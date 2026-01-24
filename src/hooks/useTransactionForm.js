@@ -337,24 +337,14 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
             // Return the SETTLEMENT transaction with its own ID, but with total remaining debt
             return {
-                id: t.id,
-                expenseName: t.expenseName,
-                timestamp: t.timestamp,
-                amount: t.amount,
-                payer: t.payer,
-                participants: t.participants,
-                linkedTransactions: t.linkedTransactions,
+                ...t,
                 parentTransactionId: allParentIds[0],
                 parentTransactionIds: allParentIds,
                 isPartialSettlement: true,
-                isReturn: true,
                 parentExpenseName: firstParent?.expenseName || t.expenseName,
                 relationType,
                 counterParty,
                 outstanding: totalRemaining,
-                remainingAmount: t.remainingAmount, // For UI partial settlement detection
-                settlementStatus: t.settlementStatus, // For UI partial settlement indicator
-                // Show remaining amount
                 displayName: totalRemaining < 0
                     ? `Use Credit: ${t.expenseName} (₹${(Math.abs(totalRemaining) / 100).toFixed(2)} available)`
                     : `Continue: ${t.expenseName} (₹${(totalRemaining / 100).toFixed(2)} remaining)`

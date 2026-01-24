@@ -342,15 +342,11 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 parentTransactionId: allParentIds[0],
                 parentTransactionIds: allParentIds,
                 isPartialSettlement: true,
-                isReturn: true,
                 parentExpenseName: firstParent?.expenseName || t.expenseName,
                 relationType,
                 counterParty,
                 outstanding: totalRemaining,
-                remainingAmount: t.remainingAmount, // For UI partial settlement detection
-                settlementStatus: t.settlementStatus, // For UI partial settlement indicator
-                // Show remaining amount
-                displayName: isCredit
+                displayName: totalRemaining < 0
                     ? `Use Credit: ${t.expenseName} (₹${(Math.abs(totalRemaining) / 100).toFixed(2)} available)`
                     : `Continue: ${t.expenseName} (₹${(totalRemaining / 100).toFixed(2)} remaining)`
             };

@@ -173,9 +173,13 @@ const updateParentStats = async (parentId) => {
     updateData.overpaidAmount = 0;
   } else if (netBalance > 0) {
     updateData.settlementStatus = 'partial';
+    updateData.remainingAmount = netBalance;
+    updateData.overpaidAmount = 0;
   } else {
-    // Negative balance means it's still a credit pool (overpaid)
-    updateData.settlementStatus = 'settled';
+    // It is an active credit pool
+    updateData.settlementStatus = 'settled'; // 'settled' here means "closed as an expense" but "active as a refund source"
+    updateData.remainingAmount = 0;
+    updateData.overpaidAmount = Math.abs(netBalance);
   }
 
   await updateDoc(parentRef, updateData);

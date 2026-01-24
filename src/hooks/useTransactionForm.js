@@ -293,9 +293,8 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
 
 
-            // Only include if there's significant remaining debt (POSITIVE only)
-            // We NO LONGER track credits/overpayments here.
-            return totalRemaining > 1;
+            // Only include if there's significant remaining debt (POSITIVE) OR unused credit (NEGATIVE)
+            return Math.abs(totalRemaining) > 1;
         }).map(t => {
             // Get ALL linked parent IDs again
             let allParentIds = [];
@@ -334,7 +333,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 totalRemaining += childUsage;
             }
 
-            const relationType = firstParent?.payer === 'me' ? 'owed_to_me' : 'owed_by_me';
+            const relationType = totalRemaining < 0 ? 'credit_link' : (firstParent?.payer === 'me' ? 'owed_to_me' : 'owed_by_me');
 
             // Return the SETTLEMENT transaction with its own ID, but with total remaining debt
             return {
@@ -356,7 +355,9 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 remainingAmount: t.remainingAmount, // For UI partial settlement detection
                 settlementStatus: t.settlementStatus, // For UI partial settlement indicator
                 // Show remaining amount
-                displayName: `Continue: ${t.expenseName} (₹${(totalRemaining / 100).toFixed(2)} remaining)`
+                displayName: totalRemaining < 0
+                    ? `Use Credit: ${t.expenseName} (₹${(Math.abs(totalRemaining) / 100).toFixed(2)} available)`
+                    : `Continue: ${t.expenseName} (₹${(totalRemaining / 100).toFixed(2)} remaining)`
             };
         });
 

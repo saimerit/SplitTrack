@@ -136,68 +136,33 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     };
 
     const getOutstandingDebt = useCallback((parentTxn, debtorId) => {
+        // 1. Get base amount (This is negative if it's an overpayment/credit)
         let debt = parentTxn.splits?.[debtorId] || 0;
-        const originalDebt = debt;
-
-        // Use a Set to prevent double-counting the same related transaction
-        const processedIds = new Set();
 
         const related = groupTransactions.filter(t => {
+            if (t.isDeleted) return false;
             if (isEditMode && t.id === initialData?.id) return false;
-            // Check if this transaction is linked to the parent
-            const isLinkedViaParentId = t.parentTransactionId === parentTxn.id;
-            const isLinkedViaParentIds = t.parentTransactionIds && t.parentTransactionIds.includes(parentTxn.id);
-            return isLinkedViaParentId || isLinkedViaParentIds;
+            return t.parentTransactionId === parentTxn.id ||
+                (t.parentTransactionIds && t.parentTransactionIds.includes(parentTxn.id));
         });
 
         related.forEach(rel => {
-            // Skip if already processed (prevents double-counting)
-            if (processedIds.has(rel.id)) return;
-            processedIds.add(rel.id);
+            const link = rel.linkedTransactions?.find(l => l.id === parentTxn.id);
+            if (!link) return;
 
-            if (rel.isReturn) {
-                // For settlements (isReturn=true), we need to check if this settlement was FOR the specific debtor
-                // A settlement reduces debt when:
-                // 1. The debtor is the payer of the settlement (they paid back), OR
-                // 2. The debtor is the recipient of the settlement (in participants array) - means 'me' paid them back
-                const link = rel.linkedTransactions?.find(l => l.id === parentTxn.id);
-                const debtorIsPayer = rel.payer === debtorId;
-                const debtorIsRecipient = rel.participants?.includes(debtorId);
+            const linkAmount = Math.abs(link.amount);
 
-                if (link) {
-                    // Only subtract if this settlement is for the specific debtor
-                    if (debtorIsPayer || debtorIsRecipient) {
-                        console.log(`[DEBT] Parent: ${parentTxn.expenseName.slice(0, 20)}, Settlement: ${rel.expenseName?.slice(0, 20)}, link.amount=${link.amount}, subtracting ${Math.abs(link.amount)}`);
-                        // If parent is a settlement (credit), we ADD to reduce the credit (move closer to 0)
-                        if (parentTxn.isReturn) {
-                            // If it's a deficit (positive debt), we pay it off -> subtract
-                            if (debt > 0) {
-                                debt -= Math.abs(link.amount);
-                            } else {
-                                // If it's a credit (negative debt), we consume it -> add (move closer to 0)
-                                debt += Math.abs(link.amount);
-                            }
-                        } else {
-                            debt -= Math.abs(link.amount);
-                        }
-                    }
-                } else if (debtorIsPayer && (!rel.linkedTransactions || rel.linkedTransactions.length === 0)) {
-                    // Unlinked settlement where debtor is the payer
-                    console.log(`[DEBT] Parent: ${parentTxn.expenseName.slice(0, 20)}, Unlinked settlement, subtracting ${Math.abs(rel.amount)}`);
-                    debt -= Math.abs(rel.amount);
-                }
-            } else if (rel.amount < 0) {
-                // Product refund - reduce the debtor's share if they had a split
-                let refundShare = rel.splits?.[debtorId] || 0;
-                debt += refundShare;
+            // FIX: If debt is positive, subtract to reduce it. 
+            // If debt is negative (credit), add to consume it.
+            if (debt > 0) {
+                debt -= linkAmount;
+            } else if (debt < 0) {
+                debt += linkAmount;
             }
         });
 
-        if (originalDebt !== debt && parentTxn.payer !== 'me') {
-            console.log(`[DEBT] FINAL: ${parentTxn.expenseName.slice(0, 30)} | original=${originalDebt} | remaining=${debt}`);
-        }
-
-        return debt;
+        // Tolerance check to handle float math issues (1 paise)
+        return Math.abs(debt) < 1 ? 0 : debt;
     }, [groupTransactions, isEditMode, initialData]);
 
     // Calculate net debt between 'me' and another person
@@ -328,9 +293,8 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
 
 
-            // Only include if there's significant remaining debt (POSITIVE only)
-            // We NO LONGER track credits/overpayments here.
-            return totalRemaining > 1;
+            // Only include if there's significant remaining debt (POSITIVE) OR unused credit (NEGATIVE)
+            return Math.abs(totalRemaining) > 1;
         }).map(t => {
             // Get ALL linked parent IDs again
             let allParentIds = [];
@@ -369,7 +333,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 totalRemaining += childUsage;
             }
 
-            const relationType = firstParent?.payer === 'me' ? 'owed_to_me' : 'owed_by_me';
+            const relationType = totalRemaining < 0 ? 'credit_link' : (firstParent?.payer === 'me' ? 'owed_to_me' : 'owed_by_me');
 
             // Return the SETTLEMENT transaction with its own ID, but with total remaining debt
             return {
@@ -391,7 +355,9 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 remainingAmount: t.remainingAmount, // For UI partial settlement detection
                 settlementStatus: t.settlementStatus, // For UI partial settlement indicator
                 // Show remaining amount
-                displayName: `Continue: ${t.expenseName} (₹${(totalRemaining / 100).toFixed(2)} remaining)`
+                displayName: totalRemaining < 0
+                    ? `Use Credit: ${t.expenseName} (₹${(Math.abs(totalRemaining) / 100).toFixed(2)} available)`
+                    : `Continue: ${t.expenseName} (₹${(totalRemaining / 100).toFixed(2)} remaining)`
             };
         });
 
@@ -922,51 +888,11 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         // If the user manually changed the total amount, we need to scale the linked allocations
         let linkedTransactionsData = [];
         if (linkedTxns.length > 0) {
-            // ROBUSTNESS FIX: Re-calculate totalAllocated using source of truth (eligibleParents)
-            // This bypasses any potential state corruption in linkedTxns
-            const robustLinks = linkedTxns.map(t => {
-                const parent = groupTransactions.find(p => p.id === t.id);
-                // Calculate outstanding debt freshly to ensure accuracy
-                const debtorId = payer;
-                const outstanding = parent ? getOutstandingDebt(parent, debtorId) : (parseFloat(t.allocated) * 100);
-
-                // Convert to Rupees for ratio calculation
-                const robustAlloc = outstanding / 100;
-
-                return { ...t, robustAlloc };
-            });
-
-            const totalAllocated = robustLinks.reduce((sum, t) => sum + t.robustAlloc, 0);
-            const formAmount = parseFloat(amount);
-
-            if (totalAllocated !== 0 && Math.abs(totalAllocated - formAmount) > 0.01) {
-                // User changed the amount - redistribute proportionally
-                const ratio = formAmount / totalAllocated;
-                console.log(`[SAVE DEBUG] Reformatted: Form=${formAmount}, TotalAlloc=${totalAllocated}, Ratio=${ratio}`);
-                let currentSum = 0;
-
-                linkedTransactionsData = robustLinks.map((t, index) => {
-                    if (index === robustLinks.length - 1) {
-                        // Last item absorbs rounding difference
-                        const remaining = Math.round(formAmount * 100) - currentSum;
-                        console.log(`[SAVE DEBUG] LastItem ${t.name}: Remaining=${remaining}`);
-                        return { id: t.id, amount: remaining * multiplier };
-                    }
-
-                    const scaledAmount = (t.robustAlloc * ratio);
-                    const roundedAmount = Math.round(scaledAmount * 100);
-                    currentSum += roundedAmount;
-                    console.log(`[SAVE DEBUG] Item ${t.name}: RobustAlloc=${t.robustAlloc}, Scaled=${scaledAmount}, Rounded=${roundedAmount}`);
-
-                    return { id: t.id, amount: roundedAmount * multiplier };
-                });
-            } else {
-                // Amounts match, just use allocated values
-                linkedTransactionsData = linkedTxns.map(t => ({
-                    id: t.id,
-                    amount: Math.round(parseFloat(t.allocated) * 100) * multiplier
-                }));
-            }
+            linkedTransactionsData = linkedTxns.map(t => ({
+                id: t.id,
+                // Ensure we use the exact allocated amount in paise
+                amount: Math.round(parseFloat(t.allocated) * 100) * multiplier
+            }));
         }
         const parentIds = linkedTransactionsData.map(t => t.id);
 

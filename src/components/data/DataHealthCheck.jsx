@@ -136,15 +136,21 @@ const DataHealthCheck = () => {
                         <p className="text-xs text-gray-400">Forces a recalculation of all settlement statuses. Use this if your balances look "stuck".</p>
                     </div>
                 </div>
-                <Button
-                    variant="secondary"
-                    onClick={handleRepair}
-                    disabled={isRepairing}
-                    className="w-full bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 border-amber-500/30"
-                >
-                    {isRepairing ? <RefreshCw className="animate-spin mr-2" size={16} /> : <RefreshCw className="mr-2" size={16} />}
-                    {isRepairing ? "Repairing Data..." : "Run Deep Recalibration"}
-                </Button>
+                {/* Logic: Button is LOCKED if we haven't scanned yet OR if the scan results are perfectly clean */}
+                {(() => {
+                    const isLocked = !hasScanned || (healthReport && healthReport.total === 0);
+                    return (
+                        <Button
+                            variant="secondary"
+                            onClick={handleRepair}
+                            disabled={isRepairing || isLocked}
+                            className={`w-full ${isLocked ? 'opacity-50 cursor-not-allowed' : 'bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 border-amber-500/30'}`}
+                        >
+                            {isRepairing ? <RefreshCw className="animate-spin mr-2" size={16} /> : <RefreshCw className="mr-2" size={16} />}
+                            {isRepairing ? "Repairing Data..." : isLocked ? "Repair Tool Locked (No Issues)" : "Run Deep Recalibration"}
+                        </Button>
+                    );
+                })()}
             </div>
 
             {/* Results */}

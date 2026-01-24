@@ -3,7 +3,7 @@ import {
   Trash2, Edit2, X, RefreshCw, ChevronRight, ChevronDown, Copy, CheckCircle, Circle,
   Utensils, ShoppingCart, Car, Zap, Smartphone, Plane,
   IceCream, BookOpen, Coffee, Package, HandCoins, Calendar, MapPin, Tag, Cookie,
-  Film, Music, Gamepad2, Bookmark
+  Film, Music, Gamepad2, Bookmark, Shirt
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { addTemplate } from '../../services/transactionService';
@@ -51,6 +51,10 @@ const getCategoryIcon = (category) => {
   // Bills, Utilities -> Zap
   if (cat.includes('bill') || cat.includes('recharge'))
     return <Zap size={20} className="text-yellow-500" />;
+
+  // Laundry, Clothes Wash -> Shirt
+  if (cat.includes('wash') || cat.includes('laundry'))
+    return <Shirt size={20} className="text-cyan-500" />;
 
   // Shopping -> Smartphone
   if (cat.includes('shopping') || cat.includes('cloth'))

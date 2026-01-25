@@ -67,27 +67,63 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
         return [
             { value: '', label: '-- Select Expense to Link --' },
             ...activeParents.map(t => {
-                // Use outstanding or remaining amount
-                // Use outstanding or remaining amount
-                const outstanding = t.outstanding || 0;
-                const rem = t.remainingAmount !== undefined ? t.remainingAmount : outstanding;
-                const isPartial = t.settlementStatus === 'partial';
+                // The counterParty is the settling participant (set in eligibleParents computation)
+                const settlingParticipant = t.counterParty;
+
+                // Use participantRemaining for precise per-participant amounts when available
+                const hasParticipantRemaining = t.participantRemaining && settlingParticipant &&
+                    t.participantRemaining[settlingParticipant] !== undefined;
+
+                // Use participantRemaining if available, otherwise fall back to computed outstanding
+                const remainingAmount = hasParticipantRemaining
+                    ? t.participantRemaining[settlingParticipant]
+                    : (t.outstanding || 0);
+
+                // Check if we have per-participant status tracking
+                const hasParticipantStatuses = t.participantStatuses && settlingParticipant &&
+                    t.participantStatuses[settlingParticipant] !== undefined;
+
+                // Use participant-specific status OR fall back to global settlementStatus
+                const participantStatus = hasParticipantStatuses
+                    ? t.participantStatuses[settlingParticipant]
+                    : t.settlementStatus;
+
+                // Check for overpaid using overpaidAmount from settlement (primary source)
+                // or participantOverpaid or negative remaining as fallback
+                const hasOverpaidAmount = t.overpaidAmount > 0 || t.participantOverpaid?.[settlingParticipant] > 0;
+                const isOverpaid = hasOverpaidAmount || remainingAmount < -1 || participantStatus === 'overpaid';
+                const isPartial = participantStatus === 'partial';
+                const isSettled = !isOverpaid && participantStatus === 'settled' && Math.abs(remainingAmount) <= 1;
                 const isOwedToMe = t.relationType === 'owed_to_me';
-                const isOverpaidAdjust = t.isOverpaymentAdjustment;
 
                 let colorClass;
                 let amountLabel;
 
-                if (isPartial) {
-                    // Partial settlement - purple with important to override hover
+                // Check for overpaid/credit first
+                if (isOverpaid) {
+                    // Credit available - show in orange and allow linking
+                    colorClass = '!text-orange-600 dark:!text-orange-400 font-semibold';
+                    // Use overpaidAmount from settlement (primary) or participantOverpaid or abs of remaining
+                    const creditAmount = t.overpaidAmount > 0
+                        ? t.overpaidAmount
+                        : (t.participantOverpaid?.[settlingParticipant] > 0
+                            ? t.participantOverpaid[settlingParticipant]
+                            : Math.abs(remainingAmount));
+                    amountLabel = `💰 Credit: ₹${(creditAmount / 100).toFixed(2)} from ${getName(settlingParticipant)}`;
+                } else if (isSettled) {
+                    // Fully settled (no credit) - gray
+                    colorClass = '!text-gray-400 dark:!text-gray-500';
+                    amountLabel = `✓ Settled by ${getName(settlingParticipant)}`;
+                } else if (isPartial) {
+                    // Partial settlement - purple
                     colorClass = '!text-purple-600 dark:!text-purple-400 font-semibold';
-                    amountLabel = `🔄 Remaining: ₹${(rem / 100).toFixed(2)}`;
+                    amountLabel = `🔄 ${getName(settlingParticipant)}: ₹${(remainingAmount / 100).toFixed(2)} remaining`;
                 } else {
-                    // Normal debt - green/red with darker shades and important
+                    // Normal debt - green/red
                     colorClass = isOwedToMe
                         ? '!text-green-700 dark:!text-green-500 font-medium'
                         : '!text-red-700 dark:!text-red-500 font-medium';
-                    amountLabel = `Outstanding: ₹${(outstanding / 100).toFixed(2)}`;
+                    amountLabel = `${getName(settlingParticipant)}: ₹${(Math.abs(remainingAmount) / 100).toFixed(2)}`;
                 }
 
                 const prefix = isOwedToMe ? `[${getName(t.counterParty)} owes You] ` : `[You owe ${getName(t.counterParty)}] `;

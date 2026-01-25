@@ -197,7 +197,24 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             const standardDebts = groupTransactions
                 .filter(t => t.amount > 0 && !t.isReturn)
                 .filter(t => !linkedTxns.some(l => l.id === t.id))
-                .map(t => ({ ...t, remainingRefundable: (t.netAmount !== undefined ? t.netAmount : t.amount) }))
+                .map(t => {
+                    // Precision: Use participantRemaining if available (for precise user debt), else fallback to global remainingAmount
+                    // If both missing, fallback to legacy netAmount or full amount
+
+                    // Identify the relevant split for 'me' (since this is 'standard debts' -> owed by me?)
+                    // line 197 says "t.amount > 0 && !t.isReturn" -> Standard Expense.
+                    // If t.payer !== 'me', it's owed_by_me. 
+                    // But if t.payer === 'me', it's owed_to_me?
+                    // "Standard Debts" usually implies what I owe others?
+                    // Wait, line 195 says "if (!isSettlement...)". This list is for "Select Expense" dropdown.
+                    // Usually this dropdown shows expenses I can pay off (Owed By Me) OR Credits I can use (Owed To Me).
+
+                    // Let's use getOutstandingDebt logic which handles all this!
+                    // But here we are mapping to `remainingRefundable`.
+
+                    let bal = t.remainingAmount !== undefined ? t.remainingAmount : (t.netAmount !== undefined ? t.netAmount : t.amount);
+                    return { ...t, remainingRefundable: bal };
+                })
                 .filter(t => t.remainingRefundable > 0);
 
             // SPECIAL CASE: Overpaid Settlements -> REMOVED as per user request
@@ -205,7 +222,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
             // CHAINING: Partial Settlements -> Treat as ongoing Debt
             const partialSettlements = groupTransactions
-                .filter(t => t.isReturn && t.remainingAmount > 0 && t.settlementStatus === 'partial' && t.settlementDeficit > 0)
+                .filter(t => t.isReturn && t.remainingAmount > 0)
                 .filter(t => !linkedTxns.some(l => l.id === t.id))
                 .map(t => {
                     const iPaid = t.payer === 'me';
@@ -294,7 +311,8 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
 
             // Only include if there's significant remaining debt (POSITIVE) OR unused credit (NEGATIVE)
-            return Math.abs(totalRemaining) > 1;
+            // OR if the settlement itself is explicitly marked as partial/has remaining amount (TRUSTED SOURCE)
+            return Math.abs(totalRemaining) > 1 || t.settlementStatus === 'partial' || (t.remainingAmount !== undefined && t.remainingAmount > 0);
         }).map(t => {
             // Get ALL linked parent IDs again
             let allParentIds = [];
@@ -308,17 +326,23 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             }
 
             const counterParty = t.payer === 'me' ? (t.participants && t.participants[0]) : t.payer;
-
-            // Calculate TOTAL remaining (only from expenses, skip settlement parents)
-            let totalRemaining = 0;
             let firstParent = null;
-            for (const parentId of allParentIds) {
-                const parentTxn = groupTransactions.find(p => p.id === parentId && !p.isDeleted);
-                // Skip if parent is also a settlement - only count original expenses
-                if (parentTxn && !parentTxn.isReturn) {
-                    if (!firstParent) firstParent = parentTxn;
-                    const debtorId = parentTxn.payer === 'me' ? counterParty : 'me';
-                    totalRemaining += getOutstandingDebt(parentTxn, debtorId);
+
+            // TRUSTED SOURCE: Use the stored remainingAmount on the settlement itself if available
+            // This represents the Deficit (if positive) or Credit (if negative via overpaidAmount logic, handled elsewhere?)
+            // Actually, for Deficits, remainingAmount is positive.
+            let totalRemaining = t.remainingAmount !== undefined ? t.remainingAmount : 0;
+
+            // Legacy Fallback: If remainingAmount is missing, try to recalculate from parents (Chained logic)
+            if (t.remainingAmount === undefined) {
+                for (const parentId of allParentIds) {
+                    const parentTxn = groupTransactions.find(p => p.id === parentId && !p.isDeleted);
+                    // Skip if parent is also a settlement - only count original expenses
+                    if (parentTxn && !parentTxn.isReturn) {
+                        if (!firstParent) firstParent = parentTxn;
+                        const debtorId = parentTxn.payer === 'me' ? counterParty : 'me';
+                        totalRemaining += getOutstandingDebt(parentTxn, debtorId);
+                    }
                 }
             }
 
@@ -334,7 +358,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             }
 
             const isCredit = totalRemaining < 0;
-            const relationType = isCredit ? 'credit_link' : (firstParent?.payer === 'me' ? 'owed_to_me' : 'owed_by_me');
+            const relationType = isCredit ? 'credit_link' : ((firstParent ? firstParent.payer === 'me' : t.payer !== 'me') ? 'owed_to_me' : 'owed_by_me');
 
             // Return the SETTLEMENT transaction with its own ID, but with total remaining debt
             return {
@@ -361,12 +385,32 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             }
         });
 
-        // Combine all sources - partial settlements are added separately
+        // Find overpaid settlements that have credit available
+        // These are settlements with overpaidAmount > 0 that can be used to offset new payments
+        const overpaidSettlements = groupTransactions.filter(t => {
+            if (!t.isReturn) return false;
+            // CHECK: Allow negative overpaidAmount (stored as negative now)
+            if (!t.overpaidAmount || Math.abs(t.overpaidAmount) <= 1) return false;
+            return true;
+        }).map(t => {
+            const counterParty = t.payer === 'me' ? (t.participants && t.participants[0]) : t.payer;
+            const relationType = t.payer === 'me' ? 'owed_to_me' : 'owed_by_me'; // Credit flows opposite
+            return {
+                ...t,
+                relationType,
+                counterParty,
+                outstanding: t.overpaidAmount, // Already negative = credit available
+                displayName: `💰 Credit from: ${t.expenseName}`,
+                isOverpaidCredit: true
+            };
+        });
+
+        // Combine all sources - partial settlements and overpaid settlements are added separately
         // Filter out transactions that already have partial settlements (user should continue those instead)
         const parentDebts = [...debtsIOwe, ...debtsTheyOwe]
             .filter(t => t.outstanding > 1)
             .filter(t => !parentIdsWithPartialSettlements.has(t.id));
-        let all = [...parentDebts, ...partialSettlements];
+        let all = [...parentDebts, ...partialSettlements, ...overpaidSettlements];
 
         // Filter by debtor - works the same for both settlement and forgiveness
         if (repaymentFilter) {
@@ -380,8 +424,9 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             }
         }
 
-        // We use Math.abs > 1 to avoid showing transactions settled within 1 paise/cent
-        const result = all.filter(t => Math.abs(t.outstanding) > 1).filter(t => !linkedTxns.some(l => l.id === t.id)).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+        // Filter: Math.abs > 1 to allow both debts (positive) and credits (negative)
+        // Also filter out already linked transactions
+        const result = all.filter(t => Math.abs(t.outstanding) > 1 || t.isOverpaidCredit).filter(t => !linkedTxns.some(l => l.id === t.id)).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
         return [...new Map(result.map(item => [`${item.id}-${item.counterParty}`, item])).values()];
     }, [groupTransactions, linkedTxns, isSettlement, isForgiveness, payer, selectedParticipants, repaymentFilter, getOutstandingDebt]);
@@ -624,16 +669,53 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 const inferred = parent.counterParty;
                 if (inferred && inferred !== 'me') setSelectedParticipants([inferred]);
             }
-            const outstandingRupees = parent.outstanding / 100;
+
+            // Use participantRemaining for precise per-participant math when available
+            const settlingParticipant = parent.counterParty;
+            const hasParticipantRemaining = parent.participantRemaining && settlingParticipant &&
+                parent.participantRemaining[settlingParticipant] !== undefined;
+
+            // Get remaining amount - can be negative (credit/overpaid)
+            let remainingAmount = hasParticipantRemaining
+                ? parent.participantRemaining[settlingParticipant]
+                : parent.outstanding;
+
+            // Check if this is an overpaid credit (marked by eligibleParents or has overpaidAmount)
+            const isOverpaidCredit = parent.isOverpaidCredit || parent.overpaidAmount > 0;
+
+            // For overpaid credits, use overpaidAmount directly
+            let creditAmount = 0;
+            let isCredit = false;
+
+            if (isOverpaidCredit) {
+                // Use overpaidAmount from settlement as the credit
+                isCredit = true;
+                creditAmount = parent.overpaidAmount; // Already negative
+                console.log('Overpaid credit detected:', parent.overpaidAmount, 'creditAmount:', creditAmount);
+            } else if (parent.participantOverpaid?.[settlingParticipant] && parent.participantOverpaid[settlingParticipant] < 0) {
+                // Use participantOverpaid as fallback (check for negative value)
+                isCredit = true;
+                creditAmount = parent.participantOverpaid[settlingParticipant];
+            } else if (remainingAmount < 0) {
+                // Remaining amount is already negative (credit)
+                isCredit = true;
+                creditAmount = remainingAmount;
+            }
+
+            // Convert to rupees - use credit amount (negative) or remaining (positive)
+            const outstandingRupees = isCredit
+                ? Math.abs(creditAmount) / 100  // Use absolute magnitude, sign is handled by logic below
+                : Math.abs(remainingAmount) / 100;
+
             const isMyDebt = parent.relationType === 'owed_by_me';
 
             // Settlement: owed_by_me = positive (I pay off my debt), owed_to_me = negative (flip, they pay me)
-            // Forgiveness: owed_to_me = positive (I forgive, I'm the giver), owed_by_me = negative (flip, they forgive me)
+            // Credit: applies as negative allocation (reduces total)
             if (isForgiveness) {
                 // Inverted signs for forgiveness
                 allocValue = (payer === 'me') ? (isMyDebt ? -outstandingRupees : outstandingRupees) : (isMyDebt ? outstandingRupees : -outstandingRupees);
             } else {
-                // Settlement logic
+                // Settlement logic - credits will have negative outstandingRupees
                 allocValue = (payer === 'me') ? (isMyDebt ? outstandingRupees : -outstandingRupees) : (isMyDebt ? -outstandingRupees : outstandingRupees);
             }
 
@@ -650,9 +732,9 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 dateStr: getTxnDateStr(parent),
                 timestamp: getTxnTime(parent),
                 fullAmount: Math.abs(parent.amount),
-                maxAllocatable: parent.outstanding,
+                maxAllocatable: isCredit ? creditAmount : remainingAmount,
                 allocated: allocValue.toFixed(2),
-                relationType: parent.relationType
+                relationType: isCredit ? 'credit_link' : parent.relationType
             };
 
             // FIX: Append new link instead of replacing
@@ -690,9 +772,23 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         const val = e.target.value;
         setAmount(val);
 
-        // FIX: Sync allocation for ANY single link (Refund OR Settlement)
+        // FIX: Sync allocation for ANY single link, but CAP at maxAllocatable (debt amount)
+        // This ensures if user types 150 for a 140 debt, allocated stays 140, creating a 10 basketDiff (overpayment)
         if (linkedTxns.length === 1) {
-            setLinkedTxns(prev => prev.map(t => ({ ...t, allocated: val })));
+            setLinkedTxns(prev => prev.map(t => {
+                // If maxAllocatable exists (settlements), cap the allocation
+                // For regular expenses or undefined max, follow the input value
+                let newAllocated = parseFloat(val) || 0;
+                if (t.maxAllocatable !== undefined && t.maxAllocatable !== null) {
+                    const max = Math.abs(parseFloat(t.maxAllocatable)) / 100; // maxAllocatable is in paise
+                    // Only cap if we are exceeding the max (overpaying)
+                    // But wait, if we are overpaying, we WANT basketDiff.
+                    if (newAllocated > max) {
+                        newAllocated = max;
+                    }
+                }
+                return { ...t, allocated: newAllocated.toFixed(2) };
+            }));
         }
     };
 
@@ -922,7 +1018,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             // BASKET VALUE LOGIC:
             // Calculate the exact difference between Payment Amount and Total Allocated to Links (in PAISE).
             // This 'basketDiff' will be used by the backend as the definitive Deficit (if positive) or Overpayment (if negative).
-            basketDiff: (isSettlement || isForgiveness) ? (amountInPaise - linkedTransactionsData.reduce((sum, t) => sum + Math.abs(t.amount), 0)) : 0
+            basketDiff: (isSettlement || isForgiveness) ? (amountInPaise - linkedTransactionsData.reduce((sum, t) => sum + t.amount, 0)) : 0
         };
 
         // Apply smart tagging rules (auto-fill empty category/tag/mode based on expense name)

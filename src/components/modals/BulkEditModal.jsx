@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { X, Tag, Folder, CreditCard, Check } from 'lucide-react';
+import { X, Tag, Folder, CreditCard, Check, Calendar } from 'lucide-react';
 import useAppStore from '../../store/useAppStore';
 import { bulkUpdateTransactions } from '../../services/transactionService';
 import Button from '../common/Button';
 import Select from '../common/Select';
+import { Timestamp } from 'firebase/firestore';
 
 const BulkEditModal = ({ isOpen, selectedIds, onClose, onSuccess }) => {
     const { categories, tags, modesOfPayment, showToast } = useAppStore();
@@ -11,7 +12,8 @@ const BulkEditModal = ({ isOpen, selectedIds, onClose, onSuccess }) => {
     const [updateData, setUpdateData] = useState({
         category: '',
         tag: '',
-        modeOfPayment: ''
+        modeOfPayment: '',
+        date: ''
     });
 
     if (!isOpen) return null;
@@ -22,6 +24,9 @@ const BulkEditModal = ({ isOpen, selectedIds, onClose, onSuccess }) => {
         if (updateData.category) cleanData.category = updateData.category;
         if (updateData.tag) cleanData.tag = updateData.tag;
         if (updateData.modeOfPayment) cleanData.modeOfPayment = updateData.modeOfPayment;
+        if (updateData.date) {
+            cleanData.timestamp = Timestamp.fromDate(new Date(updateData.date));
+        }
 
         if (Object.keys(cleanData).length === 0) {
             showToast('Please select at least one field to update', true);
@@ -116,6 +121,21 @@ const BulkEditModal = ({ isOpen, selectedIds, onClose, onSuccess }) => {
                                 onChange={(e) => setUpdateData({ ...updateData, modeOfPayment: e.target.value })}
                                 options={mapOpts(modesOfPayment)}
                                 className="bg-gray-900/50 border-gray-700"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-sky-500/10 text-sky-400">
+                            <Calendar size={18} />
+                        </div>
+                        <div className="flex-1">
+                            <label className="block text-xs font-medium text-gray-400 mb-1">Date</label>
+                            <input
+                                type="date"
+                                value={updateData.date}
+                                onChange={(e) => setUpdateData({ ...updateData, date: e.target.value })}
+                                className="w-full bg-gray-900/50 border border-gray-700 text-gray-100 text-sm rounded-lg p-3 outline-none focus:border-indigo-500/50 transition-colors"
                             />
                         </div>
                     </div>

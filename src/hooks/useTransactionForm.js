@@ -408,7 +408,11 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         // Combine all sources - partial settlements and overpaid settlements are added separately
         // Filter out transactions that already have partial settlements (user should continue those instead)
         const parentDebts = [...debtsIOwe, ...debtsTheyOwe]
-            .filter(t => t.outstanding > 1)
+            .filter(t => {
+                const hasParticipantRemaining = t.participantRemaining && t.participantRemaining[t.counterParty] > 1;
+                const hasPendingStatus = t.participantStatuses && (t.participantStatuses[t.counterParty] === 'pending' || t.participantStatuses[t.counterParty] === 'partial');
+                return t.outstanding > 1 || hasParticipantRemaining || hasPendingStatus;
+            })
             .filter(t => !parentIdsWithPartialSettlements.has(t.id));
         let all = [...parentDebts, ...partialSettlements, ...overpaidSettlements];
 
@@ -426,7 +430,11 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
         // Filter: Math.abs > 1 to allow both debts (positive) and credits (negative)
         // Also filter out already linked transactions
-        const result = all.filter(t => Math.abs(t.outstanding) > 1 || t.isOverpaidCredit).filter(t => !linkedTxns.some(l => l.id === t.id)).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+        const result = all.filter(t => {
+            const hasParticipantRemaining = t.participantRemaining && t.participantRemaining[t.counterParty] > 1;
+            const hasPendingStatus = t.participantStatuses && (t.participantStatuses[t.counterParty] === 'pending' || t.participantStatuses[t.counterParty] === 'partial');
+            return Math.abs(t.outstanding) > 1 || t.isOverpaidCredit || hasParticipantRemaining || hasPendingStatus;
+        }).filter(t => !linkedTxns.some(l => l.id === t.id)).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
         return [...new Map(result.map(item => [`${item.id}-${item.counterParty}`, item])).values()];
     }, [groupTransactions, linkedTxns, isSettlement, isForgiveness, payer, selectedParticipants, repaymentFilter, getOutstandingDebt]);

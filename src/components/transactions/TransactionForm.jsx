@@ -77,7 +77,7 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                 // Use participantRemaining if available, otherwise fall back to computed outstanding
                 const remainingAmount = hasParticipantRemaining
                     ? t.participantRemaining[settlingParticipant]
-                    : (t.outstanding || 0);
+                    : ((typeof t.participantRemaining === 'number' ? t.participantRemaining : 0) || t.remainingAmount || t.outstanding || 0);
 
                 // Check if we have per-participant status tracking
                 const hasParticipantStatuses = t.participantStatuses && settlingParticipant &&

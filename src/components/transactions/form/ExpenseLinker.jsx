@@ -82,9 +82,41 @@ const ExpenseLinker = ({ ui, formData, setters, links, debtorOptions, linkableOp
                 );
             })}
             {links.items.length > 0 && (
-                <div className={`mt-2 text-xs font-medium flex justify-between ${links.isValid ? 'text-green-600' : 'text-red-500'}`}>
-                    <span>Total Allocated: {formatCurrency(links.totalAllocated * 100)}</span>
-                    <span>{links.isValid ? "✓ Matches" : `${formatCurrency(Math.abs(links.allocationDiff) * 100)} Diff`}</span>
+                <div className={`mt-2 text-xs font-medium flex justify-between ${links.basketDiff === 0 ? 'text-green-600 dark:text-green-400' :
+                    links.basketDiff > 0 ? 'text-orange-600 dark:text-orange-400' : // Positive = Overpaid (Surplus) IF Amount > Debt. Wait.
+                        // Logic check: basketDiff = Payment (1500) - Debt (1000) = +500.
+                        // User said: "difference is positive then partial"??
+                        // Let's re-read user request: "if difference is positive then partial".
+                        // My basketDiff = Payment - Debt.
+                        // If Payment (500) - Debt (1000) = -500. (Negative).
+                        // If Payment (1500) - Debt (1000) = +500. (Positive).
+                        // User said:
+                        // "total linked amount and amount entered difference is positive then partial"
+                        // Diff = Linked (1000) - Entered (500) = +500. -> Partial.
+                        // Diff = Linked (1000) - Entered (1500) = -500. -> Overpaid.
+                        //
+                        // My basketDiff is calculated as: Payment - Debt.
+                        // So my basketDiff is -1 * User's Diff.
+                        //
+                        // My basketDiff:
+                        // -500 (Deficit/Partial)
+                        // +500 (Surplus/Overpaid)
+                        //
+                        // So:
+                        // basketDiff < 0 -> Partial
+                        // basketDiff > 0 -> Overpaid
+
+                        'text-purple-600 dark:text-purple-400' // Partial
+                    }`}>
+                    <span>Total Allocated in Links: {formatCurrency(links.totalMaxAllocatable * 100)}</span>
+                    <span>
+                        {links.basketDiff === 0
+                            ? "✓ Matches"
+                            : links.basketDiff < 0
+                                ? `Partial: ${formatCurrency(Math.abs(links.basketDiff) * 100)} remaining`
+                                : `Overpaid: ${formatCurrency(links.basketDiff * 100)} extra`
+                        }
+                    </span>
                 </div>
             )}
         </div>

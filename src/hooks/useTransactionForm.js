@@ -780,24 +780,9 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         const val = e.target.value;
         setAmount(val);
 
-        // FIX: Sync allocation for ANY single link, but CAP at maxAllocatable (debt amount)
-        // This ensures if user types 150 for a 140 debt, allocated stays 140, creating a 10 basketDiff (overpayment)
-        if (linkedTxns.length === 1) {
-            setLinkedTxns(prev => prev.map(t => {
-                // If maxAllocatable exists (settlements), cap the allocation
-                // For regular expenses or undefined max, follow the input value
-                let newAllocated = parseFloat(val) || 0;
-                if (t.maxAllocatable !== undefined && t.maxAllocatable !== null) {
-                    const max = Math.abs(parseFloat(t.maxAllocatable)) / 100; // maxAllocatable is in paise
-                    // Only cap if we are exceeding the max (overpaying)
-                    // But wait, if we are overpaying, we WANT basketDiff.
-                    if (newAllocated > max) {
-                        newAllocated = max;
-                    }
-                }
-                return { ...t, allocated: newAllocated.toFixed(2) };
-            }));
-        }
+        // AUTO-SYNC DISABLED:
+        // We no longer automatically update the linked allocation when the main amount changes.
+        // This allows the user to set a different amount (partial/overpayment) without fighting the UI.
     };
 
     const handleQuickAddRequest = (value, col, label) => {
@@ -941,13 +926,11 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
         let safeParticipants = selectedParticipants;
         if (isSettlement || isForgiveness) {
-            // Settlement/Forgiveness Logic: Ensure non-empty participants
             if (!selectedParticipants || selectedParticipants.length === 0) {
-                // Default to payer? No, settlement/forgiveness must have a recipient.
-                // We rely on handleSubmit validation, but for safety, filter empty.
+                // Safety check
             }
         } else {
-            if (!selectedParticipants.length && payer === 'me') safeParticipants = []; // Just me
+            if (!selectedParticipants.length && payer === 'me') safeParticipants = [];
         }
 
         if (!isSettlement && !isForgiveness && payer !== 'me' && !selectedParticipants.includes(payer) && includePayer) {
@@ -955,6 +938,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         }
 
         let finalSplits = { ...splits };
+        // ... (Split calculation logic remains the same) ...
         if (!isSettlement && !isForgiveness && !isIncome && splitMethod === 'equal') {
             const involvedCount = splitAllocatorParticipants.length;
             if (involvedCount > 0) {
@@ -980,23 +964,42 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             });
         }
 
-
-
         // Calculate proportional allocations for linked transactions
-        // If the user manually changed the total amount, we need to scale the linked allocations
         let linkedTransactionsData = [];
         if (linkedTxns.length > 0) {
-            linkedTransactionsData = linkedTxns.map(t => ({
-                id: t.id,
-                // Ensure we use the exact allocated amount in paise
-                amount: Math.round(parseFloat(t.allocated) * 100) * multiplier
-            }));
+            linkedTransactionsData = linkedTxns.map(t => {
+                let allocAmount = Math.round(parseFloat(t.allocated) * 100);
+
+                // DATA INTEGRITY FIX:
+                // If there's only one link, the linked amount cannot logically exceed the total transaction amount.
+                // (Unless it's an Overpayment scenario, where allocation stays at Debt amount, and extra is overpayment).
+                // But generally, for Partial payments, allocated > amount is wrong.
+                // We should clamp allocation to be AT MOST the transaction amount (if single link).
+                // However, for Overpayments: Amount (1500) > Alloc (1000). This is fine.
+                // For Partial: Amount (500) < Alloc (1000). This is BAD. Alloc should be 500.
+                if (linkedTxns.length === 1) {
+                    const totalTxnAmount = Math.abs(amountInPaise);
+                    if (Math.abs(allocAmount) > totalTxnAmount) {
+                        allocAmount = totalTxnAmount * (allocAmount < 0 ? -1 : 1);
+                    }
+                }
+
+                return {
+                    id: t.id,
+                    amount: allocAmount * multiplier
+                };
+            });
         }
         const parentIds = linkedTransactionsData.map(t => t.id);
-
-        // Ensure we don't pass undefined values to Firebase
         const participantForSettlement = safeParticipants[0] || null;
         const firstParentId = parentIds.length > 0 ? parentIds[0] : null;
+
+        // FIX: Calculate Total Target Debt using maxAllocatable (Total Debt) instead of allocated amount (Payment)
+        // This ensures basketDiff = Payment (97) - Debt (597) = -500 (Deficit)
+        const totalTargetDebt = linkedTxns.reduce((sum, t) => {
+            // maxAllocatable is in Paise. Fallback to allocated amount if max is missing.
+            return sum + (t.maxAllocatable !== undefined ? parseFloat(t.maxAllocatable) : Math.round(parseFloat(t.allocated) * 100));
+        }, 0);
 
         let txnData = {
             expenseName: name, amount: finalAmount, type: (isSettlement || isForgiveness) ? 'expense' : type,
@@ -1004,7 +1007,6 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             place: place.startsWith('add_new') ? '' : place,
             tag: tag.startsWith('add_new') ? '' : tag,
             modeOfPayment: isMultiMode ? 'Multi' : (mode.startsWith('add_new') ? '' : mode),
-            // Multi-Mode Payment Breakdown
             paymentBreakdown: isMultiMode
                 ? paymentBreakdown.map(p => ({
                     mode: p.mode,
@@ -1023,13 +1025,46 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             linkedTransactions: linkedTransactionsData, parentTransactionIds: parentIds,
             parentTransactionId: firstParentId, isLinkedRefund: parentIds.length > 0,
             groupId: formGroupId,
-            // BASKET VALUE LOGIC:
-            // Calculate the exact difference between Payment Amount and Total Allocated to Links (in PAISE).
-            // This 'basketDiff' will be used by the backend as the definitive Deficit (if positive) or Overpayment (if negative).
-            basketDiff: (isSettlement || isForgiveness) ? (amountInPaise - linkedTransactionsData.reduce((sum, t) => sum + t.amount, 0)) : 0
+
+            // CORRECTED BASKET VALUE LOGIC:
+            // Use totalTargetDebt (597) instead of linkedTransactionsData sum (97)
+            basketDiff: (isSettlement || isForgiveness) ? (amountInPaise - totalTargetDebt) : 0
         };
 
-        // Apply smart tagging rules (auto-fill empty category/tag/mode based on expense name)
+        // NEW: Manually calculate and inject participantRemaining / participantOverpaid
+        // This ensures updateTransaction (which doesn't have the basketDiff logic) also saves the correct state
+        if ((isSettlement || isForgiveness) && txnData.basketDiff !== 0) {
+            const diff = txnData.basketDiff;
+            const settlingParticipant = payer !== 'me' ? payer : (safeParticipants[0] || null);
+
+            if (settlingParticipant) {
+                if (diff > 5) {
+                    // OVERPAYMENT (Paid > Debt) -> txnData.basketDiff is POSITIVE
+                    // transactionService expects participantOverpaid to be NEGATIVE (Credit)
+                    // So we store -diff.
+                    txnData.overpaidAmount = -diff;
+                    txnData.remainingAmount = 0;
+                    txnData.settlementStatus = 'settled';
+                    txnData.participantOverpaid = { [settlingParticipant]: -diff };
+                    txnData.participantRemaining = { [settlingParticipant]: -diff }; // Also update remaining for consistency? Service does it.
+
+                    // Initial values for reversion
+                    if (!isEditMode) {
+                        txnData.initialOverpaidAmount = -diff;
+                        txnData.initialParticipantOverpaid = { [settlingParticipant]: -diff };
+                    }
+                } else if (diff < -5) {
+                    // DEFICIT (Paid < Debt) -> txnData.basketDiff is NEGATIVE
+                    // We want POSITIVE deficit amount
+                    const deficit = Math.abs(diff);
+                    txnData.settlementDeficit = deficit;
+                    txnData.remainingAmount = deficit;
+                    txnData.settlementStatus = 'partial';
+                    txnData.participantRemaining = { [settlingParticipant]: deficit };
+                }
+            }
+        }
+
         if (!isEditMode && smartRules && smartRules.length > 0) {
             txnData = applySmartRules(txnData, smartRules);
         }
@@ -1085,6 +1120,24 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
     const forceSubmit = () => { setShowDupeModal(false); saveTransactionLogic(); };
 
+    const linksTotal = linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0);
+    const links = {
+        items: linkedTxns,
+        isValid: linkedTxns.length > 0 && Math.abs(parseFloat(amount) - linksTotal) < 0.05,
+        totalAllocated: linksTotal,
+        allocationDiff: parseFloat(amount) - linksTotal,
+        // NEW: expose totalMaxAllocatable and basketDiff (Payment - Debt)
+        totalMaxAllocatable: linkedTxns.reduce((sum, t) => sum + (t.maxAllocatable ? parseFloat(t.maxAllocatable) / 100 : 0), 0),
+        basketDiff: linkedTxns.length > 0
+            ? (parseFloat(amount) - linkedTxns.reduce((sum, t) => sum + (t.maxAllocatable ? parseFloat(t.maxAllocatable) / 100 : parseFloat(t.allocated)), 0))
+            : 0,
+        tempId: tempSelectId,
+        set: setLinkedTxns,
+        remove: removeLinkedTxn,
+        updateAlloc: updateLinkedAllocation,
+        handleSelect: handleLinkSelect
+    };
+
     return {
         // 1. Form Data (Values)
         formData: {
@@ -1106,57 +1159,58 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             setIsMultiMode, setPaymentBreakdown
         },
 
-        // 3. UI State (Modals, Loading, Success)
+        // 3. UI State
         ui: {
+            isIncome, isSettlement, isForgiveness, isProductRefund, isRefundTab,
+            showSuccess, setShowSuccess,
             showDupeModal, setShowDupeModal, dupeTxn, setDupeTxn,
-            activePrompt, setActivePrompt,
             suggestion, setSuggestion,
-            showSuccess,
-            // Computed booleans
-            isRefundTab, isSettlement, isForgiveness, isProductRefund, isIncome
+            activePrompt, setActivePrompt
         },
 
-        // 4. Linked Transaction Logic
-        links: {
-            items: linkedTxns,
-            set: setLinkedTxns,
-            tempId: tempSelectId,
-            setTempId: setTempSelectId,
-            handleSelect: handleLinkSelect,
-            remove: removeLinkedTxn,
-            updateAlloc: updateLinkedAllocation,
-            totalAllocated: linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0),
-            allocationDiff: (parseFloat(amount) || 0) - linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0),
-            isValid: Math.abs((parseFloat(amount) || 0) - linkedTxns.reduce((sum, t) => sum + (parseFloat(t.allocated) || 0), 0)) < 0.05
-        },
-
-        // 5. Participants & Data Sources
+        // 4. Logic/Helpers
         data: {
+            categories,
+            places,
+            tags,
+            modesOfPayment,
             allParticipants,
             splitAllocatorParticipants,
-            groupTransactions,
             eligibleParents,
-            // Options from store
-            groups, categories, places, tags, modesOfPayment
+            groups
         },
 
-        // 6. High Level Actions
+        links,
+
         actions: {
-            handlePayerChange, handleRecipientChange,
-            handleParticipantAdd, handleParticipantRemove, handleGroupAdd,
-            handleQuickAddRequest, handlePromptConfirm,
-            handleTemplateSaveRequest, handleManualSwap, applySuggestion,
-            handleSubmit, forceSubmit, resetForm,
-            handleTypeChange, handleRefundSubTypeChange,
+            handleSubmit,
+            handleTypeChange,
+            handleRefundSubTypeChange,
+            handlePayerChange,
+            handleRecipientChange,
+            handleManualSwap,
+            handleParticipantAdd,
+            handleParticipantRemove,
+            handleGroupAdd,
+            resetForm,
+            applySuggestion,
+            handleTemplateSaveRequest,
+            handlePromptConfirm,
+            forceSubmit,
+            handleQuickAddRequest,
             handleAmountChange,
-            // Multi-Mode actions
-            addPaymentMode, removePaymentMode, updatePaymentMode, autoFillLastMode
+            // Multi-mode actions
+            addPaymentMode,
+            removePaymentMode,
+            updatePaymentMode,
+            autoFillLastMode
         },
 
-        // 7. Utilities
         utils: {
-            getTxnDateStr, getName, validation,
-            // Multi-Mode utilities
+            getName,
+            getTxnDateStr,
+            getTxnTime,
+            validation,
             getMultiModeRemaining
         }
     };

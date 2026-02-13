@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Archive, RefreshCw, Layers, Edit2, Repeat, UsersRound, Sparkles, ShieldCheck } from 'lucide-react';
+import { Trash2, Archive, RefreshCw, Layers, Edit2, Repeat, UsersRound, Sparkles, ShieldCheck, Search, Copy, Check } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { addDoc, collection, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -146,6 +146,120 @@ const CategoryManager = ({ data, onDelete }) => {
   );
 };
 
+
+
+const TransactionSearch = () => {
+  const { transactions, showToast } = useAppStore();
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [limit, setLimit] = useState(10);
+  const [copiedId, setCopiedId] = useState(null);
+
+  const handleSearch = (e) => {
+    const val = e.target.value;
+    setQuery(val);
+    if (!val || val.length < 2) {
+      setResults([]);
+      return;
+    }
+
+    const lowerVal = val.toLowerCase();
+    // Filter transactions (client-side for now as we have them in store)
+    const matches = transactions.filter(t =>
+      (t.expenseName && t.expenseName.toLowerCase().includes(lowerVal)) ||
+      (t.amount && t.amount.toString().includes(val))
+    ).sort((a, b) => {
+      // Sort by date desc
+      const ta = a.timestamp?.seconds || 0;
+      const tb = b.timestamp?.seconds || 0;
+      return tb - ta;
+    });
+
+    setResults(matches);
+  };
+
+  const copyToClipboard = (id) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(id);
+    showToast("ID copied to clipboard!");
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const displayResults = results.slice(0, limit);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="glass-card p-6 h-fit">
+        <h3 className="text-lg font-semibold mb-4 text-gray-200">Search Transaction ID</h3>
+        <div className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              value={query}
+              onChange={handleSearch}
+              placeholder="Search by name or amount..."
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-gray-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-all placeholder:text-gray-500"
+            />
+          </div>
+          <p className="text-xs text-gray-500">
+            Found {results.length} matches. {results.length > limit ? `Showing top ${limit}.` : ''}
+          </p>
+        </div>
+      </div>
+
+      <div className="glass-card overflow-hidden">
+        <h3 className="p-4 border-b border-white/5 font-semibold text-gray-200">Results</h3>
+        <div className="divide-y divide-white/5 max-h-[500px] overflow-y-auto">
+          {displayResults.map(t => (
+            <div key={t.id} className="p-4 hover:bg-white/5 transition-colors group">
+              <div className="flex justify-between items-start mb-1">
+                <span className="font-medium text-gray-200 line-clamp-1">{t.expenseName}</span>
+                <span className={`font-mono font-bold ${t.amount < 0 ? 'text-green-400' : 'text-gray-200'}`}>
+                  {t.amount < 0 ? '+' : ''}₹{Math.abs(t.amount / 100).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs text-gray-500">
+                <span>{t.dateString || new Date(t.timestamp?.seconds * 1000).toLocaleDateString()}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono bg-black/20 px-2 py-0.5 rounded text-gray-400 select-all">
+                    {t.id}
+                  </span>
+                  <button
+                    onClick={() => copyToClipboard(t.id)}
+                    className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-sky-400 transition-colors"
+                    title="Copy ID"
+                  >
+                    {copiedId === t.id ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {query && results.length === 0 && (
+            <div className="p-8 text-center text-gray-500">
+              No transactions found matching "{query}"
+            </div>
+          )}
+          {!query && (
+            <div className="p-8 text-center text-gray-500">
+              Start typing to search...
+            </div>
+          )}
+          {results.length > limit && (
+            <button
+              onClick={() => setLimit(l => l + 20)}
+              className="w-full p-3 text-sm text-sky-400 hover:text-sky-300 hover:bg-white/5 transition-colors"
+            >
+              Load More
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ManageData = () => {
   const [activeTab, setActiveTab] = useState('participants');
   const {
@@ -233,6 +347,7 @@ const ManageData = () => {
     { id: 'recurring', label: 'Recurring', icon: <Repeat size={16} /> },
     { id: 'smartRules', label: 'Smart Rules', icon: <Sparkles size={16} /> },
     { id: 'dataHealth', label: 'Data Health', icon: <ShieldCheck size={16} /> },
+    { id: 'searchIds', label: 'Find IDs', icon: <Search size={16} /> },
   ];
 
   return (
@@ -299,6 +414,7 @@ const ManageData = () => {
         {activeTab === 'recurring' && <RecurringManager />}
         {activeTab === 'smartRules' && <SmartRulesManager />}
         {activeTab === 'dataHealth' && <DataHealthCheck />}
+        {activeTab === 'searchIds' && <TransactionSearch />}
       </div>
 
       <ConfirmModal

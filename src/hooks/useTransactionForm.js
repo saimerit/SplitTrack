@@ -376,12 +376,13 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
             };
         });
 
-        // Collect all parent transaction IDs that are already covered by partial settlements
-        // These should be excluded from parentDebts to avoid showing duplicates
-        const parentIdsWithPartialSettlements = new Set();
+        // Collect parent+counterParty pairs that are already covered by partial settlements
+        // Only exclude a parent for the SPECIFIC counterparty who has a partial settlement,
+        // not for all counterparties (fixes multi-participant transactions disappearing)
+        const partialSettlementPairs = new Set();
         partialSettlements.forEach(ps => {
-            if (ps.parentTransactionIds) {
-                ps.parentTransactionIds.forEach(pid => parentIdsWithPartialSettlements.add(pid));
+            if (ps.parentTransactionIds && ps.counterParty) {
+                ps.parentTransactionIds.forEach(pid => partialSettlementPairs.add(`${pid}:${ps.counterParty}`));
             }
         });
 
@@ -406,14 +407,14 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         });
 
         // Combine all sources - partial settlements and overpaid settlements are added separately
-        // Filter out transactions that already have partial settlements (user should continue those instead)
+        // Only exclude a parent debt if THIS specific counterparty already has a partial settlement
         const parentDebts = [...debtsIOwe, ...debtsTheyOwe]
             .filter(t => {
                 const hasParticipantRemaining = t.participantRemaining && t.participantRemaining[t.counterParty] > 1;
                 const hasPendingStatus = t.participantStatuses && (t.participantStatuses[t.counterParty] === 'pending' || t.participantStatuses[t.counterParty] === 'partial');
                 return t.outstanding > 1 || hasParticipantRemaining || hasPendingStatus;
             })
-            .filter(t => !parentIdsWithPartialSettlements.has(t.id));
+            .filter(t => !partialSettlementPairs.has(`${t.id}:${t.counterParty}`));
         let all = [...parentDebts, ...partialSettlements, ...overpaidSettlements];
 
         // Filter by debtor - works the same for both settlement and forgiveness
@@ -450,13 +451,32 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 let allocVal = link.amount;
                 if (initialData.amount < 0 && !initialData.isReturn) allocVal = Math.abs(allocVal);
 
+                // FIX: Use actual outstanding amount instead of full parent amount
+                const computedMax = (() => {
+                    if (!original || !initialData.isReturn) return full;
+                    const thisLinkAmount = Math.abs(link.amount) || 0;
+                    const counterParty = initialData.payer !== 'me'
+                        ? initialData.payer
+                        : initialData.participants?.[0];
+                    // Try participant-level remaining (add back this txn's contribution)
+                    if (original.participantRemaining && counterParty
+                        && original.participantRemaining[counterParty] !== undefined) {
+                        return original.participantRemaining[counterParty] + thisLinkAmount;
+                    }
+                    // Try transaction-level remaining
+                    if (original.remainingAmount !== undefined) {
+                        return original.remainingAmount + thisLinkAmount;
+                    }
+                    return full;
+                })();
+
                 return {
                     id: link.id,
                     name: original ? original.expenseName : 'Unknown',
                     dateStr: getTxnDateStr(original),
                     timestamp: getTxnTime(original),
                     fullAmount: full,
-                    maxAllocatable: full,
+                    maxAllocatable: computedMax,
                     allocated: (allocVal / 100).toFixed(2),
                     relationType: (original && original.payer !== 'me' && original.splits?.['me']) ? 'owed_by_me' : 'owed_to_me'
                 };
@@ -996,9 +1016,12 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
 
         // FIX: Calculate Total Target Debt using maxAllocatable (Total Debt) instead of allocated amount (Payment)
         // This ensures basketDiff = Payment (97) - Debt (597) = -500 (Deficit)
+        // FIX: Use allocation sign to determine if each link adds or subtracts from total debt
         const totalTargetDebt = linkedTxns.reduce((sum, t) => {
-            // maxAllocatable is in Paise. Fallback to allocated amount if max is missing.
-            return sum + (t.maxAllocatable !== undefined ? parseFloat(t.maxAllocatable) : Math.round(parseFloat(t.allocated) * 100));
+            const max = t.maxAllocatable !== undefined ? parseFloat(t.maxAllocatable) : Math.round(parseFloat(t.allocated) * 100);
+            const alloc = parseFloat(t.allocated) || 0;
+            // Negative allocation = this link offsets debt (e.g. "they owe me")
+            return sum + (alloc < 0 ? -Math.abs(max) : Math.abs(max));
         }, 0);
 
         let txnData = {
@@ -1127,9 +1150,18 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         totalAllocated: linksTotal,
         allocationDiff: parseFloat(amount) - linksTotal,
         // NEW: expose totalMaxAllocatable and basketDiff (Payment - Debt)
-        totalMaxAllocatable: linkedTxns.reduce((sum, t) => sum + (t.maxAllocatable ? parseFloat(t.maxAllocatable) / 100 : 0), 0),
+        // FIX: Use allocation sign to handle mixed-direction links correctly
+        totalMaxAllocatable: linkedTxns.reduce((sum, t) => {
+            const max = t.maxAllocatable ? parseFloat(t.maxAllocatable) / 100 : 0;
+            const alloc = parseFloat(t.allocated) || 0;
+            return sum + (alloc < 0 ? -Math.abs(max) : Math.abs(max));
+        }, 0),
         basketDiff: linkedTxns.length > 0
-            ? (parseFloat(amount) - linkedTxns.reduce((sum, t) => sum + (t.maxAllocatable ? parseFloat(t.maxAllocatable) / 100 : parseFloat(t.allocated)), 0))
+            ? (parseFloat(amount) - linkedTxns.reduce((sum, t) => {
+                const max = t.maxAllocatable ? parseFloat(t.maxAllocatable) / 100 : parseFloat(t.allocated);
+                const alloc = parseFloat(t.allocated) || 0;
+                return sum + (alloc < 0 ? -Math.abs(max) : Math.abs(max));
+            }, 0))
             : 0,
         tempId: tempSelectId,
         set: setLinkedTxns,

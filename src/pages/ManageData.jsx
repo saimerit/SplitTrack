@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Archive, RefreshCw, Layers, Edit2, Repeat, UsersRound, Sparkles, ShieldCheck, Search, Copy, Check } from 'lucide-react';
+import { Trash2, Archive, RefreshCw, Layers, Edit2, Repeat, UsersRound, Sparkles, ShieldCheck, Search, Copy, Check, X } from 'lucide-react';
 import useAppStore from '../store/useAppStore';
 import { addDoc, collection, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -268,6 +268,7 @@ const ManageData = () => {
   } = useAppStore();
 
   const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => { } });
+  const [editingParticipant, setEditingParticipant] = useState(null);
 
   const closeModal = () => setModalConfig({ ...modalConfig, isOpen: false });
 
@@ -336,6 +337,20 @@ const ManageData = () => {
     }
   };
 
+  const handleRenameParticipant = async () => {
+    if (!editingParticipant || !editingParticipant.name.trim()) return;
+    try {
+      await updateDoc(doc(db, `ledgers/${LEDGER_ID}/participants`, editingParticipant.id), {
+        name: editingParticipant.name.trim()
+      });
+      showToast('Participant renamed!');
+      setEditingParticipant(null);
+    } catch (err) {
+      console.error(err);
+      showToast('Error renaming participant', true);
+    }
+  };
+
   const tabs = [
     { id: 'participants', label: 'Participants', icon: <Archive size={16} /> },
     { id: 'participantGroups', label: 'Groups', icon: <UsersRound size={16} /> },
@@ -391,13 +406,46 @@ const ManageData = () => {
               <div className="divide-y divide-white/5 max-h-96 overflow-y-auto">
                 {participants.map(p => (
                   <div key={p.uniqueId} className={`p-4 flex justify-between items-center ${p.isArchived ? 'opacity-50' : ''}`}>
-                    <div>
-                      <p className={`font-medium ${p.isArchived ? 'text-gray-500' : 'text-gray-200'}`}>{p.name}</p>
-                      <p className="text-xs text-gray-500">{p.uniqueId}</p>
+                    <div className="min-w-0 flex-1 pr-3">
+                      {editingParticipant?.id === p.id ? (
+                        <input
+                          autoFocus
+                          value={editingParticipant.name}
+                          onChange={e => setEditingParticipant({ ...editingParticipant, name: e.target.value })}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleRenameParticipant();
+                            if (e.key === 'Escape') setEditingParticipant(null);
+                          }}
+                          className="w-full bg-white/10 border border-sky-500/50 rounded px-2 py-1 text-gray-200 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        />
+                      ) : (
+                        <>
+                          <p className={`font-medium ${p.isArchived ? 'text-gray-500' : 'text-gray-200'}`}>{p.name}</p>
+                          <p className="text-xs text-gray-500">{p.uniqueId}</p>
+                        </>
+                      )}
                     </div>
-                    <button onClick={() => toggleArchive(p)} className="text-gray-400 hover:text-sky-500" title={p.isArchived ? "Unarchive" : "Archive"}>
-                      {p.isArchived ? <RefreshCw size={18} /> : <Archive size={18} />}
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {editingParticipant?.id === p.id ? (
+                        <>
+                          <button onClick={handleRenameParticipant} className="text-gray-400 hover:text-green-500" title="Save">
+                            <Check size={18} />
+                          </button>
+                          <button onClick={() => setEditingParticipant(null)} className="text-gray-400 hover:text-red-500" title="Cancel">
+                            <X size={18} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => setEditingParticipant({ id: p.id, name: p.name })} className="text-gray-400 hover:text-sky-500" title="Edit Name">
+                            <Edit2 size={18} />
+                          </button>
+                          <button onClick={() => toggleArchive(p)} className="text-gray-400 hover:text-sky-500" title={p.isArchived ? "Unarchive" : "Archive"}>
+                            {p.isArchived ? <RefreshCw size={18} /> : <Archive size={18} />}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

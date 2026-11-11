@@ -69,43 +69,23 @@ const ExpenseLinker = ({ ui, formData, setters, links, debtorOptions, linkableOp
                         <span className={`flex-1 truncate text-sm ${textColor}`}>
                             {link.name}
                         </span>
-                        <input
-                            type="number"
-                            value={link.allocated}
-                            onChange={e => links.updateAlloc(link.id, e.target.value)}
-                            className="w-24 border rounded px-1 text-black dark:text-white dark:bg-gray-700"
-                        />
+                        {!ui.isProductRefund && (
+                            <input
+                                type="number"
+                                value={link.allocated}
+                                onChange={e => links.updateAlloc(link.id, e.target.value)}
+                                className="w-24 border rounded px-1 text-black dark:text-white dark:bg-gray-700"
+                            />
+                        )}
                         <button type="button" onClick={() => links.remove(link.id)} className="text-gray-400 hover:text-red-500">
                             <Trash2 size={14} />
                         </button>
                     </div>
                 );
             })}
-            {links.items.length > 0 && (
+            {links.items.length > 0 && !ui.isProductRefund && (
                 <div className={`mt-2 text-xs font-medium flex justify-between ${links.basketDiff === 0 ? 'text-green-600 dark:text-green-400' :
-                    links.basketDiff > 0 ? 'text-orange-600 dark:text-orange-400' : // Positive = Overpaid (Surplus) IF Amount > Debt. Wait.
-                        // Logic check: basketDiff = Payment (1500) - Debt (1000) = +500.
-                        // User said: "difference is positive then partial"??
-                        // Let's re-read user request: "if difference is positive then partial".
-                        // My basketDiff = Payment - Debt.
-                        // If Payment (500) - Debt (1000) = -500. (Negative).
-                        // If Payment (1500) - Debt (1000) = +500. (Positive).
-                        // User said:
-                        // "total linked amount and amount entered difference is positive then partial"
-                        // Diff = Linked (1000) - Entered (500) = +500. -> Partial.
-                        // Diff = Linked (1000) - Entered (1500) = -500. -> Overpaid.
-                        //
-                        // My basketDiff is calculated as: Payment - Debt.
-                        // So my basketDiff is -1 * User's Diff.
-                        //
-                        // My basketDiff:
-                        // -500 (Deficit/Partial)
-                        // +500 (Surplus/Overpaid)
-                        //
-                        // So:
-                        // basketDiff < 0 -> Partial
-                        // basketDiff > 0 -> Overpaid
-
+                    links.basketDiff > 0 ? 'text-orange-600 dark:text-orange-400' :
                         'text-purple-600 dark:text-purple-400' // Partial
                     }`}>
                     <span>Total Allocated in Links: {formatCurrency(links.totalMaxAllocatable * 100)}</span>

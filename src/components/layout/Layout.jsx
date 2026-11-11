@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { Menu, X, Plus } from 'lucide-react';
+import { Menu, Plus, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import Toast from '../common/Toast';
 import useAppStore from '../../store/useAppStore';
+import SplitTrackLogo from '../branding/SplitTrackLogo';
+import GridGlow from '../reactbits/GridGlow';
 
 const Layout = () => {
   const toast = useAppStore(state => state.toast);
@@ -22,8 +24,8 @@ const Layout = () => {
 
   return (
     <>
-      {/* Main Layout Container */}
-      <div className={`flex h-dvh text-gray-900 dark:text-gray-100 w-full overflow-hidden ${isPrivacyEnabled ? 'privacy-active' : ''}`} style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-main)' }}>
+      <div className={`relative flex h-dvh w-full overflow-hidden bg-background text-foreground ${isPrivacyEnabled ? 'privacy-active' : ''}`}>
+        <GridGlow />
 
         {/* Sidebar Component - Fixed position, doesn't affect flex */}
         <Sidebar
@@ -34,26 +36,29 @@ const Layout = () => {
         />
 
         {/* Main Content Wrapper - Full width on mobile, offset for sidebar on desktop */}
-        <div className={`flex-1 flex flex-col min-w-0 w-full transition-all duration-300 overflow-y-auto overflow-x-hidden ${isSidebarOpen ? 'md:ml-64' : ''}`}>
+        <div className={`relative z-10 flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden transition-all duration-300 ${isSidebarOpen ? 'md:ml-72' : 'md:ml-20'}`}>
 
           {/* Header / Toggle Area - Glass Menu Bar */}
-          <header className="sticky top-0 z-30 flex items-center h-16 px-4 backdrop-blur-md bg-transparent border-b border-white/5 shrink-0">
+          <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-border/70 bg-background/80 px-4 backdrop-blur-xl md:px-8">
 
             {/* Toggle Button - Enhanced with rounded hover effect */}
             <button
               onClick={toggleSidebar}
-              className="hidden md:block p-2 mr-4 hover:bg-white/10 rounded-full transition-colors focus:outline-none"
+              className="hidden rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground md:block"
               title={isSidebarOpen ? "Close Menu" : "Open Menu"}
             >
-              {isSidebarOpen ? <X size={22} className="text-gray-300" /> : <Menu size={22} className="text-gray-300" />}
+              <Menu size={20} />
             </button>
 
             {/* Title - Enhanced typography */}
-            <span className="ml-4 font-semibold text-lg tracking-tight text-white md:hidden">SplitTrack</span>
+            <SplitTrackLogo className="md:hidden" />
+            <button onClick={() => navigate('/history')} className="hidden items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground shadow-sm hover:bg-accent lg:flex">
+              <Search size={16} /> Search transactions
+            </button>
           </header>
 
           {/* Page Content - Full width mobile, responsive padding */}
-          <main className="flex-1 w-full px-3 py-3 sm:px-4 sm:py-4 md:px-8 md:py-6 pb-24 md:pb-8">
+          <main className="flex-1 w-full px-4 py-5 pb-24 sm:px-6 md:px-8 md:py-8 md:pb-8">
             <Outlet />
           </main>
         </div>
@@ -71,7 +76,7 @@ const Layout = () => {
       {!isConsolePage && (
         <button
           onClick={() => navigate('/add')}
-          className="md:hidden fixed bottom-24 right-5 h-14 w-14 bg-linear-to-br from-sky-500 to-indigo-600 text-white rounded-full shadow-lg flex items-center justify-center z-50 focus:outline-none focus:ring-4 focus:ring-sky-300/50 fab-animated fab-ripple haptic-tap safe-area-bottom"
+          className="fixed bottom-24 right-5 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
           aria-label="Add Transaction"
         >
           <Plus size={28} />

@@ -46,7 +46,7 @@ export const rectifyAllStats = async (participants = []) => {
         Object.entries(splits).forEach(([uid, share]) => {
           if (uid !== 'me') myPersonalBalances[uid] = (myPersonalBalances[uid] || 0) + share;
         });
-      } else if (splits['me'] > 0) {
+      } else if (splits['me']) {
         myPersonalBalances[payer] = (myPersonalBalances[payer] || 0) - splits['me'];
       }
     }
@@ -218,8 +218,26 @@ const updateParentStats = async (parentId) => {
         }
       }
     } else {
-      // Child is an Expense -> INCREASE Debt (Add) / Consume Credit
-      netBalance += linkAmount;
+      // Child is an Expense or Product Refund -> Adjust Balance
+      // Raw link amount handles both positive expenses and negative refunds
+      netBalance += rawLinkAmount;
+
+      // NEW: Adjust participantRemaining based on the child's splits
+      if (childData.splits) {
+        Object.entries(childData.splits).forEach(([uid, childShare]) => {
+          if (uid !== 'me' && participantRemaining[uid] !== undefined) {
+            let newRem = participantRemaining[uid] + childShare;
+            if (newRem < 0) newRem = 0; // Cap at 0
+            participantRemaining[uid] = newRem;
+
+            if (newRem <= 1) {
+              participantStatuses[uid] = 'settled';
+            } else {
+              participantStatuses[uid] = 'partial';
+            }
+          }
+        });
+      }
 
       // Update participantOverpaid consumption (if this is a settlement parent)
       if (parentData.isReturn) {
@@ -296,7 +314,7 @@ export const addTransaction = async (txnData) => {
       const participantStatuses = {};
 
       Object.entries(txnData.splits).forEach(([uid, share]) => {
-        if (uid !== 'me' && share > 0) {
+        if (uid !== 'me' && share !== 0) {
           participantRemaining[uid] = share;
           participantStatuses[uid] = 'pending';
         }
@@ -559,9 +577,32 @@ export const deleteTransaction = async (id, parentId) => {
 export const restoreTransaction = async (id) => {
   const txnRef = doc(db, COLLECTION_PATH, id);
   await updateDoc(txnRef, { isDeleted: false, deletedAt: null });
+
+  // A restored settlement changes the outstanding amount of every linked parent.
+  // Rebuild those derived fields immediately so no record is left in a stale state.
+  const restored = await getDoc(txnRef);
+  const data = restored.exists() ? restored.data() : null;
+  const parentIds = new Set([
+    data?.parentTransactionId,
+    ...(data?.parentTransactionIds || []),
+    ...(data?.linkedTransactions || []).map(link => link.id)
+  ].filter(Boolean));
+  await Promise.all([...parentIds].map(updateParentStats));
 };
 
 export const permanentDeleteTransaction = async (id) => {
+  const colRef = collection(db, COLLECTION_PATH);
+  const [childrenByArray, childrenByLegacy] = await Promise.all([
+    getDocs(query(colRef, where("parentTransactionIds", "array-contains", id))),
+    getDocs(query(colRef, where("parentTransactionId", "==", id)))
+  ]);
+
+  // Hard-deleting a parent would make these records impossible to reconcile.
+  // Keep the parent until its linked settlements have been removed first.
+  if (!childrenByArray.empty || !childrenByLegacy.empty) {
+    throw new Error('Cannot permanently delete a transaction that has linked settlements. Remove the linked records first.');
+  }
+
   await firestoreDeleteDoc(doc(db, COLLECTION_PATH, id));
 };
 

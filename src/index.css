@@ -2,6 +2,21 @@
 
 @theme {
   --font-sans: "Inter", system-ui, sans-serif;
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-primary: hsl(var(--primary-hsl));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-border: hsl(var(--border-hsl));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
 
   /* --- PROFESSIONAL ANIMATIONS --- */
   --animate-float: float 6s ease-in-out infinite;
@@ -54,6 +69,23 @@
 
 /* --- AURORA BACKGROUND SYSTEM --- */
 :root {
+  /* Shadcn-compatible design tokens. Theme palettes can still override the
+     legacy variables below without affecting data or component state. */
+  --background: 0 0% 3%;
+  --foreground: 0 0% 98%;
+  --card: 0 0% 6%;
+  --card-foreground: 0 0% 98%;
+  --primary-hsl: 0 0% 98%;
+  --primary-foreground: 0 0% 9%;
+  --muted: 0 0% 11%;
+  --muted-foreground: 0 0% 63%;
+  --accent: 0 0% 15%;
+  --accent-foreground: 0 0% 98%;
+  --border-hsl: 0 0% 18%;
+  --input: 0 0% 18%;
+  --ring: 0 0% 83%;
+  --destructive: 0 63% 31%;
+  --destructive-foreground: 0 0% 98%;
   /* Default Theme Variables - Will be overridden by JS useTheme hook */
   --bg-main: #f9fafb;
   --bg-surface: #ffffff;
@@ -70,6 +102,24 @@
   /* Pink */
 }
 
+:root:not(.dark) {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 9%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 9%;
+  --primary-hsl: 0 0% 9%;
+  --primary-foreground: 0 0% 98%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 45%;
+  --accent: 0 0% 94%;
+  --accent-foreground: 0 0% 9%;
+  --border-hsl: 0 0% 90%;
+  --input: 0 0% 90%;
+  --ring: 0 0% 20%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 98%;
+}
+
 /* --- MOBILE SCROLL LEAK FIXES --- */
 html,
 body {
@@ -79,6 +129,21 @@ body {
   overscroll-behavior-y: contain;
   /* Prevents "pull-to-refresh" bounce if not needed */
 }
+
+/* ReactBits-style visual layer: subtle motion, no canvas or stateful data. */
+.reactbits-grid {
+  position: absolute;
+  inset: 0;
+  opacity: .42;
+  background-image: linear-gradient(hsl(var(--border-hsl) / .35) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border-hsl) / .35) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 72%);
+}
+.reactbits-orb { position: absolute; border-radius: 999px; filter: blur(68px); opacity: .16; animation: reactbits-drift 15s ease-in-out infinite alternate; }
+.reactbits-orb-one { width: 26rem; height: 26rem; right: 5%; top: -11rem; background: hsl(var(--primary-hsl)); }
+.reactbits-orb-two { width: 20rem; height: 20rem; left: 18%; bottom: -12rem; background: hsl(var(--foreground)); animation-delay: -7s; }
+@keyframes reactbits-drift { to { transform: translate3d(4rem, 2rem, 0) scale(1.18); } }
+@media (prefers-reduced-motion: reduce) { .reactbits-orb { animation: none; } }
 
 body {
   background-color: var(--bg-main);
@@ -150,59 +215,40 @@ body {
 
 /* --- GLASS CARD UTILITY --- */
 .glass-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-top: 0.5px solid rgba(255, 255, 255, 0.2);
-  box-shadow:
-    0 4px 30px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: hsl(var(--card) / .92);
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border-hsl));
+  box-shadow: 0 1px 2px hsl(222 47% 11% / .08);
+  border-radius: .75rem;
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
 
 .glass-card:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.18);
-  transform: translateY(-4px);
-  box-shadow:
-    0 10px 40px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  border-color: hsl(var(--foreground) / .32);
+  box-shadow: 0 8px 20px hsl(222 47% 11% / .10);
 }
 
 /* Elevated Glass Card - Higher in z-axis hierarchy */
 .glass-card-elevated {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-top-color: rgba(255, 255, 255, 0.2);
-  box-shadow:
-    0 8px 40px rgba(0, 0, 0, 0.25),
-    0 2px 8px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: hsl(var(--card) / .96);
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border-hsl));
+  box-shadow: 0 1px 3px hsl(222 47% 11% / .12), 0 10px 24px hsl(222 47% 11% / .06);
+  border-radius: .75rem;
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
 
 .glass-card-elevated:hover {
-  background: rgba(255, 255, 255, 0.08);
-  transform: translateY(-6px);
-  box-shadow:
-    0 16px 60px rgba(0, 0, 0, 0.35),
-    0 4px 12px rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+  border-color: hsl(var(--foreground) / .32);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px hsl(222 47% 11% / .12);
 }
 
 /* Surface Glass Card - Lower elevation, for backgrounds */
 .glass-card-surface {
-  background: rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
-  border-radius: 12px;
+  background: hsl(var(--muted) / .6);
+  border: 1px solid hsl(var(--border-hsl));
+  border-radius: .5rem;
 }
 
 /* --- MESH GRADIENT ANIMATION --- */
@@ -227,9 +273,8 @@ body {
   position: absolute;
   inset: -20px;
   background:
-    radial-gradient(ellipse at 20% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(6, 182, 212, 0.12) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 80%, rgba(236, 72, 153, 0.1) 0%, transparent 50%);
+    radial-gradient(ellipse at 20% 30%, hsl(var(--foreground) / .07) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, hsl(var(--foreground) / .04) 0%, transparent 50%);
   background-size: 200% 200%;
   animation: mesh-drift 15s ease-in-out infinite;
   border-radius: 24px;
@@ -524,9 +569,8 @@ input[type=number] {
   position: absolute;
   inset: -30px;
   background:
-    radial-gradient(ellipse at 20% 30%, rgba(16, 185, 129, 0.12) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(6, 182, 212, 0.1) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%);
+    radial-gradient(ellipse at 20% 30%, hsl(var(--foreground) / .07) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, hsl(var(--foreground) / .04) 0%, transparent 50%);
   background-size: 200% 200%;
   animation: mesh-drift 20s ease-in-out infinite;
   border-radius: 24px;
@@ -538,10 +582,7 @@ input[type=number] {
 
 /* Negative balance (warm amber/rose tones) */
 .mesh-gradient-dynamic.negative::before {
-  background:
-    radial-gradient(ellipse at 20% 30%, rgba(244, 63, 94, 0.12) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(245, 158, 11, 0.1) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 80%, rgba(251, 146, 60, 0.08) 0%, transparent 50%);
+  background: radial-gradient(ellipse at 30% 30%, hsl(var(--foreground) / .07) 0%, transparent 55%);
 }
 
 /* --- PULL TO REFRESH --- */
@@ -676,21 +717,21 @@ input[type=number] {
 
 /* --- GREETING TIME-BASED COLORS --- */
 .greeting-morning {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  background: linear-gradient(135deg, hsl(var(--foreground)) 0%, hsl(var(--muted-foreground)) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .greeting-afternoon {
-  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  background: linear-gradient(135deg, hsl(var(--foreground)) 0%, hsl(var(--muted-foreground)) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .greeting-evening {
-  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, hsl(var(--foreground)) 0%, hsl(var(--muted-foreground)) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

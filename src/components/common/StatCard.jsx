@@ -35,29 +35,19 @@ const StatCard = ({
     }
 
     const themes = {
-        blue: "from-blue-500/20 to-blue-600/5 text-blue-400 border-blue-500/20",
-        emerald: "from-emerald-500/20 to-emerald-600/5 text-emerald-400 border-emerald-500/20",
-        purple: "from-purple-500/20 to-purple-600/5 text-purple-400 border-purple-500/20",
-        orange: "from-orange-500/20 to-orange-600/5 text-orange-400 border-orange-500/20",
-        gray: "from-gray-500/20 to-gray-600/5 text-gray-400 border-gray-500/20",
-        rose: "from-rose-500/20 to-rose-600/5 text-rose-400 border-rose-500/20",
-        dynamic: value >= 0
-            ? "from-emerald-500/20 to-emerald-600/5 text-emerald-400 border-emerald-500/20"
-            : "from-red-500/20 to-red-600/5 text-red-400 border-red-500/20"
+        blue: "from-white/10 to-white/0 text-white border-white/15",
+        emerald: "from-white/10 to-white/0 text-white border-white/15",
+        purple: "from-white/10 to-white/0 text-white border-white/15",
+        orange: "from-white/10 to-white/0 text-white border-white/15",
+        gray: "from-white/10 to-white/0 text-white border-white/15",
+        rose: "from-white/10 to-white/0 text-white border-white/15",
+        dynamic: "from-white/10 to-white/0 text-white border-white/15"
     };
 
     const sparklineColors = {
-        blue: 'text-blue-400',
-        emerald: 'text-emerald-400',
-        purple: 'text-purple-400',
-        orange: 'text-orange-400',
-        gray: 'text-gray-400',
-        rose: 'text-rose-400',
-        dynamic: value >= 0 ? 'text-emerald-400' : 'text-red-400'
+        blue: 'text-white', emerald: 'text-white', purple: 'text-white', orange: 'text-white', gray: 'text-white', rose: 'text-white', dynamic: 'text-white'
     };
 
-    const activeThemeKey = colorTheme === 'dynamic' ? (value >= 0 ? 'emerald' : 'dynamic') : colorTheme;
-    // Fallback if specific color scheme maps weirdly or just use activeTheme string
     const activeTheme = themes[colorTheme] || themes.blue;
     const sparklineColor = sparklineColors[colorTheme] || 'text-sky-400';
 

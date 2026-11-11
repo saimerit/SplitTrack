@@ -191,6 +191,43 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
     }, [groupTransactions, getOutstandingDebt]);
 
     const eligibleParents = useMemo(() => {
+        const isProductRefund = type === 'refund' && refundSubType === 'product';
+
+        // Special Case: Product Refunds - Should show all expenses (even settled ones) 
+        // that still have some original amount that isn't yet refunded.
+        if (isProductRefund) {
+            const refundableExpenses = groupTransactions
+                .filter(t => t.amount > 0 && !t.isReturn)
+                .filter(t => !linkedTxns.some(l => l.id === t.id))
+                .map(t => {
+                    // Calculate how much of this expense has ALREADY been refunded
+                    const existingRefunds = groupTransactions
+                        .filter(child =>
+                            !child.isDeleted &&
+                            !child.isReturn && // Not a settlement
+                            child.amount < 0 && // Must be a refund
+                            (child.parentTransactionId === t.id || (child.parentTransactionIds && child.parentTransactionIds.includes(t.id)))
+                        )
+                        .reduce((sum, child) => {
+                            // Find the specific allocation for this parent if there are multiple parents
+                            const link = child.linkedTransactions?.find(l => l.id === t.id);
+                            return sum + Math.abs(link ? (parseFloat(link.amount) || 0) : child.amount);
+                        }, 0);
+
+                    const remainingRefundable = t.amount - existingRefunds;
+                    return {
+                        ...t,
+                        remainingRefundable,
+                        relationType: 'product_refund',
+                        counterParty: 'Vendor' // Set to 'Vendor' so it doesn't try to lookup 'undefined'
+                    };
+                })
+                .filter(t => t.remainingRefundable > 0)
+                .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+
+            return [...new Map(refundableExpenses.map(item => [`${item.id}-me`, item])).values()];
+        }
+
         // For settlements and forgiveness, show debt-based transactions
         if (!isSettlement && !isForgiveness) {
             // Standard Case: Expenses with remaining balance
@@ -438,7 +475,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         }).filter(t => !linkedTxns.some(l => l.id === t.id)).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
         return [...new Map(result.map(item => [`${item.id}-${item.counterParty}`, item])).values()];
-    }, [groupTransactions, linkedTxns, isSettlement, isForgiveness, payer, selectedParticipants, repaymentFilter, getOutstandingDebt]);
+    }, [groupTransactions, linkedTxns, isProductRefund, isSettlement, isForgiveness, payer, selectedParticipants, repaymentFilter, getOutstandingDebt]);
 
     // --- EFFECTS ---
 
@@ -998,9 +1035,14 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 // However, for Overpayments: Amount (1500) > Alloc (1000). This is fine.
                 // For Partial: Amount (500) < Alloc (1000). This is BAD. Alloc should be 500.
                 if (linkedTxns.length === 1) {
-                    const totalTxnAmount = Math.abs(amountInPaise);
-                    if (Math.abs(allocAmount) > totalTxnAmount) {
-                        allocAmount = totalTxnAmount * (allocAmount < 0 ? -1 : 1);
+                    if (isProductRefund) {
+                        // Product Refunds explicitly equal the form amount exactly
+                        allocAmount = amountInPaise * -1;
+                    } else {
+                        const totalTxnAmount = Math.abs(amountInPaise);
+                        if (Math.abs(allocAmount) > totalTxnAmount) {
+                            allocAmount = totalTxnAmount * (allocAmount < 0 ? -1 : 1);
+                        }
                     }
                 }
 

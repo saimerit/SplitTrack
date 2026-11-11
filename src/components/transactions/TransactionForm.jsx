@@ -94,13 +94,17 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                 const isOverpaid = hasOverpaidAmount || remainingAmount < -1 || participantStatus === 'overpaid';
                 const isPartial = participantStatus === 'partial';
                 const isSettled = !isOverpaid && participantStatus === 'settled' && Math.abs(remainingAmount) <= 1;
+                const isProductRefundLink = t.relationType === 'product_refund';
                 const isOwedToMe = t.relationType === 'owed_to_me';
 
                 let colorClass;
                 let amountLabel;
 
                 // Check for overpaid/credit first
-                if (isOverpaid) {
+                if (isProductRefundLink) {
+                    colorClass = '!text-blue-700 dark:!text-blue-400 font-semibold';
+                    amountLabel = `₹${((t.remainingRefundable || t.amount) / 100).toFixed(2)} refundable`;
+                } else if (isOverpaid) {
                     // Credit available - show in orange and allow linking
                     colorClass = '!text-orange-600 dark:!text-orange-400 font-semibold';
                     // Use overpaidAmount from settlement (primary) or participantOverpaid or abs of remaining
@@ -126,7 +130,10 @@ const TransactionForm = ({ initialData = null, isEditMode = false }) => {
                     amountLabel = `${getName(settlingParticipant)}: ₹${(Math.abs(remainingAmount) / 100).toFixed(2)}`;
                 }
 
-                const prefix = isOwedToMe ? `[${getName(t.counterParty)} owes You] ` : `[You owe ${getName(t.counterParty)}] `;
+                const prefix = isProductRefundLink
+                    ? `[Vendor Refund] `
+                    : (isOwedToMe ? `[${getName(t.counterParty)} owes You] ` : `[You owe ${getName(t.counterParty)}] `);
+
                 return {
                     value: t.id,
                     label: `${prefix}${t.displayName || t.expenseName} (${amountLabel}) - ${getTxnDateStr(t)}`,

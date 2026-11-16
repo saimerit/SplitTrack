@@ -309,7 +309,7 @@ const ParticipantGroupsManager = () => {
             <ConfirmModal
                 isOpen={!!deleteTarget}
                 title="Delete Group?"
-                message={`Are you sure you want to delete "<strong>${deleteTarget?.name}</strong>"? This action cannot be undone.`}
+                message={`Are you sure you want to delete "<strong>${deleteTarget?.name}</strong>"? Only this saved group is removed; participant records and historical transactions are preserved.`}
                 onConfirm={handleDelete}
                 onCancel={() => setDeleteTarget(null)}
                 confirmText="Delete"

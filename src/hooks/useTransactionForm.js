@@ -7,6 +7,7 @@ import { addTransaction, updateTransaction } from '../services/transactionServic
 import { validateSplits } from '../utils/validators';
 import { applySmartRules } from '../utils/applySmartRules';
 import useAppStore from '../store/useAppStore';
+import { dateKeyToStorageDate, formatDateKey, toDateKey, transactionDateKey } from '../utils/transactionDates';
 
 const getTxnTime = (txn) => {
     if (!txn?.timestamp) return 0;
@@ -14,9 +15,8 @@ const getTxnTime = (txn) => {
 };
 
 const getTxnDateStr = (txn) => {
-    if (!txn?.timestamp) return '';
-    const d = txn.timestamp.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+    const dateKey = transactionDateKey(txn);
+    return dateKey ? formatDateKey(dateKey, { year: '2-digit' }) : '';
 };
 
 // Helper for Smart Name generation
@@ -57,10 +57,10 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 if (typeof initialData.timestamp.toDate === 'function') d = initialData.timestamp.toDate();
                 else if (initialData.timestamp.seconds) d = new Date(initialData.timestamp.seconds * 1000);
                 else d = new Date(initialData.timestamp);
-                if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+                if (!isNaN(d.getTime())) return initialData.dateString || toDateKey(d);
             }
         } catch (e) { console.warn("Date parsing error:", e); }
-        return new Date().toISOString().split('T')[0];
+        return toDateKey(new Date());
     });
 
     const [category, setCategory] = useState(initialData?.category || userSettings.defaultCategory || '');
@@ -580,14 +580,14 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         setName(source.expenseName || '');
         setAmount(source.amount ? (Math.abs(source.amount) / 100).toFixed(2) : '');
 
-        let newDate = new Date().toISOString().split('T')[0];
+        let newDate = toDateKey(new Date());
         try {
             if (source.timestamp) {
                 let d;
                 if (typeof source.timestamp.toDate === 'function') d = source.timestamp.toDate();
                 else if (source.timestamp.seconds) d = new Date(source.timestamp.seconds * 1000);
                 else d = new Date(source.timestamp);
-                if (!isNaN(d.getTime())) newDate = d.toISOString().split('T')[0];
+                if (!isNaN(d.getTime())) newDate = source.dateString || toDateKey(d);
             }
         } catch {
             // Ignore
@@ -1079,7 +1079,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 }))
                 : [{ mode: mode.startsWith('add_new') ? '' : mode, amount: amountInPaise * multiplier }],
             description: isForgiveness ? `Debt Forgiven: ${description}`.trim() : description,
-            timestamp: Timestamp.fromDate(new Date(date)),
+            timestamp: Timestamp.fromDate(dateKeyToStorageDate(date)),
             dateString: date,
             payer: isIncome ? 'me' : payer,
             isReturn: isSettlement || isForgiveness,
@@ -1151,6 +1151,8 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
         e.preventDefault();
         const amountInRupees = parseFloat(amount);
         if (!name || isNaN(amountInRupees)) { showToast("Please enter valid name and amount", true); return; }
+        if (!dateKeyToStorageDate(date)) { showToast("Please enter a valid date.", true); return; }
+        if (isSettlement && amountInRupees <= 0) { showToast("Settlement amount must be greater than zero.", true); return; }
         if (!isSettlement && !isIncome && !validation.isValid) {
             showToast(validation.message || "Please fix split errors.", true);
             return;
@@ -1161,7 +1163,7 @@ export const useTransactionFormLogic = (initialData, isEditMode) => {
                 if (!t.timestamp) return false;
                 const tDate = t.timestamp.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
                 if (isNaN(tDate.getTime())) return false;
-                return Math.abs(t.amount) === checkAmount && t.expenseName === name && tDate.toISOString().split('T')[0] === date;
+                return Math.abs(t.amount) === checkAmount && t.expenseName === name && transactionDateKey(t) === date;
             });
             if (potentialDupe) {
                 setDupeTxn(potentialDupe);

@@ -285,6 +285,9 @@ const updateParentStats = async (parentId) => {
 
 
 export const addTransaction = async (txnData) => {
+  if (txnData.isReturn && (!Number.isFinite(Number(txnData.amount)) || Number(txnData.amount) <= 0)) {
+    throw new Error('Settlement amount must be greater than zero.');
+  }
   // --- OPTIMISTIC UI: Immediate local update ---
   const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const createdAt = Timestamp.now();
@@ -486,6 +489,9 @@ export const addTransaction = async (txnData) => {
 };
 
 export const updateTransaction = async (id, txnData, oldParentId) => {
+  if (txnData.isReturn && (!Number.isFinite(Number(txnData.amount)) || Number(txnData.amount) <= 0)) {
+    throw new Error('Settlement amount must be greater than zero.');
+  }
   const docRef = doc(db, COLLECTION_PATH, id);
   await updateDoc(docRef, txnData);
 

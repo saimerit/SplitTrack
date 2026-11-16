@@ -48,6 +48,9 @@ const SidebarMetrics = () => {
                     if (txn.type === 'income') return;
 
                     if (txn.isReturn) {
+                        // Mirror the ledger calculation: invalid settlement values
+                        // must not affect the dashboard's debt/credit trend.
+                        if (amount <= 0) return;
                         const recipient = txn.participants?.[0];
                         if (!recipient) return;
                         if (payer === 'me' && recipient !== 'me') {

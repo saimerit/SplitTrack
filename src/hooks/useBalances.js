@@ -42,6 +42,9 @@ export const useBalances = (transactions, participants) => {
                 }
 
                 if (txn.isReturn) {
+                    // A settlement is a payment. Invalid zero/negative legacy
+                    // entries are ignored rather than allowed to distort balances.
+                    if (amount <= 0) return;
                     const recipient = txn.participants?.[0];
                     if (!recipient) return;
 

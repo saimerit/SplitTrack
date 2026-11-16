@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import useAppStore from '../store/useAppStore';
 import { formatCurrency } from '../utils/formatters';
 import Select from '../components/common/Select';
+import { formatDateKey, toDateKey, transactionDateKey } from '../utils/transactionDates';
 
 const Timeline = () => {
   const { transactions, participantsLookup } = useAppStore();
@@ -110,14 +111,15 @@ const Timeline = () => {
 
     sorted.forEach(txn => {
       if (!txn.timestamp) return;
-      const dateStr = txn.timestamp.toDate().toDateString();
+      const dateStr = transactionDateKey(txn);
+      if (!dateStr) return;
       if (!grouped[dateStr]) grouped[dateStr] = [];
       grouped[dateStr].push(txn);
     });
     return grouped;
   }, [transactions, selectedParticipant, participantSummary]);
 
-  const todayStr = new Date().toDateString();
+  const todayStr = toDateKey(new Date());
 
   if (transactions.length === 0) return <div className="text-center text-gray-500 mt-10">No timeline data.</div>;
 
@@ -199,7 +201,7 @@ const Timeline = () => {
 
               {/* Date Text */}
               <h3 className="ml-12 md:ml-12 inline-block text-xs sm:text-sm font-bold text-gray-100 bg-white/10 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 shadow-sm relative z-30">
-                {dateStr === todayStr ? "Today" : dateStr}
+                {dateStr === todayStr ? "Today" : formatDateKey(dateStr)}
               </h3>
             </div>
 

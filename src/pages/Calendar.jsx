@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import useAppStore from '../store/useAppStore';
 import Select from '../components/common/Select';
+import { dateKeyParts, transactionDateKey } from '../utils/transactionDates';
 
 const Calendar = () => {
   const { transactions } = useAppStore();
@@ -74,13 +75,12 @@ const Calendar = () => {
 
     transactions.forEach(txn => {
       if (!txn.timestamp) return;
-      let d;
-      try { d = txn.timestamp.toDate ? txn.timestamp.toDate() : new Date(txn.timestamp); } catch { return; }
-      if (isNaN(d.getTime())) return;
+      const dateParts = dateKeyParts(transactionDateKey(txn));
+      if (!dateParts) return;
 
-      if (d.getFullYear() === parseInt(selectedYear) && d.getMonth() === parseInt(selectedMonth) && !txn.isReturn) {
+      if (dateParts.year === parseInt(selectedYear) && dateParts.month === parseInt(selectedMonth) && !txn.isReturn) {
         const val = (txn.splits?.me || txn.amount || 0) / 100;
-        dailyTotals[d.getDate()] += val;
+        dailyTotals[dateParts.day] += val;
       }
     });
 
